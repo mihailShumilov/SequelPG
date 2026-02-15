@@ -1,0 +1,12 @@
+# SequelPG Code Owners
+# Each line is a file pattern followed by one or more owners.
+
+# Default owner for everything
+* @sequelpg/maintainers
+
+# Core database layer
+/SequelPGApp/Services/ @sequelpg/maintainers
+
+# Security-sensitive files
+/SequelPGApp/Services/KeychainService.swift @sequelpg/maintainers
+/SECURITY.md @sequelpg/maintainers

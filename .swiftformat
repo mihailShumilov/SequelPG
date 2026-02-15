@@ -1,0 +1,46 @@
+# SwiftFormat configuration for SequelPG
+
+--swiftversion 5.9
+
+# Indentation
+--indent 4
+--tabwidth 4
+--indentcase false
+--ifdef indent
+
+# Wrapping
+--wraparguments before-first
+--wrapcollections before-first
+--wrapconditions after-first
+--wrapparameters before-first
+--maxwidth 120
+--closingparen balanced
+
+# Spacing
+--operatorfunc spaced
+--ranges spaced
+--trimwhitespace always
+--emptybraces no-space
+
+# Braces
+--allman false
+
+# Patterns
+--patternlet hoist
+--self remove
+--importgrouping alpha
+
+# Organization
+--organizetypes class,enum,struct,protocol
+--organizationmode visibility
+
+# Other
+--commas always
+--semicolons inline
+--voidtype void
+--stripunusedargs closure-only
+
+# Rules
+--enable isEmpty
+--disable redundantRawValues
+--disable wrapMultilineStatementBraces
