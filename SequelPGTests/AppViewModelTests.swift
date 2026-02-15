@@ -1010,6 +1010,204 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(lastMaxRows, 2000)
     }
 
+    // MARK: - selectRow(index:columns:values:)
+
+    func testSelectRowSetsSelectedRowIndex() {
+        vm.selectRow(index: 2, columns: ["id"], values: [.text("42")])
+
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 2)
+    }
+
+    func testSelectRowBuildsSelectedRowData() {
+        vm.selectRow(
+            index: 0,
+            columns: ["id", "name", "email"],
+            values: [.text("1"), .text("Alice"), .text("alice@example.com")]
+        )
+
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 3)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "id")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("1"))
+        XCTAssertEqual(vm.tableVM.selectedRowData?[1].column, "name")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[1].value, .text("Alice"))
+        XCTAssertEqual(vm.tableVM.selectedRowData?[2].column, "email")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[2].value, .text("alice@example.com"))
+    }
+
+    func testSelectRowWithSingleColumnAndValue() {
+        vm.selectRow(index: 0, columns: ["count"], values: [.text("99")])
+
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 0)
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 1)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "count")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("99"))
+    }
+
+    func testSelectRowWithNullValues() {
+        vm.selectRow(
+            index: 1,
+            columns: ["id", "deleted_at"],
+            values: [.text("5"), .null]
+        )
+
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 2)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("5"))
+        XCTAssertEqual(vm.tableVM.selectedRowData?[1].column, "deleted_at")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[1].value, .null)
+    }
+
+    func testSelectRowWithAllNullValues() {
+        vm.selectRow(
+            index: 0,
+            columns: ["a", "b"],
+            values: [.null, .null]
+        )
+
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 2)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .null)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[1].value, .null)
+    }
+
+    func testSelectRowWithEmptyArrays() {
+        vm.selectRow(index: 0, columns: [], values: [])
+
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 0)
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 0)
+    }
+
+    func testSelectRowWithMoreColumnsThanValues() {
+        // zip truncates to the shorter array
+        vm.selectRow(
+            index: 0,
+            columns: ["id", "name", "email"],
+            values: [.text("1")]
+        )
+
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 1)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "id")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("1"))
+    }
+
+    func testSelectRowWithMoreValuesThanColumns() {
+        // zip truncates to the shorter array
+        vm.selectRow(
+            index: 0,
+            columns: ["id"],
+            values: [.text("1"), .text("extra"), .text("ignored")]
+        )
+
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 1)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "id")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("1"))
+    }
+
+    func testSelectRowReplacesExistingSelection() {
+        vm.selectRow(index: 0, columns: ["old"], values: [.text("old_val")])
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 0)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "old")
+
+        vm.selectRow(index: 5, columns: ["new"], values: [.text("new_val")])
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 5)
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 1)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "new")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("new_val"))
+    }
+
+    func testSelectRowWithLargeIndex() {
+        vm.selectRow(index: 999_999, columns: ["x"], values: [.text("v")])
+
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 999_999)
+    }
+
+    func testSelectRowPreservesColumnOrder() {
+        let columns = ["z_col", "a_col", "m_col"]
+        let values: [CellValue] = [.text("z"), .text("a"), .text("m")]
+        vm.selectRow(index: 0, columns: columns, values: values)
+
+        // Order must match input, not sorted
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "z_col")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[1].column, "a_col")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[2].column, "m_col")
+    }
+
+    // MARK: - clearSelectedRow()
+
+    func testClearSelectedRowNilsSelectedRowIndex() {
+        vm.selectRow(index: 3, columns: ["id"], values: [.text("1")])
+        XCTAssertNotNil(vm.tableVM.selectedRowIndex)
+
+        vm.clearSelectedRow()
+
+        XCTAssertNil(vm.tableVM.selectedRowIndex)
+    }
+
+    func testClearSelectedRowNilsSelectedRowData() {
+        vm.selectRow(index: 0, columns: ["id", "name"], values: [.text("1"), .text("Bob")])
+        XCTAssertNotNil(vm.tableVM.selectedRowData)
+
+        vm.clearSelectedRow()
+
+        XCTAssertNil(vm.tableVM.selectedRowData)
+    }
+
+    func testClearSelectedRowWhenAlreadyNil() {
+        // Both properties start as nil
+        XCTAssertNil(vm.tableVM.selectedRowIndex)
+        XCTAssertNil(vm.tableVM.selectedRowData)
+
+        vm.clearSelectedRow()
+
+        XCTAssertNil(vm.tableVM.selectedRowIndex)
+        XCTAssertNil(vm.tableVM.selectedRowData)
+    }
+
+    func testClearSelectedRowIsIdempotent() {
+        vm.selectRow(index: 1, columns: ["a"], values: [.text("v")])
+
+        vm.clearSelectedRow()
+        vm.clearSelectedRow()
+
+        XCTAssertNil(vm.tableVM.selectedRowIndex)
+        XCTAssertNil(vm.tableVM.selectedRowData)
+    }
+
+    func testSelectRowAfterClearSelectedRow() {
+        vm.selectRow(index: 2, columns: ["x"], values: [.text("first")])
+        vm.clearSelectedRow()
+
+        vm.selectRow(index: 7, columns: ["y"], values: [.text("second")])
+
+        XCTAssertEqual(vm.tableVM.selectedRowIndex, 7)
+        XCTAssertEqual(vm.tableVM.selectedRowData?.count, 1)
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].column, "y")
+        XCTAssertEqual(vm.tableVM.selectedRowData?[0].value, .text("second"))
+    }
+
+    // MARK: - Row selection cleared by disconnect / tableVM.clear()
+
+    func testDisconnectClearsRowSelection() async {
+        await makeConnectedVM()
+        vm.selectRow(index: 1, columns: ["id"], values: [.text("10")])
+        XCTAssertNotNil(vm.tableVM.selectedRowIndex)
+
+        await vm.disconnect()
+
+        XCTAssertNil(vm.tableVM.selectedRowIndex)
+        XCTAssertNil(vm.tableVM.selectedRowData)
+    }
+
+    func testSelectObjectClearsRowSelection() async {
+        await makeConnectedVM()
+        vm.selectRow(index: 4, columns: ["name"], values: [.text("Alice")])
+
+        let object = DBObject(schema: "public", name: "users", type: .table)
+        await vm.selectObject(object)
+
+        // selectObject calls tableVM.clear(), which resets row selection
+        XCTAssertNil(vm.tableVM.selectedRowIndex)
+        XCTAssertNil(vm.tableVM.selectedRowData)
+    }
+
     // MARK: - MainTab enum
 
     func testMainTabRawValues() {

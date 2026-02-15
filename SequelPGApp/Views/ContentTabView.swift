@@ -50,6 +50,7 @@ struct ContentTabView: View {
             .frame(width: 130)
             .onChange(of: appVM.tableVM.pageSize) { _ in
                 appVM.tableVM.currentPage = 0
+                appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }
             }
 
@@ -57,6 +58,7 @@ struct ContentTabView: View {
 
             Button {
                 appVM.tableVM.currentPage = max(0, appVM.tableVM.currentPage - 1)
+                appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }
             } label: {
                 Image(systemName: "chevron.left")
@@ -68,6 +70,7 @@ struct ContentTabView: View {
 
             Button {
                 appVM.tableVM.currentPage = min(appVM.tableVM.totalPages - 1, appVM.tableVM.currentPage + 1)
+                appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }
             } label: {
                 Image(systemName: "chevron.right")

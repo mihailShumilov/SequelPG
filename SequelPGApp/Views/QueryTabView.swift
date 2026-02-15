@@ -133,6 +133,7 @@ struct ResultsGridView: View {
     let result: QueryResult
     var onRowSelected: ((Int) -> Void)?
     @Binding var selectedRowIndex: Int?
+    @FocusState private var isFocused: Bool
     private let columnMinWidth: CGFloat = 100
 
     init(result: QueryResult, onRowSelected: ((Int) -> Void)? = nil, selectedRowIndex: Binding<Int?> = .constant(nil)) {
@@ -180,7 +181,10 @@ struct ResultsGridView: View {
                             }
                             .background(selectedRowIndex == rowIdx ? Color.accentColor.opacity(0.15) : (rowIdx % 2 == 0 ? Color.clear : Color.gray.opacity(0.05)))
                             .contentShape(Rectangle())
-                            .onTapGesture { onRowSelected?(rowIdx) }
+                            .onTapGesture {
+                                isFocused = true
+                                onRowSelected?(rowIdx)
+                            }
 
                             Divider()
                         }
@@ -204,6 +208,23 @@ struct ResultsGridView: View {
                 }
                 .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
             }
+        }
+        .focusable()
+        .focused($isFocused)
+        .onMoveCommand { direction in
+            guard !result.rows.isEmpty else { return }
+            let current = selectedRowIndex ?? -1
+            let newIndex: Int
+            switch direction {
+            case .up:
+                newIndex = current <= 0 ? 0 : current - 1
+            case .down:
+                newIndex = min(result.rows.count - 1, current + 1)
+            default:
+                return
+            }
+            guard newIndex >= 0, newIndex < result.rows.count else { return }
+            onRowSelected?(newIndex)
         }
     }
 }

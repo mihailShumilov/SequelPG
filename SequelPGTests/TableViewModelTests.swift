@@ -50,6 +50,14 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertEqual(sut.selectedObjectColumnCount, 0)
     }
 
+    func testInitialSelectedRowIndexIsNil() {
+        XCTAssertNil(sut.selectedRowIndex)
+    }
+
+    func testInitialSelectedRowDataIsNil() {
+        XCTAssertNil(sut.selectedRowData)
+    }
+
     // MARK: - totalPages (computed property)
     // Tests the pagination calculation: ceil(approximateRowCount / pageSize), minimum 1.
     // Special case: returns 0 when pageSize is 0 (guard clause).
@@ -259,6 +267,18 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertEqual(sut.selectedObjectColumnCount, 0)
     }
 
+    func testClearResetsSelectedRowIndexToNil() {
+        sut.selectedRowIndex = 3
+        sut.clear()
+        XCTAssertNil(sut.selectedRowIndex)
+    }
+
+    func testClearResetsSelectedRowDataToNil() {
+        sut.selectedRowData = [(column: "id", value: .text("1"))]
+        sut.clear()
+        XCTAssertNil(sut.selectedRowData)
+    }
+
     func testClearResetsAllFieldsAtOnce() {
         // Set every field to a non-default value
         sut.setColumns(makeColumns(count: 2))
@@ -268,6 +288,8 @@ final class TableViewModelTests: XCTestCase {
         sut.approximateRowCount = 500
         sut.selectedObjectName = "orders"
         sut.selectedObjectColumnCount = 7
+        sut.selectedRowIndex = 2
+        sut.selectedRowData = [(column: "id", value: .text("99"))]
 
         sut.clear()
 
@@ -278,6 +300,8 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertEqual(sut.approximateRowCount, 0)
         XCTAssertNil(sut.selectedObjectName)
         XCTAssertEqual(sut.selectedObjectColumnCount, 0)
+        XCTAssertNil(sut.selectedRowIndex)
+        XCTAssertNil(sut.selectedRowData)
     }
 
     func testClearDoesNotChangePageSize() {
@@ -297,6 +321,8 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertEqual(sut.approximateRowCount, 0)
         XCTAssertNil(sut.selectedObjectName)
         XCTAssertEqual(sut.selectedObjectColumnCount, 0)
+        XCTAssertNil(sut.selectedRowIndex)
+        XCTAssertNil(sut.selectedRowData)
     }
 
     // MARK: - @Published property mutation
@@ -329,6 +355,41 @@ final class TableViewModelTests: XCTestCase {
     func testIsLoadingContentCanBeSet() {
         sut.isLoadingContent = true
         XCTAssertTrue(sut.isLoadingContent)
+    }
+
+    func testSelectedRowIndexCanBeSet() {
+        sut.selectedRowIndex = 5
+        XCTAssertEqual(sut.selectedRowIndex, 5)
+    }
+
+    func testSelectedRowIndexCanBeSetToZero() {
+        sut.selectedRowIndex = 0
+        XCTAssertEqual(sut.selectedRowIndex, 0)
+    }
+
+    func testSelectedRowIndexCanBeSetBackToNil() {
+        sut.selectedRowIndex = 3
+        sut.selectedRowIndex = nil
+        XCTAssertNil(sut.selectedRowIndex)
+    }
+
+    func testSelectedRowDataCanBeSet() {
+        let data: [(column: String, value: CellValue)] = [
+            (column: "id", value: .text("1")),
+            (column: "name", value: .text("Alice")),
+        ]
+        sut.selectedRowData = data
+        XCTAssertEqual(sut.selectedRowData?.count, 2)
+        XCTAssertEqual(sut.selectedRowData?[0].column, "id")
+        XCTAssertEqual(sut.selectedRowData?[0].value, .text("1"))
+        XCTAssertEqual(sut.selectedRowData?[1].column, "name")
+        XCTAssertEqual(sut.selectedRowData?[1].value, .text("Alice"))
+    }
+
+    func testSelectedRowDataCanBeSetBackToNil() {
+        sut.selectedRowData = [(column: "x", value: .null)]
+        sut.selectedRowData = nil
+        XCTAssertNil(sut.selectedRowData)
     }
 
     // MARK: - totalPages reacts to property changes

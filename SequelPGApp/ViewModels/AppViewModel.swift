@@ -240,6 +240,7 @@ final class AppViewModel: ObservableObject {
         queryVM.isExecuting = true
         queryVM.errorMessage = nil
         queryVM.result = nil
+        clearSelectedRow()
 
         do {
             let result = try await dbClient.runQuery(sql, maxRows: 2000, timeout: 10.0)
