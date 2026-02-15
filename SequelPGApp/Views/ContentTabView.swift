@@ -9,7 +9,13 @@ struct ContentTabView: View {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let result = appVM.tableVM.contentResult {
-                ResultsGridView(result: result)
+                ResultsGridView(
+                    result: result,
+                    onRowSelected: { rowIdx in
+                        appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
+                    },
+                    selectedRowIndex: $appVM.tableVM.selectedRowIndex
+                )
             } else if appVM.navigatorVM.selectedObject != nil {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

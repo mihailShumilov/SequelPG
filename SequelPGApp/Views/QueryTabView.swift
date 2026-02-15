@@ -76,7 +76,13 @@ struct QueryTabView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     VStack(spacing: 0) {
-                        ResultsGridView(result: result)
+                        ResultsGridView(
+                            result: result,
+                            onRowSelected: { rowIdx in
+                                appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
+                            },
+                            selectedRowIndex: $appVM.tableVM.selectedRowIndex
+                        )
 
                         Divider()
 
@@ -125,7 +131,15 @@ struct QueryTabView: View {
 /// Uses ScrollView instead of Table to support arbitrary column counts on macOS 13.
 struct ResultsGridView: View {
     let result: QueryResult
+    var onRowSelected: ((Int) -> Void)?
+    @Binding var selectedRowIndex: Int?
     private let columnMinWidth: CGFloat = 100
+
+    init(result: QueryResult, onRowSelected: ((Int) -> Void)? = nil, selectedRowIndex: Binding<Int?> = .constant(nil)) {
+        self.result = result
+        self.onRowSelected = onRowSelected
+        self._selectedRowIndex = selectedRowIndex
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -164,7 +178,9 @@ struct ResultsGridView: View {
                                     }
                                 }
                             }
-                            .background(rowIdx % 2 == 0 ? Color.clear : Color.gray.opacity(0.05))
+                            .background(selectedRowIndex == rowIdx ? Color.accentColor.opacity(0.15) : (rowIdx % 2 == 0 ? Color.clear : Color.gray.opacity(0.05)))
+                            .contentShape(Rectangle())
+                            .onTapGesture { onRowSelected?(rowIdx) }
 
                             Divider()
                         }

@@ -11,6 +11,8 @@ final class TableViewModel: ObservableObject {
     @Published var approximateRowCount: Int64 = 0
     @Published var selectedObjectName: String?
     @Published var selectedObjectColumnCount = 0
+    @Published var selectedRowIndex: Int?
+    @Published var selectedRowData: [(column: String, value: CellValue)]?
 
     var totalPages: Int {
         guard pageSize > 0 else { return 0 }
@@ -35,5 +37,7 @@ final class TableViewModel: ObservableObject {
         approximateRowCount = 0
         selectedObjectName = nil
         selectedObjectColumnCount = 0
+        selectedRowIndex = nil
+        selectedRowData = nil
     }
 }

@@ -224,6 +224,16 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func selectRow(index: Int, columns: [String], values: [CellValue]) {
+        tableVM.selectedRowIndex = index
+        tableVM.selectedRowData = zip(columns, values).map { (column: $0.0, value: $0.1) }
+    }
+
+    func clearSelectedRow() {
+        tableVM.selectedRowIndex = nil
+        tableVM.selectedRowData = nil
+    }
+
     func executeQuery(_ sql: String) async {
         guard !sql.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
