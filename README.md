@@ -26,7 +26,7 @@ Select the **SequelPG** scheme and press **Cmd+R** to run.
 ## Running Tests
 
 ```bash
-xcodebuild -project SequelPG.xcodeproj -scheme SequelPGTests -configuration Debug test
+xcodebuild test -project SequelPG.xcodeproj -scheme SequelPG -destination 'platform=macOS'
 ```
 
 Or use **Cmd+U** in Xcode.
