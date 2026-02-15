@@ -7,7 +7,7 @@ enum DBObjectType: String, Sendable {
 }
 
 /// A database object (table or view) in the navigator tree.
-struct DBObject: Identifiable, Sendable, Equatable {
+struct DBObject: Identifiable, Sendable, Equatable, Hashable {
     let id: String
     let schema: String
     let name: String
