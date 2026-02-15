@@ -8,7 +8,7 @@ import SwiftUI
 final class AppViewModel: ObservableObject {
     let connectionStore: ConnectionStore
     let keychainService: KeychainServiceProtocol
-    let dbClient: DatabaseClient
+    let dbClient: any PostgresClientProtocol
 
     @Published var connectionListVM: ConnectionListViewModel
     @Published var navigatorVM: NavigatorViewModel
@@ -21,6 +21,8 @@ final class AppViewModel: ObservableObject {
     @Published var connectedProfileName: String?
     @Published var errorMessage: String?
 
+    private var connectedProfile: ConnectionProfile?
+    private var connectedPassword: String?
     private var cancellables = Set<AnyCancellable>()
 
     enum MainTab: String, CaseIterable {
@@ -32,7 +34,7 @@ final class AppViewModel: ObservableObject {
     init(
         connectionStore: ConnectionStore = ConnectionStore(),
         keychainService: KeychainServiceProtocol = KeychainService.shared,
-        dbClient: DatabaseClient = DatabaseClient()
+        dbClient: any PostgresClientProtocol = DatabaseClient()
     ) {
         self.connectionStore = connectionStore
         self.keychainService = keychainService
@@ -74,9 +76,15 @@ final class AppViewModel: ObservableObject {
         do {
             try await dbClient.connect(profile: profile, password: password)
             isConnected = true
+            connectedProfile = profile
+            connectedPassword = password
             connectedProfileName = profile.name
             connectionListVM.setConnected(profileId: profile.id)
             selectedTab = .query
+
+            // Load databases
+            let databases = try await dbClient.listDatabases()
+            navigatorVM.setDatabases(databases, current: profile.database)
 
             // Load schemas
             let schemas = try await dbClient.listSchemas()
@@ -94,12 +102,49 @@ final class AppViewModel: ObservableObject {
     func disconnect() async {
         await dbClient.disconnect()
         isConnected = false
+        connectedProfile = nil
+        connectedPassword = nil
         connectedProfileName = nil
         connectionListVM.clearConnectionState()
         navigatorVM.clear()
         tableVM.clear()
         selectedTab = .query
         Log.ui.info("UI: disconnected")
+    }
+
+    func switchDatabase(_ name: String) async {
+        guard let profile = connectedProfile, name != profile.database else { return }
+        do {
+            try await dbClient.switchDatabase(to: name, profile: profile, password: connectedPassword)
+
+            // Update stored profile with the new database
+            var updatedProfile = profile
+            updatedProfile.database = name
+            connectedProfile = updatedProfile
+
+            // Clear navigator (schemas/tables/views/selection) and table state
+            navigatorVM.schemas = []
+            navigatorVM.selectedSchema = ""
+            navigatorVM.tables = []
+            navigatorVM.views = []
+            navigatorVM.selectedObject = nil
+            tableVM.clear()
+
+            // Reload schemas and tables for the new database
+            let schemas = try await dbClient.listSchemas()
+            navigatorVM.setSchemas(schemas)
+            navigatorVM.selectedDatabase = name
+
+            if !navigatorVM.selectedSchema.isEmpty {
+                await loadTablesAndViews(forSchema: navigatorVM.selectedSchema)
+            }
+
+            errorMessage = nil
+            Log.ui.info("UI: switched to database \(name, privacy: .public)")
+        } catch {
+            errorMessage = error.localizedDescription
+            Log.ui.error("UI: database switch failed - \(error.localizedDescription)")
+        }
     }
 
     func selectObject(_ object: DBObject) async {

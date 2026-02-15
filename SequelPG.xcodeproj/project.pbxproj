@@ -39,6 +39,11 @@
 		AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001E; };
 		AA1000000000000000001F /* PostgresNIO in Frameworks */ = {isa = PBXBuildFile; productRef = AD10000000000000000001; };
 		AA10000000000000000020 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000022; };
+		AA10000000000000000023 /* TableViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000023; };
+		AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000024; };
+		AA10000000000000000025 /* QueryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000025; };
+		AA10000000000000000026 /* ConnectionListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000026; };
+		AA10000000000000000027 /* AppViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000027; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,6 +89,11 @@
 		AB1000000000000000001E /* ConnectionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStoreTests.swift; sourceTree = "<group>"; };
 		AB1000000000000000001F /* SequelPGApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SequelPGApp.entitlements; sourceTree = "<group>"; };
 		AB10000000000000000022 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000023 /* TableViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000024 /* NavigatorViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000025 /* QueryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000026 /* ConnectionListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionListViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000027 /* AppViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -206,6 +216,11 @@
 				AB1000000000000000001E /* ConnectionStoreTests.swift */,
 				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
+				AB10000000000000000023 /* TableViewModelTests.swift */,
+				AB10000000000000000024 /* NavigatorViewModelTests.swift */,
+				AB10000000000000000025 /* QueryViewModelTests.swift */,
+				AB10000000000000000026 /* ConnectionListViewModelTests.swift */,
+				AB10000000000000000027 /* AppViewModelTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -353,6 +368,11 @@
 				AA1000000000000000001D /* QuoteIdentTests.swift in Sources */,
 				AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */,
 				AA10000000000000000020 /* ModelTests.swift in Sources */,
+				AA10000000000000000023 /* TableViewModelTests.swift in Sources */,
+				AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */,
+				AA10000000000000000025 /* QueryViewModelTests.swift in Sources */,
+				AA10000000000000000026 /* ConnectionListViewModelTests.swift in Sources */,
+				AA10000000000000000027 /* AppViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

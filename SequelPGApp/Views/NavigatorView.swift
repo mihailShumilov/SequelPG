@@ -13,6 +13,22 @@ struct NavigatorView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
+            if !appVM.navigatorVM.databases.isEmpty {
+                Picker("Database", selection: $appVM.navigatorVM.selectedDatabase) {
+                    ForEach(appVM.navigatorVM.databases, id: \.self) { db in
+                        Text(db).tag(db)
+                    }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
+                .onChange(of: appVM.navigatorVM.selectedDatabase) { newValue in
+                    if !newValue.isEmpty {
+                        Task { await appVM.switchDatabase(newValue) }
+                    }
+                }
+            }
+
             if !appVM.navigatorVM.schemas.isEmpty {
                 Picker("Schema", selection: $appVM.navigatorVM.selectedSchema) {
                     ForEach(appVM.navigatorVM.schemas, id: \.self) { schema in

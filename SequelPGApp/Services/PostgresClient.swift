@@ -14,6 +14,8 @@ protocol PostgresClientProtocol: Sendable {
     func getColumns(schema: String, table: String) async throws -> [ColumnInfo]
     func getApproximateRowCount(schema: String, table: String) async throws -> Int64
     func invalidateCache() async
+    func listDatabases() async throws -> [String]
+    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?) async throws
 }
 
 /// The sole component that communicates with PostgreSQL via PostgresNIO.
@@ -339,5 +341,30 @@ actor DatabaseClient: PostgresClientProtocol {
             return max(count, 0)
         }
         return 0
+    }
+
+    func listDatabases() async throws -> [String] {
+        guard let client else { throw AppError.notConnected }
+
+        let sql = """
+            SELECT datname
+            FROM pg_database
+            WHERE datistemplate = false
+            ORDER BY datname
+            """
+        var databases: [String] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            databases.append(name)
+        }
+        Log.db.info("Loaded \(databases.count) databases")
+        return databases
+    }
+
+    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?) async throws {
+        var newProfile = profile
+        newProfile.database = database
+        try await connect(profile: newProfile, password: password)
     }
 }
