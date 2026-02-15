@@ -65,7 +65,7 @@ struct QueryTabView: View {
                 errorBanner(error)
             }
 
-            if let result = appVM.queryVM.result {
+            if let result = appVM.queryVM.sortedResult {
                 if result.columns.isEmpty {
                     VStack {
                         Text("Query executed successfully.")
@@ -85,6 +85,11 @@ struct QueryTabView: View {
                             },
                             onCellEdited: { row, col, text in
                                 Task { await appVM.updateQueryCell(rowIndex: row, columnIndex: col, newText: text) }
+                            },
+                            sortColumn: appVM.queryVM.sortColumn,
+                            sortAscending: appVM.queryVM.sortAscending,
+                            onColumnHeaderTapped: { column in
+                                appVM.toggleQuerySort(column: column)
                             },
                             selectedRowIndex: $appVM.tableVM.selectedRowIndex
                         )
@@ -140,6 +145,9 @@ struct ResultsGridView: View {
     var isEditable: Bool
     var onRowSelected: ((Int) -> Void)?
     var onCellEdited: ((Int, Int, String) -> Void)?
+    var sortColumn: String?
+    var sortAscending: Bool
+    var onColumnHeaderTapped: ((String) -> Void)?
     @Binding var selectedRowIndex: Int?
     @FocusState private var isFocused: Bool
     @FocusState private var editFieldFocused: Bool
@@ -153,6 +161,9 @@ struct ResultsGridView: View {
         isEditable: Bool = false,
         onRowSelected: ((Int) -> Void)? = nil,
         onCellEdited: ((Int, Int, String) -> Void)? = nil,
+        sortColumn: String? = nil,
+        sortAscending: Bool = true,
+        onColumnHeaderTapped: ((String) -> Void)? = nil,
         selectedRowIndex: Binding<Int?> = .constant(nil)
     ) {
         self.result = result
@@ -160,6 +171,9 @@ struct ResultsGridView: View {
         self.isEditable = isEditable
         self.onRowSelected = onRowSelected
         self.onCellEdited = onCellEdited
+        self.sortColumn = sortColumn
+        self.sortAscending = sortAscending
+        self.onColumnHeaderTapped = onColumnHeaderTapped
         self._selectedRowIndex = selectedRowIndex
     }
 
@@ -205,12 +219,25 @@ struct ResultsGridView: View {
                     } header: {
                         HStack(spacing: 0) {
                             ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                                Text(result.columns[colIdx])
-                                    .fontWeight(.semibold)
-                                    .lineLimit(1)
-                                    .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 4)
+                                let colName = result.columns[colIdx]
+                                HStack(spacing: 3) {
+                                    Text(colName)
+                                        .fontWeight(.semibold)
+                                        .lineLimit(1)
+                                    if sortColumn == colName {
+                                        Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                                .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    onColumnHeaderTapped?(colName)
+                                }
 
                                 if colIdx < result.columns.count - 1 {
                                     Divider()

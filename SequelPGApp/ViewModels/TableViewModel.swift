@@ -13,6 +13,8 @@ final class TableViewModel: ObservableObject {
     @Published var selectedObjectColumnCount = 0
     @Published var selectedRowIndex: Int?
     @Published var selectedRowData: [(column: String, value: CellValue)]?
+    @Published var sortColumn: String?
+    @Published var sortAscending: Bool = true
 
     var totalPages: Int {
         guard pageSize > 0 else { return 0 }
@@ -39,5 +41,7 @@ final class TableViewModel: ObservableObject {
         selectedObjectColumnCount = 0
         selectedRowIndex = nil
         selectedRowData = nil
+        sortColumn = nil
+        sortAscending = true
     }
 }

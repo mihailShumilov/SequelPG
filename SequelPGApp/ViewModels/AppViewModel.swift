@@ -197,7 +197,12 @@ final class AppViewModel: ObservableObject {
         let limit = tableVM.pageSize
         let offset = tableVM.currentPage * tableVM.pageSize
 
-        let sql = "SELECT * FROM \(schema).\(table) LIMIT \(limit) OFFSET \(offset)"
+        var sql = "SELECT * FROM \(schema).\(table)"
+        if let sortCol = tableVM.sortColumn {
+            let dir = tableVM.sortAscending ? "ASC" : "DESC"
+            sql += " ORDER BY \(quoteIdent(sortCol)) \(dir) NULLS LAST"
+        }
+        sql += " LIMIT \(limit) OFFSET \(offset)"
 
         do {
             tableVM.isLoadingContent = true
@@ -272,6 +277,30 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Column Sorting
+
+    func toggleContentSort(column: String) {
+        if tableVM.sortColumn == column {
+            tableVM.sortAscending.toggle()
+        } else {
+            tableVM.sortColumn = column
+            tableVM.sortAscending = true
+        }
+        tableVM.currentPage = 0
+        clearSelectedRow()
+        Task { await loadContentPage() }
+    }
+
+    func toggleQuerySort(column: String) {
+        if queryVM.sortColumn == column {
+            queryVM.sortAscending.toggle()
+        } else {
+            queryVM.sortColumn = column
+            queryVM.sortAscending = true
+        }
+        clearSelectedRow()
+    }
+
     // MARK: - Inline Cell Editing
 
     func updateContentCell(rowIndex: Int, columnIndex: Int, newText: String) async {
@@ -284,9 +313,9 @@ final class AppViewModel: ObservableObject {
 
         let columnName = result.columns[columnIndex]
         let originalRow = result.rows[rowIndex]
-        let newValue: CellValue = newText == "NULL" ? .null : .text(newText)
+        let newValue: CellValue = newText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "NULL" ? .null : .text(newText)
 
-        let sql = buildUpdateSQL(
+        guard let sql = buildUpdateSQL(
             schema: object.schema,
             table: object.name,
             columnName: columnName,
@@ -294,7 +323,10 @@ final class AppViewModel: ObservableObject {
             originalRow: originalRow,
             resultColumns: result.columns,
             pkColumnNames: pkColumns.map(\.name)
-        )
+        ) else {
+            errorMessage = "Cannot update: primary key columns missing from result"
+            return
+        }
 
         do {
             _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
@@ -314,9 +346,9 @@ final class AppViewModel: ObservableObject {
 
         let columnName = result.columns[columnIndex]
         let originalRow = result.rows[rowIndex]
-        let newValue: CellValue = newText == "NULL" ? .null : .text(newText)
+        let newValue: CellValue = newText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "NULL" ? .null : .text(newText)
 
-        let sql = buildUpdateSQL(
+        guard let sql = buildUpdateSQL(
             schema: tableRef.schema,
             table: tableRef.table,
             columnName: columnName,
@@ -324,7 +356,10 @@ final class AppViewModel: ObservableObject {
             originalRow: originalRow,
             resultColumns: result.columns,
             pkColumnNames: pkColumns.map(\.name)
-        )
+        ) else {
+            errorMessage = "Cannot update: primary key columns missing from result"
+            return
+        }
 
         do {
             _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
@@ -335,6 +370,41 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func updateInspectorCell(columnName: String, newText: String) async {
+        // Determine which context we're editing in based on the active tab
+        if selectedTab == .content {
+            guard let result = tableVM.contentResult,
+                  let rowIndex = tableVM.selectedRowIndex,
+                  let colIndex = result.columns.firstIndex(of: columnName)
+            else { return }
+            await updateContentCell(rowIndex: rowIndex, columnIndex: colIndex, newText: newText)
+            // Re-select the row to refresh inspector data
+            if let updatedResult = tableVM.contentResult, rowIndex < updatedResult.rows.count {
+                selectRow(index: rowIndex, columns: updatedResult.columns, values: updatedResult.rows[rowIndex])
+            }
+        } else if selectedTab == .query {
+            guard let result = queryVM.result,
+                  let rowIndex = tableVM.selectedRowIndex,
+                  let colIndex = result.columns.firstIndex(of: columnName)
+            else { return }
+            await updateQueryCell(rowIndex: rowIndex, columnIndex: colIndex, newText: newText)
+            // Re-select the row to refresh inspector data
+            if let updatedResult = queryVM.result, rowIndex < updatedResult.rows.count {
+                selectRow(index: rowIndex, columns: updatedResult.columns, values: updatedResult.rows[rowIndex])
+            }
+        }
+    }
+
+    /// Whether the inspector row detail should allow editing.
+    var isInspectorEditable: Bool {
+        if selectedTab == .content {
+            return tableVM.columns.contains { $0.isPrimaryKey }
+        } else if selectedTab == .query {
+            return queryVM.editableTableContext != nil
+        }
+        return false
+    }
+
     private func buildUpdateSQL(
         schema: String,
         table: String,
@@ -343,12 +413,15 @@ final class AppViewModel: ObservableObject {
         originalRow: [CellValue],
         resultColumns: [String],
         pkColumnNames: [String]
-    ) -> String {
+    ) -> String? {
         let setClause = "\(quoteIdent(columnName)) = \(quoteLiteral(newValue))"
 
         var whereParts: [String] = []
         for pkName in pkColumnNames {
-            guard let idx = resultColumns.firstIndex(of: pkName) else { continue }
+            guard let idx = resultColumns.firstIndex(of: pkName) else {
+                // PK column missing from result — cannot build safe WHERE clause
+                return nil
+            }
             let val = originalRow[idx]
             if val.isNull {
                 whereParts.append("\(quoteIdent(pkName)) IS NULL")
@@ -356,6 +429,8 @@ final class AppViewModel: ObservableObject {
                 whereParts.append("\(quoteIdent(pkName)) = \(quoteLiteral(val))")
             }
         }
+
+        guard !whereParts.isEmpty else { return nil }
 
         let whereClause = whereParts.joined(separator: " AND ")
         return "UPDATE \(quoteIdent(schema)).\(quoteIdent(table)) SET \(setClause) WHERE \(whereClause)"

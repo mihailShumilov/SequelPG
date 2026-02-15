@@ -19,6 +19,11 @@ struct ContentTabView: View {
                     onCellEdited: { row, col, text in
                         Task { await appVM.updateContentCell(rowIndex: row, columnIndex: col, newText: text) }
                     },
+                    sortColumn: appVM.tableVM.sortColumn,
+                    sortAscending: appVM.tableVM.sortAscending,
+                    onColumnHeaderTapped: { column in
+                        appVM.toggleContentSort(column: column)
+                    },
                     selectedRowIndex: $appVM.tableVM.selectedRowIndex
                 )
             } else if appVM.navigatorVM.selectedObject != nil {
