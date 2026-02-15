@@ -8,12 +8,24 @@ protocol PostgresClientProtocol: Sendable {
     func disconnect() async
     var isConnected: Bool { get async }
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
+    func listSchemas() async throws -> [String]
+    func listTables(schema: String) async throws -> [DBObject]
+    func listViews(schema: String) async throws -> [DBObject]
+    func getColumns(schema: String, table: String) async throws -> [ColumnInfo]
+    func getApproximateRowCount(schema: String, table: String) async throws -> Int64
+    func invalidateCache() async
 }
 
 /// The sole component that communicates with PostgreSQL via PostgresNIO.
 actor DatabaseClient: PostgresClientProtocol {
     private var client: PostgresClient?
     private var runTask: Task<Void, Never>?
+
+    // Introspection cache
+    private var cachedSchemas: [String]?
+    private var cachedTables: [String: [DBObject]] = [:]
+    private var cachedViews: [String: [DBObject]] = [:]
+    private var cachedColumns: [String: [ColumnInfo]] = [:]
 
     var isConnected: Bool {
         client != nil
@@ -66,7 +78,15 @@ actor DatabaseClient: PostgresClientProtocol {
         runTask?.cancel()
         runTask = nil
         client = nil
+        await invalidateCache()
         Log.db.info("Disconnected")
+    }
+
+    func invalidateCache() async {
+        cachedSchemas = nil
+        cachedTables.removeAll()
+        cachedViews.removeAll()
+        cachedColumns.removeAll()
     }
 
     func runQuery(
@@ -149,5 +169,132 @@ actor DatabaseClient: PostgresClientProtocol {
         }
 
         return result
+    }
+
+    // MARK: - Introspection
+
+    func listSchemas() async throws -> [String] {
+        if let cached = cachedSchemas { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let sql = """
+            SELECT schema_name
+            FROM information_schema.schemata
+            WHERE schema_name NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schema_name
+            """
+        var schemas: [String] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            schemas.append(name)
+        }
+        cachedSchemas = schemas
+        Log.db.info("Loaded \(schemas.count) schemas")
+        return schemas
+    }
+
+    func listTables(schema: String) async throws -> [DBObject] {
+        if let cached = cachedTables[schema] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let sql = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = '\(schema.replacingOccurrences(of: "'", with: "''"))'
+              AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """
+        var tables: [DBObject] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            tables.append(DBObject(schema: schema, name: name, type: .table))
+        }
+        cachedTables[schema] = tables
+        Log.db.info("Loaded \(tables.count) tables in schema \(schema, privacy: .public)")
+        return tables
+    }
+
+    func listViews(schema: String) async throws -> [DBObject] {
+        if let cached = cachedViews[schema] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let sql = """
+            SELECT table_name
+            FROM information_schema.views
+            WHERE table_schema = '\(schema.replacingOccurrences(of: "'", with: "''"))'
+            ORDER BY table_name
+            """
+        var views: [DBObject] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            views.append(DBObject(schema: schema, name: name, type: .view))
+        }
+        cachedViews[schema] = views
+        Log.db.info("Loaded \(views.count) views in schema \(schema, privacy: .public)")
+        return views
+    }
+
+    func getColumns(schema: String, table: String) async throws -> [ColumnInfo] {
+        let cacheKey = "\(schema).\(table)"
+        if let cached = cachedColumns[cacheKey] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let escapedTable = table.replacingOccurrences(of: "'", with: "''")
+
+        let sql = """
+            SELECT column_name, ordinal_position, data_type, is_nullable, column_default, character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = '\(escapedSchema)'
+              AND table_name = '\(escapedTable)'
+            ORDER BY ordinal_position
+            """
+        var columns: [ColumnInfo] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let randomRow = PostgresRandomAccessRow(row)
+            let name = try randomRow["column_name"].decode(String.self)
+            let ordinal = try randomRow["ordinal_position"].decode(Int.self)
+            let dataType = try randomRow["data_type"].decode(String.self)
+            let nullable = try randomRow["is_nullable"].decode(String.self)
+            let defaultVal = try? randomRow["column_default"].decode(String?.self)
+            let maxLength = try? randomRow["character_maximum_length"].decode(Int?.self)
+
+            columns.append(ColumnInfo(
+                name: name,
+                ordinalPosition: ordinal,
+                dataType: dataType,
+                isNullable: nullable == "YES",
+                columnDefault: defaultVal ?? nil,
+                characterMaximumLength: maxLength ?? nil
+            ))
+        }
+        cachedColumns[cacheKey] = columns
+        Log.db.info("Loaded \(columns.count) columns for \(cacheKey, privacy: .public)")
+        return columns
+    }
+
+    func getApproximateRowCount(schema: String, table: String) async throws -> Int64 {
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let escapedTable = table.replacingOccurrences(of: "'", with: "''")
+
+        let sql = """
+            SELECT reltuples::bigint AS approx_count
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = '\(escapedSchema)'
+              AND c.relname = '\(escapedTable)'
+            """
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (count,) = try row.decode(Int64.self)
+            return max(count, 0)
+        }
+        return 0
     }
 }
