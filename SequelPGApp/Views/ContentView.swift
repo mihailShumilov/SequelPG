@@ -4,23 +4,32 @@ struct ContentView: View {
     @StateObject private var appVM = AppViewModel()
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             SidebarView()
                 .environmentObject(appVM)
-        } content: {
+                .frame(minWidth: 200, idealWidth: 250, maxWidth: 350)
+
+            Divider()
+
             MainAreaView()
                 .environmentObject(appVM)
-        } detail: {
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
             if appVM.showInspector {
+                Divider()
+
                 InspectorView()
                     .environmentObject(appVM)
+                    .frame(minWidth: 180, idealWidth: 220, maxWidth: 300)
             }
         }
         .frame(minWidth: 900, minHeight: 600)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
-                    appVM.showInspector.toggle()
+                    withAnimation {
+                        appVM.showInspector.toggle()
+                    }
                 } label: {
                     Image(systemName: "sidebar.right")
                 }

@@ -11,7 +11,7 @@ protocol ConnectionStoreProtocol: Sendable {
 }
 
 /// Persists connection profiles to UserDefaults (without passwords).
-final class ConnectionStore: ConnectionStoreProtocol, Sendable {
+final class ConnectionStore: ConnectionStoreProtocol, @unchecked Sendable {
     private let defaults: UserDefaults
     private let key = "com.sequelpg.connections"
 
