@@ -9,6 +9,7 @@ struct ColumnInfo: Identifiable, Sendable, Equatable {
     let isNullable: Bool
     let columnDefault: String?
     let characterMaximumLength: Int?
+    let isPrimaryKey: Bool
 
     init(
         name: String,
@@ -16,7 +17,8 @@ struct ColumnInfo: Identifiable, Sendable, Equatable {
         dataType: String,
         isNullable: Bool,
         columnDefault: String?,
-        characterMaximumLength: Int?
+        characterMaximumLength: Int?,
+        isPrimaryKey: Bool = false
     ) {
         self.id = "\(ordinalPosition)_\(name)"
         self.name = name
@@ -25,5 +27,6 @@ struct ColumnInfo: Identifiable, Sendable, Equatable {
         self.isNullable = isNullable
         self.columnDefault = columnDefault
         self.characterMaximumLength = characterMaximumLength
+        self.isPrimaryKey = isPrimaryKey
     }
 }

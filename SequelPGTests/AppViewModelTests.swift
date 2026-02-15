@@ -45,9 +45,11 @@ actor MockDatabaseClient: PostgresClientProtocol {
         DBObject(schema: "public", name: "active_users", type: .view)
     ]
     var stubbedColumns: [ColumnInfo] = [
-        ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer", isNullable: false, columnDefault: nil, characterMaximumLength: nil),
+        ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer", isNullable: false, columnDefault: nil, characterMaximumLength: nil, isPrimaryKey: true),
         ColumnInfo(name: "name", ordinalPosition: 2, dataType: "character varying", isNullable: true, columnDefault: nil, characterMaximumLength: 255),
     ]
+    var stubbedPrimaryKeys: [String] = ["id"]
+    var shouldThrowOnGetPrimaryKeys = false
     var stubbedApproximateRowCount: Int64 = 42
     var stubbedQueryResult = QueryResult(
         columns: ["id", "name"],
@@ -101,6 +103,11 @@ actor MockDatabaseClient: PostgresClientProtocol {
         lastGetColumnsTable = table
         if shouldThrowOnGetColumns { throw AppError.queryFailed("mock columns error") }
         return stubbedColumns
+    }
+
+    func getPrimaryKeys(schema: String, table: String) async throws -> [String] {
+        if shouldThrowOnGetPrimaryKeys { throw AppError.queryFailed("mock pk error") }
+        return stubbedPrimaryKeys
     }
 
     func getApproximateRowCount(schema: String, table: String) async throws -> Int64 {
@@ -1349,6 +1356,10 @@ extension MockDatabaseClient {
 
     func setShouldThrowOnSwitchDatabase(_ value: Bool) {
         shouldThrowOnSwitchDatabase = value
+    }
+
+    func setShouldThrowOnGetPrimaryKeys(_ value: Bool) {
+        shouldThrowOnGetPrimaryKeys = value
     }
 
     func setStubbedQueryResult(_ result: QueryResult) {

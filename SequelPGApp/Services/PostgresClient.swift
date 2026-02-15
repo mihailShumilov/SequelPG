@@ -12,6 +12,7 @@ protocol PostgresClientProtocol: Sendable {
     func listTables(schema: String) async throws -> [DBObject]
     func listViews(schema: String) async throws -> [DBObject]
     func getColumns(schema: String, table: String) async throws -> [ColumnInfo]
+    func getPrimaryKeys(schema: String, table: String) async throws -> [String]
     func getApproximateRowCount(schema: String, table: String) async throws -> Int64
     func invalidateCache() async
     func listDatabases() async throws -> [String]
@@ -28,6 +29,7 @@ actor DatabaseClient: PostgresClientProtocol {
     private var cachedTables: [String: [DBObject]] = [:]
     private var cachedViews: [String: [DBObject]] = [:]
     private var cachedColumns: [String: [ColumnInfo]] = [:]
+    private var cachedPrimaryKeys: [String: [String]] = [:]
 
     var isConnected: Bool {
         client != nil
@@ -89,6 +91,7 @@ actor DatabaseClient: PostgresClientProtocol {
         cachedTables.removeAll()
         cachedViews.removeAll()
         cachedColumns.removeAll()
+        cachedPrimaryKeys.removeAll()
     }
 
     func runQuery(
@@ -287,6 +290,9 @@ actor DatabaseClient: PostgresClientProtocol {
         if let cached = cachedColumns[cacheKey] { return cached }
         guard let client else { throw AppError.notConnected }
 
+        let pkNames = try await getPrimaryKeys(schema: schema, table: table)
+        let pkSet = Set(pkNames)
+
         let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
         let escapedTable = table.replacingOccurrences(of: "'", with: "''")
 
@@ -314,12 +320,43 @@ actor DatabaseClient: PostgresClientProtocol {
                 dataType: dataType,
                 isNullable: nullable == "YES",
                 columnDefault: defaultVal ?? nil,
-                characterMaximumLength: maxLength ?? nil
+                characterMaximumLength: maxLength ?? nil,
+                isPrimaryKey: pkSet.contains(name)
             ))
         }
         cachedColumns[cacheKey] = columns
         Log.db.info("Loaded \(columns.count) columns for \(cacheKey, privacy: .public)")
         return columns
+    }
+
+    func getPrimaryKeys(schema: String, table: String) async throws -> [String] {
+        let cacheKey = "\(schema).\(table)"
+        if let cached = cachedPrimaryKeys[cacheKey] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let escapedTable = table.replacingOccurrences(of: "'", with: "''")
+
+        let sql = """
+            SELECT a.attname
+            FROM pg_index i
+            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            JOIN pg_class c ON c.oid = i.indrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE i.indisprimary
+              AND n.nspname = '\(escapedSchema)'
+              AND c.relname = '\(escapedTable)'
+            ORDER BY a.attnum
+            """
+        var keys: [String] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            keys.append(name)
+        }
+        cachedPrimaryKeys[cacheKey] = keys
+        Log.db.info("Loaded \(keys.count) primary keys for \(cacheKey, privacy: .public)")
+        return keys
     }
 
     func getApproximateRowCount(schema: String, table: String) async throws -> Int64 {

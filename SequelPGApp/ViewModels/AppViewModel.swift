@@ -240,15 +240,124 @@ final class AppViewModel: ObservableObject {
         queryVM.isExecuting = true
         queryVM.errorMessage = nil
         queryVM.result = nil
+        queryVM.editableTableContext = nil
+        queryVM.editableColumns = []
         clearSelectedRow()
 
         do {
             let result = try await dbClient.runQuery(sql, maxRows: 2000, timeout: 10.0)
             queryVM.result = result
             queryVM.isExecuting = false
+
+            // Detect table context for inline editing
+            if let tableRef = queryVM.parseTableFromQuery() {
+                do {
+                    let columns = try await dbClient.getColumns(schema: tableRef.schema, table: tableRef.table)
+                    let pkColumns = columns.filter { $0.isPrimaryKey }
+                    let resultColumnSet = Set(result.columns)
+                    let allPKsPresent = !pkColumns.isEmpty && pkColumns.allSatisfy { resultColumnSet.contains($0.name) }
+                    if allPKsPresent {
+                        queryVM.editableTableContext = tableRef
+                        queryVM.editableColumns = columns
+                    }
+                } catch {
+                    // Silently fail — editing just won't be available
+                    queryVM.editableTableContext = nil
+                    queryVM.editableColumns = []
+                }
+            }
         } catch {
             queryVM.errorMessage = error.localizedDescription
             queryVM.isExecuting = false
         }
+    }
+
+    // MARK: - Inline Cell Editing
+
+    func updateContentCell(rowIndex: Int, columnIndex: Int, newText: String) async {
+        guard let object = navigatorVM.selectedObject,
+              let result = tableVM.contentResult
+        else { return }
+
+        let pkColumns = tableVM.columns.filter { $0.isPrimaryKey }
+        guard !pkColumns.isEmpty else { return }
+
+        let columnName = result.columns[columnIndex]
+        let originalRow = result.rows[rowIndex]
+        let newValue: CellValue = newText == "NULL" ? .null : .text(newText)
+
+        let sql = buildUpdateSQL(
+            schema: object.schema,
+            table: object.name,
+            columnName: columnName,
+            newValue: newValue,
+            originalRow: originalRow,
+            resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name)
+        )
+
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            await loadContentPage()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func updateQueryCell(rowIndex: Int, columnIndex: Int, newText: String) async {
+        guard let tableRef = queryVM.editableTableContext,
+              let result = queryVM.result
+        else { return }
+
+        let pkColumns = queryVM.editableColumns.filter { $0.isPrimaryKey }
+        guard !pkColumns.isEmpty else { return }
+
+        let columnName = result.columns[columnIndex]
+        let originalRow = result.rows[rowIndex]
+        let newValue: CellValue = newText == "NULL" ? .null : .text(newText)
+
+        let sql = buildUpdateSQL(
+            schema: tableRef.schema,
+            table: tableRef.table,
+            columnName: columnName,
+            newValue: newValue,
+            originalRow: originalRow,
+            resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name)
+        )
+
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            // Re-execute the user's query to refresh results
+            await executeQuery(queryVM.queryText)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func buildUpdateSQL(
+        schema: String,
+        table: String,
+        columnName: String,
+        newValue: CellValue,
+        originalRow: [CellValue],
+        resultColumns: [String],
+        pkColumnNames: [String]
+    ) -> String {
+        let setClause = "\(quoteIdent(columnName)) = \(quoteLiteral(newValue))"
+
+        var whereParts: [String] = []
+        for pkName in pkColumnNames {
+            guard let idx = resultColumns.firstIndex(of: pkName) else { continue }
+            let val = originalRow[idx]
+            if val.isNull {
+                whereParts.append("\(quoteIdent(pkName)) IS NULL")
+            } else {
+                whereParts.append("\(quoteIdent(pkName)) = \(quoteLiteral(val))")
+            }
+        }
+
+        let whereClause = whereParts.joined(separator: " AND ")
+        return "UPDATE \(quoteIdent(schema)).\(quoteIdent(table)) SET \(setClause) WHERE \(whereClause)"
     }
 }

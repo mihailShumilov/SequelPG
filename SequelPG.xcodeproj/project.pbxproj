@@ -33,6 +33,7 @@
 		AA10000000000000000018 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000018; };
 		AA10000000000000000019 /* MainAreaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000019; };
 		AA1000000000000000001A /* QuoteIdent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001A; };
+		AA10000000000000000028 /* QuoteLiteral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000028; };
 		AA1000000000000000001B /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001B; };
 		AA1000000000000000001C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001C; };
 		AA1000000000000000001D /* QuoteIdentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001D; };
@@ -83,6 +84,7 @@
 		AB10000000000000000018 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
 		AB10000000000000000019 /* MainAreaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainAreaView.swift; sourceTree = "<group>"; };
 		AB1000000000000000001A /* QuoteIdent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdent.swift; sourceTree = "<group>"; };
+		AB10000000000000000028 /* QuoteLiteral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteLiteral.swift; sourceTree = "<group>"; };
 		AB1000000000000000001B /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		AB1000000000000000001C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB1000000000000000001D /* QuoteIdentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdentTests.swift; sourceTree = "<group>"; };
@@ -197,6 +199,7 @@
 			children = (
 				AB1000000000000000001B /* Logger.swift */,
 				AB1000000000000000001A /* QuoteIdent.swift */,
+				AB10000000000000000028 /* QuoteLiteral.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -357,6 +360,7 @@
 				AA10000000000000000018 /* InspectorView.swift in Sources */,
 				AA10000000000000000019 /* MainAreaView.swift in Sources */,
 				AA1000000000000000001A /* QuoteIdent.swift in Sources */,
+				AA10000000000000000028 /* QuoteLiteral.swift in Sources */,
 				AA1000000000000000001B /* Logger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

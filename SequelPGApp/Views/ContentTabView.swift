@@ -11,8 +11,13 @@ struct ContentTabView: View {
             } else if let result = appVM.tableVM.contentResult {
                 ResultsGridView(
                     result: result,
+                    columns: appVM.tableVM.columns,
+                    isEditable: appVM.tableVM.columns.contains { $0.isPrimaryKey },
                     onRowSelected: { rowIdx in
                         appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
+                    },
+                    onCellEdited: { row, col, text in
+                        Task { await appVM.updateContentCell(rowIndex: row, columnIndex: col, newText: text) }
                     },
                     selectedRowIndex: $appVM.tableVM.selectedRowIndex
                 )
