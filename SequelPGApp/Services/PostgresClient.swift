@@ -122,17 +122,10 @@ actor DatabaseClient: PostgresClientProtocol {
                         }
                     }
 
-                    // Convert cells to CellValue
+                    // Convert cells to CellValue using type-aware decoding
                     var cellValues: [CellValue] = []
                     for i in 0 ..< randomRow.count {
-                        let cell = randomRow[i]
-                        if cell.bytes == nil {
-                            cellValues.append(.null)
-                        } else if let str = try? cell.decode(String.self) {
-                            cellValues.append(.text(str))
-                        } else {
-                            cellValues.append(.text("<binary>"))
-                        }
+                        cellValues.append(Self.decodeCellValue(randomRow[i]))
                     }
 
                     rows.append(cellValues)
@@ -169,6 +162,56 @@ actor DatabaseClient: PostgresClientProtocol {
         }
 
         return result
+    }
+
+    // MARK: - Cell Decoding
+
+    private static let dateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    /// Decode a PostgresCell to CellValue using type-aware decoding.
+    /// Binary-encoded types (timestamps, numerics, etc.) need their native
+    /// decoder; falling back to String on binary data produces garbled text.
+    private static func decodeCellValue(_ cell: PostgresCell) -> CellValue {
+        guard cell.bytes != nil else { return .null }
+
+        switch cell.dataType {
+        case .bool:
+            if let v = try? cell.decode(Bool.self) { return .text(v ? "true" : "false") }
+        case .int2:
+            if let v = try? cell.decode(Int16.self) { return .text(String(v)) }
+        case .int4:
+            if let v = try? cell.decode(Int32.self) { return .text(String(v)) }
+        case .int8:
+            if let v = try? cell.decode(Int64.self) { return .text(String(v)) }
+        case .float4:
+            if let v = try? cell.decode(Float.self) { return .text(String(v)) }
+        case .float8:
+            if let v = try? cell.decode(Double.self) { return .text(String(v)) }
+        case .numeric:
+            if let v = try? cell.decode(String.self) { return .text(v) }
+        case .uuid:
+            if let v = try? cell.decode(UUID.self) { return .text(v.uuidString) }
+        case .timestamp, .timestamptz:
+            if let v = try? cell.decode(Date.self) { return .text(dateFormatter.string(from: v)) }
+        case .date:
+            if let v = try? cell.decode(Date.self) {
+                let fmt = DateFormatter()
+                fmt.dateFormat = "yyyy-MM-dd"
+                return .text(fmt.string(from: v))
+            }
+        case .bytea:
+            return .text("<binary>")
+        default:
+            break
+        }
+
+        // Fallback: try String decoding (works for text, varchar, json, jsonb, etc.)
+        if let v = try? cell.decode(String.self) { return .text(v) }
+        return .text("<binary>")
     }
 
     // MARK: - Introspection

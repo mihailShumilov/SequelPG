@@ -128,62 +128,65 @@ struct ResultsGridView: View {
     private let columnMinWidth: CGFloat = 100
 
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    if result.rows.isEmpty {
-                        HStack(spacing: 0) {
-                            ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                                Text("")
-                                    .frame(minWidth: columnMinWidth, alignment: .leading)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
+        GeometryReader { geometry in
+            ScrollView([.horizontal, .vertical]) {
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        if result.rows.isEmpty {
+                            HStack(spacing: 0) {
+                                ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
+                                    Text("")
+                                        .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
 
-                                if colIdx < result.columns.count - 1 {
-                                    Divider()
+                                    if colIdx < result.columns.count - 1 {
+                                        Divider()
+                                    }
                                 }
                             }
+                            Divider()
                         }
-                        Divider()
-                    }
-                    ForEach(0 ..< result.rows.count, id: \.self) { rowIdx in
+                        ForEach(0 ..< result.rows.count, id: \.self) { rowIdx in
+                            HStack(spacing: 0) {
+                                ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
+                                    let cell = result.rows[rowIdx][colIdx]
+                                    Text(cell.displayString)
+                                        .lineLimit(1)
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundStyle(cell.isNull ? .secondary : .primary)
+                                        .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+
+                                    if colIdx < result.columns.count - 1 {
+                                        Divider()
+                                    }
+                                }
+                            }
+                            .background(rowIdx % 2 == 0 ? Color.clear : Color.gray.opacity(0.05))
+
+                            Divider()
+                        }
+                    } header: {
                         HStack(spacing: 0) {
                             ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                                let cell = result.rows[rowIdx][colIdx]
-                                Text(cell.displayString)
+                                Text(result.columns[colIdx])
+                                    .fontWeight(.semibold)
                                     .lineLimit(1)
-                                    .font(.system(.body, design: .monospaced))
-                                    .foregroundStyle(cell.isNull ? .secondary : .primary)
-                                    .frame(minWidth: columnMinWidth, alignment: .leading)
+                                    .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
+                                    .padding(.vertical, 4)
 
                                 if colIdx < result.columns.count - 1 {
                                     Divider()
                                 }
                             }
                         }
-                        .background(rowIdx % 2 == 0 ? Color.clear : Color.gray.opacity(0.05))
-
-                        Divider()
+                        .background(Color(nsColor: .controlBackgroundColor))
                     }
-                } header: {
-                    HStack(spacing: 0) {
-                        ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                            Text(result.columns[colIdx])
-                                .fontWeight(.semibold)
-                                .lineLimit(1)
-                                .frame(minWidth: columnMinWidth, alignment: .leading)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 4)
-
-                            if colIdx < result.columns.count - 1 {
-                                Divider()
-                            }
-                        }
-                    }
-                    .background(Color(nsColor: .controlBackgroundColor))
                 }
+                .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
             }
         }
     }
