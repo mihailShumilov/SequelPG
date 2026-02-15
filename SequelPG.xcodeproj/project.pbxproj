@@ -1,0 +1,545 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA10000000000000000001 /* SequelPGApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000001; };
+		AA10000000000000000002 /* ConnectionProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000002; };
+		AA10000000000000000003 /* DBObject.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000003; };
+		AA10000000000000000004 /* ColumnInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000004; };
+		AA10000000000000000005 /* QueryResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000005; };
+		AA10000000000000000006 /* CellValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000006; };
+		AA10000000000000000007 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000007; };
+		AA10000000000000000008 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000008; };
+		AA10000000000000000009 /* ConnectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000009; };
+		AA1000000000000000000A /* PostgresClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000A; };
+		AA1000000000000000000B /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000B; };
+		AA1000000000000000000C /* ConnectionListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000C; };
+		AA1000000000000000000D /* NavigatorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000D; };
+		AA1000000000000000000E /* TableViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000E; };
+		AA1000000000000000000F /* QueryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000F; };
+		AA10000000000000000010 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000010; };
+		AA10000000000000000011 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000011; };
+		AA10000000000000000012 /* ConnectionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000012; };
+		AA10000000000000000013 /* ConnectionFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000013; };
+		AA10000000000000000014 /* NavigatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000014; };
+		AA10000000000000000015 /* StructureTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000015; };
+		AA10000000000000000016 /* ContentTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000016; };
+		AA10000000000000000017 /* QueryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000017; };
+		AA10000000000000000018 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000018; };
+		AA10000000000000000019 /* MainAreaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000019; };
+		AA1000000000000000001A /* QuoteIdent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001A; };
+		AA1000000000000000001B /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001B; };
+		AA1000000000000000001C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001C; };
+		AA1000000000000000001D /* QuoteIdentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001D; };
+		AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001E; };
+		AA1000000000000000001F /* PostgresNIO in Frameworks */ = {isa = PBXBuildFile; productRef = AD10000000000000000001; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AC10000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE10000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AF10000000000000000001;
+			remoteInfo = SequelPG;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AB10000000000000000001 /* SequelPGApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SequelPGApp.swift; sourceTree = "<group>"; };
+		AB10000000000000000002 /* ConnectionProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionProfile.swift; sourceTree = "<group>"; };
+		AB10000000000000000003 /* DBObject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DBObject.swift; sourceTree = "<group>"; };
+		AB10000000000000000004 /* ColumnInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColumnInfo.swift; sourceTree = "<group>"; };
+		AB10000000000000000005 /* QueryResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryResult.swift; sourceTree = "<group>"; };
+		AB10000000000000000006 /* CellValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CellValue.swift; sourceTree = "<group>"; };
+		AB10000000000000000007 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		AB10000000000000000008 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		AB10000000000000000009 /* ConnectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStore.swift; sourceTree = "<group>"; };
+		AB1000000000000000000A /* PostgresClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostgresClient.swift; sourceTree = "<group>"; };
+		AB1000000000000000000B /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
+		AB1000000000000000000C /* ConnectionListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionListViewModel.swift; sourceTree = "<group>"; };
+		AB1000000000000000000D /* NavigatorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorViewModel.swift; sourceTree = "<group>"; };
+		AB1000000000000000000E /* TableViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableViewModel.swift; sourceTree = "<group>"; };
+		AB1000000000000000000F /* QueryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryViewModel.swift; sourceTree = "<group>"; };
+		AB10000000000000000010 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB10000000000000000011 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		AB10000000000000000012 /* ConnectionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionListView.swift; sourceTree = "<group>"; };
+		AB10000000000000000013 /* ConnectionFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionFormView.swift; sourceTree = "<group>"; };
+		AB10000000000000000014 /* NavigatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorView.swift; sourceTree = "<group>"; };
+		AB10000000000000000015 /* StructureTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructureTabView.swift; sourceTree = "<group>"; };
+		AB10000000000000000016 /* ContentTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentTabView.swift; sourceTree = "<group>"; };
+		AB10000000000000000017 /* QueryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryTabView.swift; sourceTree = "<group>"; };
+		AB10000000000000000018 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
+		AB10000000000000000019 /* MainAreaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainAreaView.swift; sourceTree = "<group>"; };
+		AB1000000000000000001A /* QuoteIdent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdent.swift; sourceTree = "<group>"; };
+		AB1000000000000000001B /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		AB1000000000000000001C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB1000000000000000001D /* QuoteIdentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdentTests.swift; sourceTree = "<group>"; };
+		AB1000000000000000001E /* ConnectionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStoreTests.swift; sourceTree = "<group>"; };
+		AB1000000000000000001F /* SequelPGApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SequelPGApp.entitlements; sourceTree = "<group>"; };
+		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AF10000000000000000010 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA1000000000000000001F /* PostgresNIO in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AF10000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AC20000000000000000001 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				AC20000000000000000002 /* SequelPGApp */,
+				AC20000000000000000009 /* SequelPGTests */,
+				AC2000000000000000000A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AC20000000000000000002 /* SequelPGApp */ = {
+			isa = PBXGroup;
+			children = (
+				AB10000000000000000001 /* SequelPGApp.swift */,
+				AC20000000000000000003 /* Models */,
+				AC20000000000000000004 /* Services */,
+				AC20000000000000000005 /* ViewModels */,
+				AC20000000000000000006 /* Views */,
+				AC20000000000000000007 /* Utilities */,
+				AC20000000000000000008 /* Resources */,
+			);
+			path = SequelPGApp;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000003 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AB10000000000000000007 /* AppError.swift */,
+				AB10000000000000000006 /* CellValue.swift */,
+				AB10000000000000000004 /* ColumnInfo.swift */,
+				AB10000000000000000002 /* ConnectionProfile.swift */,
+				AB10000000000000000003 /* DBObject.swift */,
+				AB10000000000000000005 /* QueryResult.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000004 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				AB10000000000000000009 /* ConnectionStore.swift */,
+				AB10000000000000000008 /* KeychainService.swift */,
+				AB1000000000000000000A /* PostgresClient.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000005 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				AB1000000000000000000B /* AppViewModel.swift */,
+				AB1000000000000000000C /* ConnectionListViewModel.swift */,
+				AB1000000000000000000D /* NavigatorViewModel.swift */,
+				AB1000000000000000000F /* QueryViewModel.swift */,
+				AB1000000000000000000E /* TableViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000006 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AB10000000000000000013 /* ConnectionFormView.swift */,
+				AB10000000000000000012 /* ConnectionListView.swift */,
+				AB10000000000000000016 /* ContentTabView.swift */,
+				AB10000000000000000010 /* ContentView.swift */,
+				AB10000000000000000018 /* InspectorView.swift */,
+				AB10000000000000000019 /* MainAreaView.swift */,
+				AB10000000000000000014 /* NavigatorView.swift */,
+				AB10000000000000000017 /* QueryTabView.swift */,
+				AB10000000000000000011 /* SidebarView.swift */,
+				AB10000000000000000015 /* StructureTabView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000007 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				AB1000000000000000001B /* Logger.swift */,
+				AB1000000000000000001A /* QuoteIdent.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000008 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AB1000000000000000001C /* Assets.xcassets */,
+				AB1000000000000000001F /* SequelPGApp.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		AC20000000000000000009 /* SequelPGTests */ = {
+			isa = PBXGroup;
+			children = (
+				AB1000000000000000001E /* ConnectionStoreTests.swift */,
+				AB1000000000000000001D /* QuoteIdentTests.swift */,
+			);
+			path = SequelPGTests;
+			sourceTree = "<group>";
+		};
+		AC2000000000000000000A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AB10000000000000000020 /* SequelPG.app */,
+				AB10000000000000000021 /* SequelPGTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AF10000000000000000001 /* SequelPG */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AF10000000000000000020 /* Build configuration list for PBXNativeTarget "SequelPG" */;
+			buildPhases = (
+				AF10000000000000000012 /* Sources */,
+				AF10000000000000000010 /* Frameworks */,
+				AF10000000000000000014 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SequelPG;
+			packageProductDependencies = (
+				AD10000000000000000001 /* PostgresNIO */,
+			);
+			productName = SequelPG;
+			productReference = AB10000000000000000020 /* SequelPG.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AF10000000000000000002 /* SequelPGTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AF10000000000000000021 /* Build configuration list for PBXNativeTarget "SequelPGTests" */;
+			buildPhases = (
+				AF10000000000000000013 /* Sources */,
+				AF10000000000000000011 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC10000000000000000002 /* PBXTargetDependency */,
+			);
+			name = SequelPGTests;
+			productName = SequelPGTests;
+			productReference = AB10000000000000000021 /* SequelPGTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AE10000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					AF10000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					AF10000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AF10000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = AF1000000000000000001F /* Build configuration list for PBXProject "SequelPG" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AC20000000000000000001 /* Root */;
+			packageReferences = (
+				AD10000000000000000002 /* XCRemoteSwiftPackageReference "postgres-nio" */,
+			);
+			productRefGroup = AC2000000000000000000A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AF10000000000000000001 /* SequelPG */,
+				AF10000000000000000002 /* SequelPGTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AF10000000000000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA1000000000000000001C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AF10000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA10000000000000000001 /* SequelPGApp.swift in Sources */,
+				AA10000000000000000002 /* ConnectionProfile.swift in Sources */,
+				AA10000000000000000003 /* DBObject.swift in Sources */,
+				AA10000000000000000004 /* ColumnInfo.swift in Sources */,
+				AA10000000000000000005 /* QueryResult.swift in Sources */,
+				AA10000000000000000006 /* CellValue.swift in Sources */,
+				AA10000000000000000007 /* AppError.swift in Sources */,
+				AA10000000000000000008 /* KeychainService.swift in Sources */,
+				AA10000000000000000009 /* ConnectionStore.swift in Sources */,
+				AA1000000000000000000A /* PostgresClient.swift in Sources */,
+				AA1000000000000000000B /* AppViewModel.swift in Sources */,
+				AA1000000000000000000C /* ConnectionListViewModel.swift in Sources */,
+				AA1000000000000000000D /* NavigatorViewModel.swift in Sources */,
+				AA1000000000000000000E /* TableViewModel.swift in Sources */,
+				AA1000000000000000000F /* QueryViewModel.swift in Sources */,
+				AA10000000000000000010 /* ContentView.swift in Sources */,
+				AA10000000000000000011 /* SidebarView.swift in Sources */,
+				AA10000000000000000012 /* ConnectionListView.swift in Sources */,
+				AA10000000000000000013 /* ConnectionFormView.swift in Sources */,
+				AA10000000000000000014 /* NavigatorView.swift in Sources */,
+				AA10000000000000000015 /* StructureTabView.swift in Sources */,
+				AA10000000000000000016 /* ContentTabView.swift in Sources */,
+				AA10000000000000000017 /* QueryTabView.swift in Sources */,
+				AA10000000000000000018 /* InspectorView.swift in Sources */,
+				AA10000000000000000019 /* MainAreaView.swift in Sources */,
+				AA1000000000000000001A /* QuoteIdent.swift in Sources */,
+				AA1000000000000000001B /* Logger.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AF10000000000000000013 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA1000000000000000001D /* QuoteIdentTests.swift in Sources */,
+				AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AC10000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AF10000000000000000001 /* SequelPG */;
+			targetProxy = AC10000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AF10000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AF10000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AF10000000000000000017 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SequelPGApp/Resources/SequelPGApp.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AF10000000000000000018 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SequelPGApp/Resources/SequelPGApp.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AF10000000000000000019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SequelPG.app/Contents/MacOS/SequelPG";
+			};
+			name = Debug;
+		};
+		AF1000000000000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SequelPG.app/Contents/MacOS/SequelPG";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AF1000000000000000001F /* Build configuration list for PBXProject "SequelPG" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AF10000000000000000015 /* Debug */,
+				AF10000000000000000016 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AF10000000000000000020 /* Build configuration list for PBXNativeTarget "SequelPG" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AF10000000000000000017 /* Debug */,
+				AF10000000000000000018 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AF10000000000000000021 /* Build configuration list for PBXNativeTarget "SequelPGTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AF10000000000000000019 /* Debug */,
+				AF1000000000000000001A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AD10000000000000000002 /* XCRemoteSwiftPackageReference "postgres-nio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/vapor/postgres-nio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.21.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AD10000000000000000001 /* PostgresNIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD10000000000000000002 /* XCRemoteSwiftPackageReference "postgres-nio" */;
+			productName = PostgresNIO;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = AE10000000000000000001 /* Project object */;
+}
