@@ -38,6 +38,7 @@
 		AA1000000000000000001D /* QuoteIdentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001D; };
 		AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001E; };
 		AA1000000000000000001F /* PostgresNIO in Frameworks */ = {isa = PBXBuildFile; productRef = AD10000000000000000001; };
+		AA10000000000000000020 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000022; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +83,7 @@
 		AB1000000000000000001D /* QuoteIdentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdentTests.swift; sourceTree = "<group>"; };
 		AB1000000000000000001E /* ConnectionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStoreTests.swift; sourceTree = "<group>"; };
 		AB1000000000000000001F /* SequelPGApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SequelPGApp.entitlements; sourceTree = "<group>"; };
+		AB10000000000000000022 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -202,6 +204,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000001E /* ConnectionStoreTests.swift */,
+				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
 			);
 			path = SequelPGTests;
@@ -349,6 +352,7 @@
 			files = (
 				AA1000000000000000001D /* QuoteIdentTests.swift in Sources */,
 				AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */,
+				AA10000000000000000020 /* ModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
