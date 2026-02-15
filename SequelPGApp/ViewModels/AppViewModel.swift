@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import OSLog
 import SwiftUI
@@ -19,6 +20,8 @@ final class AppViewModel: ObservableObject {
     @Published var isConnected = false
     @Published var connectedProfileName: String?
     @Published var errorMessage: String?
+
+    private var cancellables = Set<AnyCancellable>()
 
     enum MainTab: String, CaseIterable {
         case structure = "Structure"
@@ -42,6 +45,28 @@ final class AppViewModel: ObservableObject {
         self.navigatorVM = NavigatorViewModel()
         self.tableVM = TableViewModel()
         self.queryVM = QueryViewModel()
+
+        // Forward child VM objectWillChange to parent so SwiftUI
+        // views observing this AppViewModel re-render on nested changes.
+        connectionListVM.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        navigatorVM.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        tableVM.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        queryVM.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     func connect(profile: ConnectionProfile) async {
