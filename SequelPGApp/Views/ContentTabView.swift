@@ -8,23 +8,29 @@ struct ContentTabView: View {
             if appVM.tableVM.isLoadingContent {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let result = appVM.tableVM.contentResult, !result.columns.isEmpty {
+            } else if let result = appVM.tableVM.contentResult {
                 ResultsGridView(result: result)
+            } else if appVM.navigatorVM.selectedObject != nil {
+                ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack {
-                    Text("Select a table and switch to Content to browse rows.")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear {
-                    if appVM.navigatorVM.selectedObject != nil, appVM.tableVM.contentResult == nil {
-                        Task { await appVM.loadContentPage() }
-                    }
-                }
+                Text("Select a table and switch to Content to browse rows.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             Divider()
             paginationBar
+        }
+        .onAppear {
+            if appVM.navigatorVM.selectedObject != nil, appVM.tableVM.contentResult == nil {
+                Task { await appVM.loadContentPage() }
+            }
+        }
+        .onChange(of: appVM.navigatorVM.selectedObject) { _ in
+            if appVM.navigatorVM.selectedObject != nil, appVM.selectedTab == .content {
+                Task { await appVM.loadContentPage() }
+            }
         }
     }
 

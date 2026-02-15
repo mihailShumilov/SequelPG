@@ -104,8 +104,12 @@ final class AppViewModel: ObservableObject {
 
     func selectObject(_ object: DBObject) async {
         navigatorVM.selectedObject = object
-        selectedTab = .structure
         tableVM.clear()
+
+        // If no object-specific tab is active, switch to structure.
+        if selectedTab == .query {
+            selectedTab = .structure
+        }
 
         do {
             let columns = try await dbClient.getColumns(
@@ -121,6 +125,11 @@ final class AppViewModel: ObservableObject {
             tableVM.approximateRowCount = approxRows
             tableVM.selectedObjectName = object.name
             tableVM.selectedObjectColumnCount = columns.count
+
+            // If content tab is active, load content for the new object.
+            if selectedTab == .content {
+                await loadContentPage()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -147,7 +156,21 @@ final class AppViewModel: ObservableObject {
 
         do {
             tableVM.isLoadingContent = true
-            let result = try await dbClient.runQuery(sql, maxRows: limit, timeout: 10.0)
+            var result = try await dbClient.runQuery(sql, maxRows: limit, timeout: 10.0)
+
+            // When the table has zero rows, runQuery returns empty columns
+            // because column names are derived from row data. Use the
+            // already-loaded structure columns as a fallback.
+            if result.columns.isEmpty, !tableVM.columns.isEmpty {
+                result = QueryResult(
+                    columns: tableVM.columns.map(\.name),
+                    rows: [],
+                    executionTime: result.executionTime,
+                    rowsAffected: result.rowsAffected,
+                    isTruncated: false
+                )
+            }
+
             tableVM.setContentResult(result)
             tableVM.isLoadingContent = false
         } catch {

@@ -131,6 +131,21 @@ struct ResultsGridView: View {
         ScrollView([.horizontal, .vertical]) {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
+                    if result.rows.isEmpty {
+                        HStack(spacing: 0) {
+                            ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
+                                Text("")
+                                    .frame(minWidth: columnMinWidth, alignment: .leading)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+
+                                if colIdx < result.columns.count - 1 {
+                                    Divider()
+                                }
+                            }
+                        }
+                        Divider()
+                    }
                     ForEach(0 ..< result.rows.count, id: \.self) { rowIdx in
                         HStack(spacing: 0) {
                             ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
