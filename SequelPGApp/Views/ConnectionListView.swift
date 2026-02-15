@@ -32,7 +32,7 @@ struct ConnectionListView: View {
                     Spacer()
                 }
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
+                .onTapGesture {
                     Task { await appVM.connect(profile: profile) }
                 }
                 .contextMenu {
