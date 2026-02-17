@@ -32,6 +32,7 @@
 		AA10000000000000000017 /* QueryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000017; };
 		AA10000000000000000018 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000018; };
 		AA10000000000000000019 /* MainAreaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000019; };
+		AA10000000000000000029 /* StartPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000029; };
 		AA1000000000000000001A /* QuoteIdent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001A; };
 		AA10000000000000000028 /* QuoteLiteral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000028; };
 		AA1000000000000000001B /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001B; };
@@ -85,6 +86,7 @@
 		AB10000000000000000017 /* QueryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryTabView.swift; sourceTree = "<group>"; };
 		AB10000000000000000018 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
 		AB10000000000000000019 /* MainAreaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainAreaView.swift; sourceTree = "<group>"; };
+		AB10000000000000000029 /* StartPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartPageView.swift; sourceTree = "<group>"; };
 		AB1000000000000000001A /* QuoteIdent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdent.swift; sourceTree = "<group>"; };
 		AB10000000000000000028 /* QuoteLiteral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteLiteral.swift; sourceTree = "<group>"; };
 		AB1000000000000000001B /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
@@ -193,6 +195,7 @@
 				AB10000000000000000014 /* NavigatorView.swift */,
 				AB10000000000000000017 /* QueryTabView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
+				AB10000000000000000029 /* StartPageView.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
 			);
 			path = Views;
@@ -365,6 +368,7 @@
 				AA10000000000000000017 /* QueryTabView.swift in Sources */,
 				AA10000000000000000018 /* InspectorView.swift in Sources */,
 				AA10000000000000000019 /* MainAreaView.swift in Sources */,
+				AA10000000000000000029 /* StartPageView.swift in Sources */,
 				AA1000000000000000001A /* QuoteIdent.swift in Sources */,
 				AA10000000000000000028 /* QuoteLiteral.swift in Sources */,
 				AA1000000000000000001B /* Logger.swift in Sources */,

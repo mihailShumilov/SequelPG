@@ -10,16 +10,8 @@ struct SidebarView: View {
 
             Divider()
 
-            if appVM.isConnected {
-                NavigatorView()
-                    .environmentObject(appVM)
-            } else {
-                Spacer()
-                Text("Connect to browse")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                Spacer()
-            }
+            NavigatorView()
+                .environmentObject(appVM)
         }
         .frame(minWidth: 200)
     }
