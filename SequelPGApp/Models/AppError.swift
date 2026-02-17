@@ -8,6 +8,7 @@ enum AppError: LocalizedError, Sendable {
     case validationFailed([String])
     case keychainError(String)
     case notConnected
+    case foreignKeyViolation(String)
     case underlying(String)
 
     var errorDescription: String? {
@@ -24,6 +25,8 @@ enum AppError: LocalizedError, Sendable {
             return "Keychain error: \(message)"
         case .notConnected:
             return "Not connected to a database."
+        case let .foreignKeyViolation(message):
+            return "Foreign key violation: \(message)"
         case let .underlying(message):
             return message
         }

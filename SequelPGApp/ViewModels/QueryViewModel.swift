@@ -14,6 +14,9 @@ final class QueryViewModel: ObservableObject {
     /// Column metadata for the detected table (includes PK info).
     @Published var editableColumns: [ColumnInfo] = []
 
+    /// Row index pending delete confirmation in query results.
+    @Published var deleteConfirmationRowIndex: Int?
+
     /// Client-side sort state for query results.
     @Published var sortColumn: String?
     @Published var sortAscending: Bool = true
@@ -25,23 +28,52 @@ final class QueryViewModel: ObservableObject {
               let colIdx = result.columns.firstIndex(of: sortCol)
         else { return result }
 
-        let sorted = result.rows.sorted { a, b in
-            let lhs = a[colIdx]
-            let rhs = b[colIdx]
-            // NULLs sort last
-            if lhs.isNull && rhs.isNull { return false }
+        // Use enumerated + stable tiebreaker so the order is identical
+        // to originalRowIndex() even when values compare equal.
+        let sorted = result.rows.enumerated().sorted { a, b in
+            let lhs = a.element[colIdx]
+            let rhs = b.element[colIdx]
+            if lhs.isNull && rhs.isNull { return a.offset < b.offset }
             if lhs.isNull { return !sortAscending }
             if rhs.isNull { return sortAscending }
             let cmp = lhs.displayString.localizedStandardCompare(rhs.displayString)
+            if cmp == .orderedSame { return a.offset < b.offset }
             return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }
         return QueryResult(
             columns: result.columns,
-            rows: sorted,
+            rows: sorted.map(\.element),
             executionTime: result.executionTime,
             rowsAffected: result.rowsAffected,
             isTruncated: result.isTruncated
         )
+    }
+
+    /// Maps a display row index (from `sortedResult`) back to the original
+    /// row index in `result`. When no client-side sort is active, returns
+    /// the index unchanged.
+    func originalRowIndex(_ displayIndex: Int) -> Int {
+        guard let result,
+              let sortCol = sortColumn,
+              let colIdx = result.columns.firstIndex(of: sortCol)
+        else { return displayIndex }
+
+        let indexed = result.rows.enumerated().map { ($0.offset, $0.element) }
+        // Must use the same stable tiebreaker as sortedResult so the
+        // mapping is consistent even when values compare equal.
+        let sorted = indexed.sorted { a, b in
+            let lhs = a.1[colIdx]
+            let rhs = b.1[colIdx]
+            if lhs.isNull && rhs.isNull { return a.0 < b.0 }
+            if lhs.isNull { return !sortAscending }
+            if rhs.isNull { return sortAscending }
+            let cmp = lhs.displayString.localizedStandardCompare(rhs.displayString)
+            if cmp == .orderedSame { return a.0 < b.0 }
+            return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+        }
+
+        guard displayIndex < sorted.count else { return displayIndex }
+        return sorted[displayIndex].0
     }
 
     /// Attempts to extract a single table reference from a simple SELECT query.

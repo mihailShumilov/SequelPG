@@ -4,6 +4,7 @@ struct InspectorView: View {
     @EnvironmentObject var appVM: AppViewModel
     @State private var editingColumn: String?
     @State private var editingText: String = ""
+    @State private var showDeleteConfirmation = false
     @FocusState private var editFieldFocused: Bool
 
     var body: some View {
@@ -43,6 +44,16 @@ struct InspectorView: View {
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
                     Spacer()
+                    if inspectorCanDelete {
+                        Button {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Delete this row")
+                    }
                     Button {
                         appVM.clearSelectedRow()
                     } label: {
@@ -105,6 +116,23 @@ struct InspectorView: View {
             Spacer()
         }
         .padding()
+        .alert("Delete Row?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                Task { await appVM.deleteInspectorRow() }
+            }
+        } message: {
+            Text("This row will be permanently deleted from the database.")
+        }
+    }
+
+    private var inspectorCanDelete: Bool {
+        if appVM.selectedTab == .content {
+            return appVM.canDeleteContentRow
+        } else if appVM.selectedTab == .query {
+            return appVM.canDeleteQueryRow
+        }
+        return false
     }
 
     private func commitInspectorEdit(column: String) {

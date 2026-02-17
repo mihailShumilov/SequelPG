@@ -45,6 +45,8 @@
 		AA10000000000000000025 /* QueryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000025; };
 		AA10000000000000000026 /* ConnectionListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000026; };
 		AA10000000000000000027 /* AppViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000027; };
+		AA10000000000000000024A /* InsertDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000024A; };
+		AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000025A; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +98,8 @@
 		AB10000000000000000025 /* QueryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000026 /* ConnectionListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionListViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000027 /* AppViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000024A /* InsertDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertDeleteTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000025A /* CascadeDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CascadeDeleteTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -224,6 +228,8 @@
 				AB10000000000000000025 /* QueryViewModelTests.swift */,
 				AB10000000000000000026 /* ConnectionListViewModelTests.swift */,
 				AB10000000000000000027 /* AppViewModelTests.swift */,
+				AB10000000000000000024A /* InsertDeleteTests.swift */,
+				AB10000000000000000025A /* CascadeDeleteTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -377,6 +383,8 @@
 				AA10000000000000000025 /* QueryViewModelTests.swift in Sources */,
 				AA10000000000000000026 /* ConnectionListViewModelTests.swift in Sources */,
 				AA10000000000000000027 /* AppViewModelTests.swift in Sources */,
+				AA10000000000000000024A /* InsertDeleteTests.swift in Sources */,
+				AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

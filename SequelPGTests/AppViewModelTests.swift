@@ -15,6 +15,7 @@ actor MockDatabaseClient: PostgresClientProtocol {
     private(set) var lastSwitchDatabase: String?
     private(set) var lastRunQuerySQL: String?
     private(set) var lastRunQueryMaxRows: Int?
+    private(set) var allRunQuerySQLs: [String] = []
     private(set) var lastGetColumnsSchema: String?
     private(set) var lastGetColumnsTable: String?
     private(set) var lastListTablesSchema: String?
@@ -59,6 +60,10 @@ actor MockDatabaseClient: PostgresClientProtocol {
         isTruncated: false
     )
 
+    /// Optional per-call handler: receives the SQL and returns a result or throws.
+    /// When set, overrides shouldThrowOnRunQuery and stubbedQueryResult.
+    var runQueryHandler: (@Sendable (String) throws -> QueryResult)?
+
     var isConnected: Bool { connected }
 
     func connect(profile: ConnectionProfile, password: String?) async throws {
@@ -77,6 +82,10 @@ actor MockDatabaseClient: PostgresClientProtocol {
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult {
         lastRunQuerySQL = sql
         lastRunQueryMaxRows = maxRows
+        allRunQuerySQLs.append(sql)
+        if let handler = runQueryHandler {
+            return try handler(sql)
+        }
         if shouldThrowOnRunQuery { throw runQueryError }
         return stubbedQueryResult
     }
@@ -1305,6 +1314,275 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isConnected)
     }
 
+    // MARK: - executeQuery clears deleteConfirmationRowIndex
+
+    func testExecuteQueryClearsDeleteConfirmationRowIndex() async {
+        await makeConnectedVM()
+        vm.queryVM.deleteConfirmationRowIndex = 3
+
+        await vm.executeQuery("SELECT 1")
+
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+    }
+
+    func testExecuteQueryClearsDeleteConfirmationRowIndexEvenWhenAlreadyNil() async {
+        await makeConnectedVM()
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+
+        await vm.executeQuery("SELECT 1")
+
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+    }
+
+    func testExecuteQueryClearsDeleteConfirmationRowIndexOnError() async {
+        await makeConnectedVM()
+        vm.queryVM.deleteConfirmationRowIndex = 5
+        await mockDB.setShouldThrowOnRunQuery(true)
+
+        await vm.executeQuery("SELECT bad")
+
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+    }
+
+    // MARK: - deleteQueryRow with active sort
+
+    /// Sets up a query result with a sort active, verifying that
+    /// deleteQueryRow targets the correct original row based on the
+    /// sorted display index.
+    func testDeleteQueryRowWithActiveSortTargetsCorrectOriginalRow() async {
+        await makeConnectedVM()
+
+        // Set up editable query context
+        vm.queryVM.editableTableContext = (schema: "public", table: "users")
+        vm.queryVM.editableColumns = [
+            ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer",
+                       isNullable: false, columnDefault: nil,
+                       characterMaximumLength: nil, isPrimaryKey: true),
+            ColumnInfo(name: "name", ordinalPosition: 2, dataType: "text",
+                       isNullable: true, columnDefault: nil,
+                       characterMaximumLength: nil),
+        ]
+
+        // Original result: [0] id=3/Charlie, [1] id=1/Alice, [2] id=2/Bob
+        vm.queryVM.result = QueryResult(
+            columns: ["id", "name"],
+            rows: [
+                [.text("3"), .text("Charlie")],  // original index 0
+                [.text("1"), .text("Alice")],     // original index 1
+                [.text("2"), .text("Bob")],       // original index 2
+            ],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+
+        // Sort ascending by name: Alice(orig 1), Bob(orig 2), Charlie(orig 0)
+        vm.queryVM.sortColumn = "name"
+        vm.queryVM.sortAscending = true
+
+        // Delete display row 0 (Alice), which is original row 1 (id=1)
+        await vm.deleteQueryRow(rowIndex: 0)
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL, "Expected a DELETE SQL to be executed")
+        // The DELETE should target id=1 (Alice), not id=3 (Charlie at original index 0)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false,
+                       "Expected DELETE to target id=1 (Alice), got: \(deleteSQL ?? "nil")")
+    }
+
+    func testDeleteQueryRowWithDescendingSortTargetsCorrectOriginalRow() async {
+        await makeConnectedVM()
+
+        vm.queryVM.editableTableContext = (schema: "public", table: "items")
+        vm.queryVM.editableColumns = [
+            ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer",
+                       isNullable: false, columnDefault: nil,
+                       characterMaximumLength: nil, isPrimaryKey: true),
+            ColumnInfo(name: "val", ordinalPosition: 2, dataType: "text",
+                       isNullable: true, columnDefault: nil,
+                       characterMaximumLength: nil),
+        ]
+
+        // Original: [0] id=1/A, [1] id=2/C, [2] id=3/B
+        vm.queryVM.result = QueryResult(
+            columns: ["id", "val"],
+            rows: [
+                [.text("1"), .text("A")],  // original index 0
+                [.text("2"), .text("C")],  // original index 1
+                [.text("3"), .text("B")],  // original index 2
+            ],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+
+        // Sort descending by val: C(orig 1), B(orig 2), A(orig 0)
+        vm.queryVM.sortColumn = "val"
+        vm.queryVM.sortAscending = false
+
+        // Delete display row 2 (A), which is original row 0 (id=1)
+        await vm.deleteQueryRow(rowIndex: 2)
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false,
+                       "Expected DELETE to target id=1 (A), got: \(deleteSQL ?? "nil")")
+    }
+
+    func testDeleteQueryRowWithNoSortActiveUsesIndexDirectly() async {
+        await makeConnectedVM()
+
+        vm.queryVM.editableTableContext = (schema: "public", table: "users")
+        vm.queryVM.editableColumns = [
+            ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer",
+                       isNullable: false, columnDefault: nil,
+                       characterMaximumLength: nil, isPrimaryKey: true),
+        ]
+
+        vm.queryVM.result = QueryResult(
+            columns: ["id"],
+            rows: [[.text("10")], [.text("20")], [.text("30")]],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+        vm.queryVM.sortColumn = nil
+
+        // Delete display row 1 -> should target id=20
+        await vm.deleteQueryRow(rowIndex: 1)
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = '20'") ?? false)
+    }
+
+    // MARK: - updateQueryCell with active sort
+
+    func testUpdateQueryCellWithActiveSortTargetsCorrectOriginalRow() async {
+        await makeConnectedVM()
+
+        vm.queryVM.editableTableContext = (schema: "public", table: "users")
+        vm.queryVM.editableColumns = [
+            ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer",
+                       isNullable: false, columnDefault: nil,
+                       characterMaximumLength: nil, isPrimaryKey: true),
+            ColumnInfo(name: "name", ordinalPosition: 2, dataType: "text",
+                       isNullable: true, columnDefault: nil,
+                       characterMaximumLength: nil),
+        ]
+
+        // Original: [0] id=3/Charlie, [1] id=1/Alice, [2] id=2/Bob
+        vm.queryVM.result = QueryResult(
+            columns: ["id", "name"],
+            rows: [
+                [.text("3"), .text("Charlie")],
+                [.text("1"), .text("Alice")],
+                [.text("2"), .text("Bob")],
+            ],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+
+        // Sort ascending by name: Alice(orig 1), Bob(orig 2), Charlie(orig 0)
+        vm.queryVM.sortColumn = "name"
+        vm.queryVM.sortAscending = true
+        vm.queryVM.queryText = "SELECT * FROM users"
+
+        // Update display row 1 (Bob, orig 2, id=2), column 1 (name) to "Bobby"
+        await vm.updateQueryCell(rowIndex: 1, columnIndex: 1, newText: "Bobby")
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let updateSQL = allSQLs.first { $0.contains("UPDATE") }
+        XCTAssertNotNil(updateSQL, "Expected an UPDATE SQL to be executed")
+        // Should target id=2 (Bob at original index 2), not id=1 (Alice at original index 1)
+        XCTAssertTrue(updateSQL?.contains("\"id\" = '2'") ?? false,
+                       "Expected UPDATE to target id=2 (Bob), got: \(updateSQL ?? "nil")")
+        XCTAssertTrue(updateSQL?.contains("\"name\" = 'Bobby'") ?? false)
+    }
+
+    func testUpdateQueryCellWithNoSortActiveUsesIndexDirectly() async {
+        await makeConnectedVM()
+
+        vm.queryVM.editableTableContext = (schema: "public", table: "users")
+        vm.queryVM.editableColumns = [
+            ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer",
+                       isNullable: false, columnDefault: nil,
+                       characterMaximumLength: nil, isPrimaryKey: true),
+            ColumnInfo(name: "name", ordinalPosition: 2, dataType: "text",
+                       isNullable: true, columnDefault: nil,
+                       characterMaximumLength: nil),
+        ]
+
+        vm.queryVM.result = QueryResult(
+            columns: ["id", "name"],
+            rows: [
+                [.text("1"), .text("Alice")],
+                [.text("2"), .text("Bob")],
+            ],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+        vm.queryVM.sortColumn = nil
+        vm.queryVM.queryText = "SELECT * FROM users"
+
+        // Update row 1 (Bob, id=2), column 1 (name) to "Bobby"
+        await vm.updateQueryCell(rowIndex: 1, columnIndex: 1, newText: "Bobby")
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let updateSQL = allSQLs.first { $0.contains("UPDATE") }
+        XCTAssertNotNil(updateSQL)
+        XCTAssertTrue(updateSQL?.contains("\"id\" = '2'") ?? false)
+        XCTAssertTrue(updateSQL?.contains("\"name\" = 'Bobby'") ?? false)
+    }
+
+    func testUpdateQueryCellWithNullSortedValueTargetsCorrectRow() async {
+        await makeConnectedVM()
+
+        vm.queryVM.editableTableContext = (schema: "public", table: "users")
+        vm.queryVM.editableColumns = [
+            ColumnInfo(name: "id", ordinalPosition: 1, dataType: "integer",
+                       isNullable: false, columnDefault: nil,
+                       characterMaximumLength: nil, isPrimaryKey: true),
+            ColumnInfo(name: "name", ordinalPosition: 2, dataType: "text",
+                       isNullable: true, columnDefault: nil,
+                       characterMaximumLength: nil),
+        ]
+
+        // Original: [0] id=1/NULL, [1] id=2/Alice, [2] id=3/Bob
+        vm.queryVM.result = QueryResult(
+            columns: ["id", "name"],
+            rows: [
+                [.text("1"), .null],           // original index 0
+                [.text("2"), .text("Alice")],  // original index 1
+                [.text("3"), .text("Bob")],    // original index 2
+            ],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+
+        // Sort ascending by name: Alice(orig 1), Bob(orig 2), NULL(orig 0) -- nulls last
+        vm.queryVM.sortColumn = "name"
+        vm.queryVM.sortAscending = true
+        vm.queryVM.queryText = "SELECT * FROM users"
+
+        // Update display row 2 (NULL, orig 0, id=1), column 1 to "Zara"
+        await vm.updateQueryCell(rowIndex: 2, columnIndex: 1, newText: "Zara")
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let updateSQL = allSQLs.first { $0.contains("UPDATE") }
+        XCTAssertNotNil(updateSQL)
+        XCTAssertTrue(updateSQL?.contains("\"id\" = '1'") ?? false,
+                       "Expected UPDATE to target id=1 (NULL row), got: \(updateSQL ?? "nil")")
+    }
+
+    // MARK: - Reconnect after disconnect
+
     func testReconnectAfterDisconnect() async {
         let profile = makeProfile()
         await vm.connect(profile: profile)
@@ -1364,5 +1642,22 @@ extension MockDatabaseClient {
 
     func setStubbedQueryResult(_ result: QueryResult) {
         stubbedQueryResult = result
+    }
+
+    func getAllRunQuerySQLs() -> [String] {
+        return allRunQuerySQLs
+    }
+
+    func setRunQueryError(_ error: Error) {
+        runQueryError = error
+    }
+
+    func setRunQueryHandler(_ handler: (@Sendable (String) throws -> QueryResult)?) {
+        runQueryHandler = handler
+    }
+
+    func clearAllRunQuerySQLs() {
+        allRunQuerySQLs = []
+        lastRunQuerySQL = nil
     }
 }

@@ -11,6 +11,41 @@ struct QueryTabView: View {
             resultsArea
                 .frame(minHeight: 100)
         }
+        .alert(
+            "Delete Row?",
+            isPresented: Binding<Bool>(
+                get: { appVM.queryVM.deleteConfirmationRowIndex != nil },
+                set: { if !$0 { appVM.queryVM.deleteConfirmationRowIndex = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {
+                appVM.queryVM.deleteConfirmationRowIndex = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let idx = appVM.queryVM.deleteConfirmationRowIndex {
+                    appVM.queryVM.deleteConfirmationRowIndex = nil
+                    Task { await appVM.deleteQueryRow(rowIndex: idx) }
+                }
+            }
+        } message: {
+            Text("This row will be permanently deleted from the database.")
+        }
+        .alert(
+            "Foreign Key Conflict",
+            isPresented: Binding<Bool>(
+                get: { appVM.cascadeDeleteContext?.source == .query },
+                set: { if !$0 { appVM.cascadeDeleteContext = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {
+                appVM.cascadeDeleteContext = nil
+            }
+            Button("Delete All", role: .destructive) {
+                Task { await appVM.executeCascadeDelete() }
+            }
+        } message: {
+            Text(appVM.cascadeDeleteContext?.errorMessage ?? "This row is referenced by other tables. Delete all referencing rows too?")
+        }
     }
 
     private var editorArea: some View {
@@ -91,6 +126,9 @@ struct QueryTabView: View {
                             onColumnHeaderTapped: { column in
                                 appVM.toggleQuerySort(column: column)
                             },
+                            onDeleteRow: appVM.canDeleteQueryRow ? { rowIdx in
+                                appVM.queryVM.deleteConfirmationRowIndex = rowIdx
+                            } : nil,
                             selectedRowIndex: $appVM.tableVM.selectedRowIndex
                         )
 
@@ -148,9 +186,15 @@ struct ResultsGridView: View {
     var sortColumn: String?
     var sortAscending: Bool
     var onColumnHeaderTapped: ((String) -> Void)?
+    var onDeleteRow: ((Int) -> Void)?
+    var isInsertingRow: Bool
+    var insertRowValues: Binding<[String: String]>?
+    var onInsertCommit: (() -> Void)?
+    var onInsertCancel: (() -> Void)?
     @Binding var selectedRowIndex: Int?
     @FocusState private var isFocused: Bool
     @FocusState private var editFieldFocused: Bool
+    @FocusState private var insertFieldFocused: Bool
     @State private var editingCell: (row: Int, col: Int)?
     @State private var editingText: String = ""
     private let columnMinWidth: CGFloat = 100
@@ -164,7 +208,12 @@ struct ResultsGridView: View {
         sortColumn: String? = nil,
         sortAscending: Bool = true,
         onColumnHeaderTapped: ((String) -> Void)? = nil,
-        selectedRowIndex: Binding<Int?> = .constant(nil)
+        onDeleteRow: ((Int) -> Void)? = nil,
+        selectedRowIndex: Binding<Int?> = .constant(nil),
+        isInsertingRow: Bool = false,
+        insertRowValues: Binding<[String: String]>? = nil,
+        onInsertCommit: (() -> Void)? = nil,
+        onInsertCancel: (() -> Void)? = nil
     ) {
         self.result = result
         self.columns = columns
@@ -174,7 +223,12 @@ struct ResultsGridView: View {
         self.sortColumn = sortColumn
         self.sortAscending = sortAscending
         self.onColumnHeaderTapped = onColumnHeaderTapped
+        self.onDeleteRow = onDeleteRow
         self._selectedRowIndex = selectedRowIndex
+        self.isInsertingRow = isInsertingRow
+        self.insertRowValues = insertRowValues
+        self.onInsertCommit = onInsertCommit
+        self.onInsertCancel = onInsertCancel
     }
 
     var body: some View {
@@ -213,7 +267,21 @@ struct ResultsGridView: View {
                                 isFocused = true
                                 onRowSelected?(rowIdx)
                             }
+                            .contextMenu {
+                                if onDeleteRow != nil {
+                                    Button(role: .destructive) {
+                                        onDeleteRow?(rowIdx)
+                                    } label: {
+                                        Label("Delete Row", systemImage: "trash")
+                                    }
+                                }
+                            }
 
+                            Divider()
+                        }
+
+                        if isInsertingRow, let binding = insertRowValues {
+                            insertRowView(binding: binding)
                             Divider()
                         }
                     } header: {
@@ -267,6 +335,10 @@ struct ResultsGridView: View {
             guard newIndex >= 0, newIndex < result.rows.count else { return }
             onRowSelected?(newIndex)
         }
+        .onDeleteCommand {
+            guard let onDeleteRow, let idx = selectedRowIndex else { return }
+            onDeleteRow(idx)
+        }
     }
 
     @ViewBuilder
@@ -317,5 +389,40 @@ struct ResultsGridView: View {
     private func cancelEdit() {
         editingCell = nil
         editingText = ""
+    }
+
+    @ViewBuilder
+    private func insertRowView(binding: Binding<[String: String]>) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
+                let colName = result.columns[colIdx]
+                let colInfo = columns.first { $0.name == colName }
+                let placeholder = colInfo.map { info -> String in
+                    var parts: [String] = [info.dataType]
+                    if info.isNullable { parts.append("nullable") }
+                    if info.columnDefault != nil { parts.append("has default") }
+                    return parts.joined(separator: ", ")
+                } ?? colName
+
+                TextField(placeholder, text: Binding(
+                    get: { binding.wrappedValue[colName] ?? "" },
+                    set: { binding.wrappedValue[colName] = $0 }
+                ))
+                .textFieldStyle(.plain)
+                .font(.system(.body, design: .monospaced))
+                .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .focused($insertFieldFocused)
+
+                if colIdx < result.columns.count - 1 {
+                    Divider()
+                }
+            }
+        }
+        .background(Color.blue.opacity(0.08))
+        .onExitCommand {
+            onInsertCancel?()
+        }
     }
 }

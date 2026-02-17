@@ -159,11 +159,26 @@ actor DatabaseClient: PostgresClientProtocol {
                 throw AppError.queryTimeout
             }
 
-            guard let result = try await group.next() else {
-                throw AppError.queryTimeout
+            do {
+                guard let result = try await group.next() else {
+                    throw AppError.queryTimeout
+                }
+                group.cancelAll()
+                return result
+            } catch let error as AppError {
+                throw error
+            } catch let error as PSQLError {
+                // Note: PSQLError does not expose sqlState directly, so we
+                // parse String(reflecting:). This may break if PostgresNIO
+                // changes its debug description format.
+                let reflected = String(reflecting: error)
+                if reflected.contains("sqlState: 23503") {
+                    throw AppError.foreignKeyViolation(Self.formatPSQLError(error))
+                }
+                throw AppError.queryFailed(Self.formatPSQLError(error))
+            } catch {
+                throw AppError.queryFailed(String(reflecting: error))
             }
-            group.cancelAll()
-            return result
         }
 
         return result
@@ -217,6 +232,35 @@ actor DatabaseClient: PostgresClientProtocol {
         // Fallback: try String decoding (works for text, varchar, json, jsonb, etc.)
         if let v = try? cell.decode(String.self) { return .text(v) }
         return .text("<binary>")
+    }
+
+    // MARK: - Error Formatting
+
+    /// Extracts the human-readable message and detail from a PSQLError,
+    /// falling back to the full reflected description.
+    private static func formatPSQLError(_ error: PSQLError) -> String {
+        // PSQLError exposes server info via String(reflecting:).
+        // Parse out just the message and detail fields for a clean UX.
+        let full = String(reflecting: error)
+
+        // Try to extract "message: ..." from serverInfo
+        var parts: [String] = []
+        if let msgRange = full.range(of: "message: ") {
+            let start = msgRange.upperBound
+            let rest = full[start...]
+            if let end = rest.range(of: ", ")?.lowerBound ?? rest.range(of: "]")?.lowerBound {
+                parts.append(String(rest[..<end]))
+            }
+        }
+        if let detRange = full.range(of: "detail: ") {
+            let start = detRange.upperBound
+            let rest = full[start...]
+            if let end = rest.range(of: ", ")?.lowerBound ?? rest.range(of: "]")?.lowerBound {
+                parts.append(String(rest[..<end]))
+            }
+        }
+
+        return parts.isEmpty ? full : parts.joined(separator: "\n")
     }
 
     // MARK: - Introspection

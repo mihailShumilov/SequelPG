@@ -392,6 +392,34 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertNil(sut.selectedRowData)
     }
 
+    // MARK: - deleteConfirmationRowIndex
+
+    func testInitialDeleteConfirmationRowIndexIsNil() {
+        XCTAssertNil(sut.deleteConfirmationRowIndex)
+    }
+
+    func testDeleteConfirmationRowIndexCanBeSet() {
+        sut.deleteConfirmationRowIndex = 3
+        XCTAssertEqual(sut.deleteConfirmationRowIndex, 3)
+    }
+
+    func testDeleteConfirmationRowIndexCanBeSetToZero() {
+        sut.deleteConfirmationRowIndex = 0
+        XCTAssertEqual(sut.deleteConfirmationRowIndex, 0)
+    }
+
+    func testDeleteConfirmationRowIndexCanBeSetBackToNil() {
+        sut.deleteConfirmationRowIndex = 5
+        sut.deleteConfirmationRowIndex = nil
+        XCTAssertNil(sut.deleteConfirmationRowIndex)
+    }
+
+    func testClearResetsDeleteConfirmationRowIndexToNil() {
+        sut.deleteConfirmationRowIndex = 7
+        sut.clear()
+        XCTAssertNil(sut.deleteConfirmationRowIndex)
+    }
+
     // MARK: - totalPages reacts to property changes
 
     func testTotalPagesUpdatesWhenPageSizeChanges() {

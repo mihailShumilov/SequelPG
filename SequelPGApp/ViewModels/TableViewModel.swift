@@ -15,6 +15,9 @@ final class TableViewModel: ObservableObject {
     @Published var selectedRowData: [(column: String, value: CellValue)]?
     @Published var sortColumn: String?
     @Published var sortAscending: Bool = true
+    @Published var deleteConfirmationRowIndex: Int?
+    @Published var isInsertingRow = false
+    @Published var newRowValues: [String: String] = [:]
 
     var totalPages: Int {
         guard pageSize > 0 else { return 0 }
@@ -43,5 +46,8 @@ final class TableViewModel: ObservableObject {
         selectedRowData = nil
         sortColumn = nil
         sortAscending = true
+        deleteConfirmationRowIndex = nil
+        isInsertingRow = false
+        newRowValues = [:]
     }
 }

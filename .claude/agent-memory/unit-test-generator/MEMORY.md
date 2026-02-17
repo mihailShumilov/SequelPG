@@ -19,7 +19,8 @@
 - `DBObject(schema:name:type:)` where type is `.table` or `.view`
 - `ConnectionProfile(name:host:port:database:username:)` with `id: UUID`
 - `CellValue` enum: `.null`, `.text(String)`
-- `AppError` enum with `.connectionFailed`, `.queryTimeout`, `.validationFailed`, `.notConnected`
+- `AppError` enum with `.connectionFailed`, `.queryTimeout`, `.validationFailed`, `.notConnected`, `.foreignKeyViolation`, `.underlying`
+- `AppViewModel.CascadeDeleteContext` struct: `schema`, `table`, `pkValues`, `errorMessage`, `source` (MainTab)
 
 ## MainActor Testing
 - ViewModels are `@MainActor` -- test classes must be `@MainActor` too
@@ -44,6 +45,11 @@
 - Mocks are defined at file scope (not private) in test files; no shared mock files yet
 - Use `@unchecked Sendable` on mock classes that track calls with mutable arrays
 - `AppViewModel` DI: `init(connectionStore:keychainService:dbClient:)` -- all three injectable
+- MockDatabaseClient has `allRunQuerySQLs: [String]` array + `getAllRunQuerySQLs()` -- use when methods chain multiple queries (e.g., delete then reload)
+- Mocks in `AppViewModelTests.swift` are `internal` (file-scope, no access modifier) and reusable from other test files in the same target
+- MockDatabaseClient has `runQueryHandler: (@Sendable (String) throws -> QueryResult)?` for per-SQL-call behavior control
+  - Set via `setRunQueryHandler(...)` -- overrides `shouldThrowOnRunQuery`/`stubbedQueryResult` when non-nil
+  - Useful for testing methods that call `runQuery` multiple times with different SQL (e.g., `executeCascadeDelete`)
 
 ## Xcode Project Registration (pbxproj)
 - New test files MUST be added to `project.pbxproj` in 4 places:
@@ -52,7 +58,7 @@
   3. SequelPGTests PBXGroup children list (`AC20000000000000000009`)
   4. Test target PBXSourcesBuildPhase files list (`AF10000000000000000013`)
 - IDs follow pattern: `AA1000000000000000XXXX` (build) / `AB1000000000000000XXXX` (ref)
-- Next available suffix: `0024` (after TableViewModelTests used `0023`)
+- Next available suffix: `0026` (after CascadeDeleteTests used `0025A`)
 
 ## Build & Run Tests
 ```bash

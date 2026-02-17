@@ -54,6 +54,47 @@ final class AppErrorTests: XCTestCase {
         let error = AppError.notConnected
         XCTAssertTrue(error.userMessage.contains("Not connected"))
     }
+
+    func testForeignKeyViolationErrorDescription() {
+        let error = AppError.foreignKeyViolation("Key (id)=(1) is still referenced from table \"orders\"")
+        XCTAssertEqual(
+            error.errorDescription,
+            "Foreign key violation: Key (id)=(1) is still referenced from table \"orders\""
+        )
+    }
+
+    func testForeignKeyViolationUserMessage() {
+        let error = AppError.foreignKeyViolation("referenced row")
+        XCTAssertEqual(error.userMessage, "Foreign key violation: referenced row")
+    }
+
+    func testForeignKeyViolationUserMessageContainsForeignKey() {
+        let error = AppError.foreignKeyViolation("detail text")
+        XCTAssertTrue(error.userMessage.contains("Foreign key violation"))
+        XCTAssertTrue(error.userMessage.contains("detail text"))
+    }
+
+    func testForeignKeyViolationWithEmptyMessage() {
+        let error = AppError.foreignKeyViolation("")
+        XCTAssertEqual(error.errorDescription, "Foreign key violation: ")
+    }
+
+    func testUnderlyingErrorMessage() {
+        let error = AppError.underlying("something went wrong")
+        XCTAssertEqual(error.userMessage, "something went wrong")
+    }
+
+    func testKeychainErrorMessage() {
+        let error = AppError.keychainError("access denied")
+        XCTAssertTrue(error.userMessage.contains("Keychain error"))
+        XCTAssertTrue(error.userMessage.contains("access denied"))
+    }
+
+    func testQueryFailedMessage() {
+        let error = AppError.queryFailed("syntax error")
+        XCTAssertTrue(error.userMessage.contains("Query failed"))
+        XCTAssertTrue(error.userMessage.contains("syntax error"))
+    }
 }
 
 final class SSLModeTests: XCTestCase {
