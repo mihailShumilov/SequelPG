@@ -109,4 +109,5 @@ jobs:
           gh release create "v${VERSION}" \
             "SequelPG-v${VERSION}.dmg" \
             --title "SequelPG v${VERSION}" \
-            --generate-notes
+            --generate-notes \
+            --draft=false
