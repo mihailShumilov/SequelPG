@@ -1,0 +1,102 @@
+name: Build & Release DMG
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    # Skip if the push was a version-bump commit (prevents infinite loop)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        id: version
+        run: |
+          PBXPROJ="SequelPG.xcodeproj/project.pbxproj"
+
+          # Read current marketing version
+          CURRENT_VERSION=$(grep -m1 'MARKETING_VERSION' "$PBXPROJ" | sed 's/.*= *\(.*\);/\1/' | tr -d ' ')
+          echo "Current version: $CURRENT_VERSION"
+
+          # Bump patch: X.Y.Z -> X.Y.(Z+1)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "New version: $NEW_VERSION"
+
+          # Replace all MARKETING_VERSION occurrences
+          sed -i '' "s/MARKETING_VERSION = ${CURRENT_VERSION};/MARKETING_VERSION = ${NEW_VERSION};/g" "$PBXPROJ"
+
+          # Read and bump CURRENT_PROJECT_VERSION
+          BUILD_NUM=$(grep -m1 'CURRENT_PROJECT_VERSION' "$PBXPROJ" | sed 's/.*= *\(.*\);/\1/' | tr -d ' ')
+          NEW_BUILD_NUM=$((BUILD_NUM + 1))
+          echo "Build number: $BUILD_NUM -> $NEW_BUILD_NUM"
+
+          sed -i '' "s/CURRENT_PROJECT_VERSION = ${BUILD_NUM};/CURRENT_PROJECT_VERSION = ${NEW_BUILD_NUM};/g" "$PBXPROJ"
+
+          # Export for later steps
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$NEW_BUILD_NUM" >> "$GITHUB_OUTPUT"
+
+      - name: Commit & push version bump
+        run: |
+          git add SequelPG.xcodeproj/project.pbxproj
+          git commit -m "Bump version to ${{ steps.version.outputs.version }} [skip ci]"
+          git push
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Resolve SPM dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project SequelPG.xcodeproj \
+            -scheme SequelPG
+
+      - name: Build Release archive
+        run: |
+          xcodebuild archive \
+            -project SequelPG.xcodeproj \
+            -scheme SequelPG \
+            -configuration Release \
+            -archivePath build/SequelPG.xcarchive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p dmg_content
+          cp -R "build/SequelPG.xcarchive/Products/Applications/SequelPG.app" dmg_content/
+          ln -s /Applications dmg_content/Applications
+          hdiutil create \
+            -volname "SequelPG" \
+            -srcfolder dmg_content \
+            -ov \
+            -format UDZO \
+            "SequelPG-v${VERSION}.dmg"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v${VERSION}" \
+            "SequelPG-v${VERSION}.dmg" \
+            --title "SequelPG v${VERSION}" \
+            --generate-notes
