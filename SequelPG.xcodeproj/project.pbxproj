@@ -49,6 +49,11 @@
 		AA10000000000000000024A /* InsertDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000024A; };
 		AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000025A; };
 		AA1000000000000000002A /* SSHTunnelService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002A; };
+		AA1000000000000000002B /* SQLFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002B; };
+		AA1000000000000000002C /* SQLSyntaxColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002C; };
+		AA1000000000000000002D /* SQLTextStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002D; };
+		AA1000000000000000002E /* SQLCompletionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002E; };
+		AA1000000000000000002F /* SQLEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002F; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +109,11 @@
 		AB10000000000000000024A /* InsertDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertDeleteTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000025A /* CascadeDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CascadeDeleteTests.swift; sourceTree = "<group>"; };
 		AB1000000000000000002A /* SSHTunnelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHTunnelService.swift; sourceTree = "<group>"; };
+		AB1000000000000000002B /* SQLFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLFormatter.swift; sourceTree = "<group>"; };
+		AB1000000000000000002C /* SQLSyntaxColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLSyntaxColors.swift; sourceTree = "<group>"; };
+		AB1000000000000000002D /* SQLTextStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLTextStorage.swift; sourceTree = "<group>"; };
+		AB1000000000000000002E /* SQLCompletionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionProvider.swift; sourceTree = "<group>"; };
+		AB1000000000000000002F /* SQLEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLEditorView.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -197,6 +207,7 @@
 				AB10000000000000000019 /* MainAreaView.swift */,
 				AB10000000000000000014 /* NavigatorView.swift */,
 				AB10000000000000000017 /* QueryTabView.swift */,
+				AB1000000000000000002F /* SQLEditorView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
 				AB10000000000000000029 /* StartPageView.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
@@ -210,6 +221,10 @@
 				AB1000000000000000001B /* Logger.swift */,
 				AB1000000000000000001A /* QuoteIdent.swift */,
 				AB10000000000000000028 /* QuoteLiteral.swift */,
+				AB1000000000000000002B /* SQLFormatter.swift */,
+				AB1000000000000000002C /* SQLSyntaxColors.swift */,
+				AB1000000000000000002D /* SQLTextStorage.swift */,
+				AB1000000000000000002E /* SQLCompletionProvider.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -376,6 +391,11 @@
 				AA10000000000000000028 /* QuoteLiteral.swift in Sources */,
 				AA1000000000000000001B /* Logger.swift in Sources */,
 				AA1000000000000000002A /* SSHTunnelService.swift in Sources */,
+				AA1000000000000000002B /* SQLFormatter.swift in Sources */,
+				AA1000000000000000002C /* SQLSyntaxColors.swift in Sources */,
+				AA1000000000000000002D /* SQLTextStorage.swift in Sources */,
+				AA1000000000000000002E /* SQLCompletionProvider.swift in Sources */,
+				AA1000000000000000002F /* SQLEditorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

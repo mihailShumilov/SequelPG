@@ -76,6 +76,14 @@ struct QueryTabView: View {
                     Label("Clear", systemImage: "trash")
                 }
 
+                Button {
+                    appVM.queryVM.beautify()
+                } label: {
+                    Label("Beautify", systemImage: "wand.and.stars")
+                }
+                .disabled(appVM.queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Format SQL query")
+
                 Spacer()
 
                 if appVM.queryVM.isExecuting {
@@ -88,9 +96,14 @@ struct QueryTabView: View {
 
             Divider()
 
-            TextEditor(text: $appVM.queryVM.queryText)
-                .font(.system(.body, design: .monospaced))
-                .scrollContentBackground(.visible)
+            SQLEditorView(
+                text: $appVM.queryVM.queryText,
+                completionMetadata: SQLCompletionProvider.Metadata(
+                    schemas: appVM.navigatorVM.schemas,
+                    tables: appVM.navigatorVM.tables,
+                    columns: appVM.tableVM.columns
+                )
+            )
         }
     }
 

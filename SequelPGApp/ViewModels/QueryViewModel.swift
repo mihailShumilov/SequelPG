@@ -76,6 +76,14 @@ final class QueryViewModel: ObservableObject {
         return sorted[displayIndex].0
     }
 
+    /// Formats the current query text using the SQL formatter.
+    func beautify() {
+        let formatted = SQLFormatter.format(queryText)
+        if formatted != queryText {
+            queryText = formatted
+        }
+    }
+
     /// Attempts to extract a single table reference from a simple SELECT query.
     /// Returns nil for JOINs, subqueries, or queries without a FROM clause.
     func parseTableFromQuery() -> (schema: String, table: String)? {

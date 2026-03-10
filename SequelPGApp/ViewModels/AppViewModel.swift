@@ -270,14 +270,26 @@ final class AppViewModel: ObservableObject {
         clearSelectedRow()
 
         do {
-            let result = try await dbClient.runQuery(sql, maxRows: 2000, timeout: 10.0)
-            queryVM.result = result
-            queryVM.isExecuting = false
+            var result = try await dbClient.runQuery(sql, maxRows: 2000, timeout: 10.0)
 
-            // Detect table context for inline editing
+            // Detect table context for inline editing and resolve empty columns
             if let tableRef = queryVM.parseTableFromQuery() {
                 do {
                     let columns = try await dbClient.getColumns(schema: tableRef.schema, table: tableRef.table)
+
+                    // When a SELECT returns 0 rows, PostgresNIO doesn't yield
+                    // any rows so column names aren't captured. Use the table's
+                    // column metadata to fill them in.
+                    if result.columns.isEmpty, !columns.isEmpty {
+                        result = QueryResult(
+                            columns: columns.map(\.name),
+                            rows: [],
+                            executionTime: result.executionTime,
+                            rowsAffected: result.rowsAffected,
+                            isTruncated: false
+                        )
+                    }
+
                     let pkColumns = columns.filter { $0.isPrimaryKey }
                     let resultColumnSet = Set(result.columns)
                     let allPKsPresent = !pkColumns.isEmpty && pkColumns.allSatisfy { resultColumnSet.contains($0.name) }
@@ -291,6 +303,9 @@ final class AppViewModel: ObservableObject {
                     queryVM.editableColumns = []
                 }
             }
+
+            queryVM.result = result
+            queryVM.isExecuting = false
         } catch {
             queryVM.errorMessage = error.localizedDescription
             queryVM.isExecuting = false
