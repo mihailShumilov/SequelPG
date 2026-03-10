@@ -13,6 +13,10 @@ final class ConnectionListViewModel: ObservableObject {
     private let store: ConnectionStore
     private let keychainService: KeychainServiceProtocol
 
+    /// In-memory password cache to avoid repeated Keychain reads.
+    /// Populated lazily on first access per profile; written through on save.
+    private var passwordCache: [String: String] = [:]
+
     @Published var profiles: [ConnectionProfile] = []
     @Published var connectionStatuses: [UUID: ConnectionStatus] = [:]
     @Published var showAddForm = false
@@ -48,9 +52,11 @@ final class ConnectionListViewModel: ObservableObject {
         store.add(profile)
         if let password, !password.isEmpty {
             try? keychainService.save(password: password, forKey: profile.keychainKey)
+            passwordCache[profile.keychainKey] = password
         }
         if let sshPassword, !sshPassword.isEmpty {
             try? keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+            passwordCache[profile.sshKeychainKey] = sshPassword
         }
         reload()
         selectedProfileId = profile.id
@@ -60,13 +66,17 @@ final class ConnectionListViewModel: ObservableObject {
         store.update(profile)
         if let password, !password.isEmpty {
             try? keychainService.save(password: password, forKey: profile.keychainKey)
+            passwordCache[profile.keychainKey] = password
         } else if password?.isEmpty == true {
             try? keychainService.delete(forKey: profile.keychainKey)
+            passwordCache.removeValue(forKey: profile.keychainKey)
         }
         if let sshPassword, !sshPassword.isEmpty {
             try? keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+            passwordCache[profile.sshKeychainKey] = sshPassword
         } else if sshPassword?.isEmpty == true {
             try? keychainService.delete(forKey: profile.sshKeychainKey)
+            passwordCache.removeValue(forKey: profile.sshKeychainKey)
         }
         reload()
     }
@@ -78,16 +88,28 @@ final class ConnectionListViewModel: ObservableObject {
         store.delete(id: profile.id)
         try? keychainService.delete(forKey: profile.keychainKey)
         try? keychainService.delete(forKey: profile.sshKeychainKey)
+        passwordCache.removeValue(forKey: profile.keychainKey)
+        passwordCache.removeValue(forKey: profile.sshKeychainKey)
         connectionStatuses.removeValue(forKey: profile.id)
         reload()
     }
 
     func loadPasswordForProfile(_ profile: ConnectionProfile) -> String {
-        (try? keychainService.load(forKey: profile.keychainKey)) ?? ""
+        if let cached = passwordCache[profile.keychainKey] {
+            return cached
+        }
+        let password = (try? keychainService.load(forKey: profile.keychainKey)) ?? ""
+        passwordCache[profile.keychainKey] = password
+        return password
     }
 
     func loadSSHPasswordForProfile(_ profile: ConnectionProfile) -> String {
-        (try? keychainService.load(forKey: profile.sshKeychainKey)) ?? ""
+        if let cached = passwordCache[profile.sshKeychainKey] {
+            return cached
+        }
+        let password = (try? keychainService.load(forKey: profile.sshKeychainKey)) ?? ""
+        passwordCache[profile.sshKeychainKey] = password
+        return password
     }
 
     func setConnected(profileId: UUID) {

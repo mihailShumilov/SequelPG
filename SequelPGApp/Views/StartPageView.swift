@@ -47,9 +47,10 @@ struct StartPageView: View {
         VStack(spacing: 12) {
             Spacer()
 
-            Image(systemName: "cylinder.split.1x2")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 80, height: 80)
 
             Text("SequelPG")
                 .font(.title2)
@@ -98,6 +99,9 @@ struct StartPageView: View {
                 connectionListVM.selectedProfileId = profile.id
                 loadFormFromProfile(profile)
                 connectSelected()
+            }
+            .onTapGesture(count: 1) {
+                connectionListVM.selectedProfileId = profile.id
             }
             .contextMenu {
                 Button("Connect") {

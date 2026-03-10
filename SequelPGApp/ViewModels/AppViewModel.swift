@@ -82,10 +82,14 @@ final class AppViewModel: ObservableObject {
     }
 
     func connect(profile: ConnectionProfile) async {
-        let password = try? keychainService.load(forKey: profile.keychainKey)
-        let sshPassword: String? = profile.useSSHTunnel
-            ? (try? keychainService.load(forKey: profile.sshKeychainKey))
-            : nil
+        let password: String? = {
+            let p = connectionListVM.loadPasswordForProfile(profile)
+            return p.isEmpty ? nil : p
+        }()
+        let sshPassword: String? = profile.useSSHTunnel ? {
+            let p = connectionListVM.loadSSHPasswordForProfile(profile)
+            return p.isEmpty ? nil : p
+        }() : nil
         do {
             try await dbClient.connect(profile: profile, password: password, sshPassword: sshPassword)
             isConnected = true
