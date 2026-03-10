@@ -44,21 +44,29 @@ final class ConnectionListViewModel: ObservableObject {
         }
     }
 
-    func addProfile(_ profile: ConnectionProfile, password: String?) {
+    func addProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.add(profile)
         if let password, !password.isEmpty {
             try? keychainService.save(password: password, forKey: profile.keychainKey)
+        }
+        if let sshPassword, !sshPassword.isEmpty {
+            try? keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
         }
         reload()
         selectedProfileId = profile.id
     }
 
-    func updateProfile(_ profile: ConnectionProfile, password: String?) {
+    func updateProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.update(profile)
         if let password, !password.isEmpty {
             try? keychainService.save(password: password, forKey: profile.keychainKey)
         } else if password?.isEmpty == true {
             try? keychainService.delete(forKey: profile.keychainKey)
+        }
+        if let sshPassword, !sshPassword.isEmpty {
+            try? keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+        } else if sshPassword?.isEmpty == true {
+            try? keychainService.delete(forKey: profile.sshKeychainKey)
         }
         reload()
     }
@@ -69,12 +77,17 @@ final class ConnectionListViewModel: ObservableObject {
         }
         store.delete(id: profile.id)
         try? keychainService.delete(forKey: profile.keychainKey)
+        try? keychainService.delete(forKey: profile.sshKeychainKey)
         connectionStatuses.removeValue(forKey: profile.id)
         reload()
     }
 
     func loadPasswordForProfile(_ profile: ConnectionProfile) -> String {
         (try? keychainService.load(forKey: profile.keychainKey)) ?? ""
+    }
+
+    func loadSSHPasswordForProfile(_ profile: ConnectionProfile) -> String {
+        (try? keychainService.load(forKey: profile.sshKeychainKey)) ?? ""
     }
 
     func setConnected(profileId: UUID) {

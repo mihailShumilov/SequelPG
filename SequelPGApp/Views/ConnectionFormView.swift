@@ -19,6 +19,15 @@ struct ConnectionFormView: View {
     @State private var sslMode: SSLMode = .prefer
     @State private var validationErrors: [String] = []
 
+    // SSH tunnel fields
+    @State private var useSSHTunnel = false
+    @State private var sshHost = ""
+    @State private var sshPort = "22"
+    @State private var sshUser = ""
+    @State private var sshAuthMethod: SSHAuthMethod = .keyFile
+    @State private var sshKeyPath = ""
+    @State private var sshPassword = ""
+
     private var isEditing: Bool {
         if case .edit = mode { return true }
         return false
@@ -30,20 +39,59 @@ struct ConnectionFormView: View {
                 .font(.headline)
                 .padding()
 
-            Form {
-                TextField("Name:", text: $name)
-                TextField("Host:", text: $host)
-                TextField("Port:", text: $port)
-                TextField("Database:", text: $database)
-                TextField("Username:", text: $username)
-                SecureField("Password:", text: $password)
-                Picker("SSL Mode:", selection: $sslMode) {
-                    ForEach(SSLMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
+            ScrollView {
+                Form {
+                    Section {
+                        TextField("Name:", text: $name)
+                        TextField("Host:", text: $host)
+                        TextField("Port:", text: $port)
+                        TextField("Database:", text: $database)
+                        TextField("Username:", text: $username)
+                        SecureField("Password:", text: $password)
+                        Picker("SSL Mode:", selection: $sslMode) {
+                            ForEach(SSLMode.allCases, id: \.self) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                    } header: {
+                        Text("Connection")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    Section {
+                        Toggle("Connect via SSH Tunnel", isOn: $useSSHTunnel.animation())
+
+                        if useSSHTunnel {
+                            TextField("SSH Host:", text: $sshHost)
+                            TextField("SSH Port:", text: $sshPort)
+                            TextField("SSH User:", text: $sshUser)
+                            Picker("Auth Method:", selection: $sshAuthMethod) {
+                                ForEach(SSHAuthMethod.allCases, id: \.self) { method in
+                                    Text(method.displayName).tag(method)
+                                }
+                            }
+
+                            if sshAuthMethod == .keyFile {
+                                TextField("Key Path:", text: $sshKeyPath)
+                                    .help("Path to SSH private key (e.g. ~/.ssh/id_rsa). Leave empty to use SSH agent.")
+                            }
+
+                            if sshAuthMethod == .password {
+                                SecureField("SSH Password:", text: $sshPassword)
+                            }
+                        }
+                    } header: {
+                        Text("SSH Tunnel")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .padding()
             }
-            .padding()
 
             if !validationErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
@@ -65,7 +113,8 @@ struct ConnectionFormView: View {
             }
             .padding()
         }
-        .frame(width: 400)
+        .frame(width: 420)
+        .frame(minHeight: 380, idealHeight: useSSHTunnel ? 580 : 420)
         .onAppear(perform: loadExisting)
     }
 
@@ -78,11 +127,20 @@ struct ConnectionFormView: View {
             username = profile.username
             sslMode = profile.sslMode
             password = appVM.connectionListVM.loadPasswordForProfile(profile)
+
+            useSSHTunnel = profile.useSSHTunnel
+            sshHost = profile.sshHost
+            sshPort = String(profile.sshPort)
+            sshUser = profile.sshUser
+            sshAuthMethod = profile.sshAuthMethod
+            sshKeyPath = profile.sshKeyPath
+            sshPassword = appVM.connectionListVM.loadSSHPasswordForProfile(profile)
         }
     }
 
     private func save() {
         let portInt = Int(port) ?? 0
+        let sshPortInt = Int(sshPort) ?? 22
         let profile = ConnectionProfile(
             id: existingId ?? UUID(),
             name: name.trimmingCharacters(in: .whitespaces),
@@ -90,7 +148,13 @@ struct ConnectionFormView: View {
             port: portInt,
             database: database.trimmingCharacters(in: .whitespaces),
             username: username.trimmingCharacters(in: .whitespaces),
-            sslMode: sslMode
+            sslMode: sslMode,
+            useSSHTunnel: useSSHTunnel,
+            sshHost: sshHost.trimmingCharacters(in: .whitespaces),
+            sshPort: sshPortInt,
+            sshUser: sshUser.trimmingCharacters(in: .whitespaces),
+            sshAuthMethod: sshAuthMethod,
+            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces)
         )
 
         let errors = profile.validate()
@@ -99,10 +163,11 @@ struct ConnectionFormView: View {
             return
         }
 
+        let sshPass: String? = useSSHTunnel ? sshPassword : nil
         if isEditing {
-            appVM.connectionListVM.updateProfile(profile, password: password)
+            appVM.connectionListVM.updateProfile(profile, password: password, sshPassword: sshPass)
         } else {
-            appVM.connectionListVM.addProfile(profile, password: password)
+            appVM.connectionListVM.addProfile(profile, password: password, sshPassword: sshPass)
         }
         dismiss()
     }

@@ -66,7 +66,7 @@ actor MockDatabaseClient: PostgresClientProtocol {
 
     var isConnected: Bool { connected }
 
-    func connect(profile: ConnectionProfile, password: String?) async throws {
+    func connect(profile: ConnectionProfile, password: String?, sshPassword: String? = nil) async throws {
         connectCallCount += 1
         lastConnectedProfile = profile
         lastConnectedPassword = password
@@ -132,7 +132,7 @@ actor MockDatabaseClient: PostgresClientProtocol {
         return stubbedDatabases
     }
 
-    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?) async throws {
+    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String? = nil) async throws {
         lastSwitchDatabase = database
         if shouldThrowOnSwitchDatabase { throw AppError.connectionFailed("mock switch error") }
         connected = true

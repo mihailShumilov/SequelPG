@@ -32,6 +32,7 @@ final class AppViewModel: ObservableObject {
 
     private var connectedProfile: ConnectionProfile?
     private var connectedPassword: String?
+    private var connectedSSHPassword: String?
     private var cancellables = Set<AnyCancellable>()
 
     enum MainTab: String, CaseIterable {
@@ -82,11 +83,15 @@ final class AppViewModel: ObservableObject {
 
     func connect(profile: ConnectionProfile) async {
         let password = try? keychainService.load(forKey: profile.keychainKey)
+        let sshPassword: String? = profile.useSSHTunnel
+            ? (try? keychainService.load(forKey: profile.sshKeychainKey))
+            : nil
         do {
-            try await dbClient.connect(profile: profile, password: password)
+            try await dbClient.connect(profile: profile, password: password, sshPassword: sshPassword)
             isConnected = true
             connectedProfile = profile
             connectedPassword = password
+            connectedSSHPassword = sshPassword
             connectedProfileName = profile.name
             connectionListVM.setConnected(profileId: profile.id)
             selectedTab = .query
@@ -113,6 +118,7 @@ final class AppViewModel: ObservableObject {
         isConnected = false
         connectedProfile = nil
         connectedPassword = nil
+        connectedSSHPassword = nil
         connectedProfileName = nil
         connectionListVM.clearConnectionState()
         navigatorVM.clear()
@@ -124,7 +130,7 @@ final class AppViewModel: ObservableObject {
     func switchDatabase(_ name: String) async {
         guard let profile = connectedProfile, name != profile.database else { return }
         do {
-            try await dbClient.switchDatabase(to: name, profile: profile, password: connectedPassword)
+            try await dbClient.switchDatabase(to: name, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
 
             // Update stored profile with the new database
             var updatedProfile = profile

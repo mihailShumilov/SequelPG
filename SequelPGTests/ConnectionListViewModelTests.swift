@@ -305,8 +305,10 @@ final class ConnectionListViewModelTests: XCTestCase {
 
         sut.deleteProfile(profile)
 
-        XCTAssertEqual(keychain.deleteCalls.count, 1)
-        XCTAssertEqual(keychain.deleteCalls.first, profile.keychainKey)
+        // Deletes both the DB password and SSH password keychain entries
+        XCTAssertEqual(keychain.deleteCalls.count, 2)
+        XCTAssertTrue(keychain.deleteCalls.contains(profile.keychainKey))
+        XCTAssertTrue(keychain.deleteCalls.contains(profile.sshKeychainKey))
     }
 
     func testDeleteProfileRemovesConnectionStatus() {

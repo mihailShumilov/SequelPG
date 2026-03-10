@@ -36,6 +36,7 @@ Or use **Cmd+U** in Xcode.
 - [x] Connection management (add, edit, delete, connect, disconnect)
 - [x] Keychain-backed password storage
 - [x] SSL mode toggle (Off / Prefer / Require)
+- [x] SSH tunnel support (key file or password auth)
 - [x] Database navigator (schemas, tables, views)
 - [x] Structure tab (column details)
 - [x] Content tab with pagination (50 / 100 / 200 rows)
@@ -91,7 +92,6 @@ SwiftFormat is used for consistent formatting. See [CONTRIBUTING.md](CONTRIBUTIN
 
 ## Known Limitations
 
-- No SSH tunnel support.
 - No SSL certificate management (only mode toggle).
 - No CSV import/export.
 - No ER diagrams.

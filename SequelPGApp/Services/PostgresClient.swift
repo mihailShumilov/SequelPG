@@ -4,7 +4,7 @@ import PostgresNIO
 
 /// Protocol for database operations, enabling test mocking.
 protocol PostgresClientProtocol: Sendable {
-    func connect(profile: ConnectionProfile, password: String?) async throws
+    func connect(profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
     func disconnect() async
     var isConnected: Bool { get async }
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
@@ -16,13 +16,14 @@ protocol PostgresClientProtocol: Sendable {
     func getApproximateRowCount(schema: String, table: String) async throws -> Int64
     func invalidateCache() async
     func listDatabases() async throws -> [String]
-    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?) async throws
+    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
 }
 
 /// The sole component that communicates with PostgreSQL via PostgresNIO.
 actor DatabaseClient: PostgresClientProtocol {
     private var client: PostgresClient?
     private var runTask: Task<Void, Never>?
+    private let sshTunnel = SSHTunnelService()
 
     // Introspection cache
     private var cachedSchemas: [String]?
@@ -35,8 +36,27 @@ actor DatabaseClient: PostgresClientProtocol {
         client != nil
     }
 
-    func connect(profile: ConnectionProfile, password: String?) async throws {
+    func connect(profile: ConnectionProfile, password: String?, sshPassword: String? = nil) async throws {
         await disconnect()
+
+        // Start SSH tunnel if configured
+        var effectiveHost = profile.host
+        var effectivePort = profile.port
+
+        if profile.useSSHTunnel {
+            let localPort = try await sshTunnel.start(
+                sshHost: profile.sshHost,
+                sshPort: profile.sshPort,
+                sshUser: profile.sshUser,
+                sshAuthMethod: profile.sshAuthMethod,
+                sshKeyPath: profile.sshKeyPath,
+                sshPassword: sshPassword,
+                remoteHost: profile.host,
+                remotePort: profile.port
+            )
+            effectiveHost = "127.0.0.1"
+            effectivePort = Int(localPort)
+        }
 
         let tls: PostgresClient.Configuration.TLS
         switch profile.sslMode {
@@ -49,8 +69,8 @@ actor DatabaseClient: PostgresClientProtocol {
         }
 
         let config = PostgresClient.Configuration(
-            host: profile.host,
-            port: profile.port,
+            host: effectiveHost,
+            port: effectivePort,
             username: profile.username,
             password: password,
             database: profile.database,
@@ -78,10 +98,10 @@ actor DatabaseClient: PostgresClientProtocol {
     }
 
     func disconnect() async {
-        guard client != nil else { return }
         runTask?.cancel()
         runTask = nil
         client = nil
+        await sshTunnel.stop()
         await invalidateCache()
         Log.db.info("Disconnected")
     }
@@ -443,9 +463,9 @@ actor DatabaseClient: PostgresClientProtocol {
         return databases
     }
 
-    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?) async throws {
+    func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String? = nil) async throws {
         var newProfile = profile
         newProfile.database = database
-        try await connect(profile: newProfile, password: password)
+        try await connect(profile: newProfile, password: password, sshPassword: sshPassword)
     }
 }

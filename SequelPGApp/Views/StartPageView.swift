@@ -17,6 +17,16 @@ struct StartPageView: View {
     @State private var deleteTarget: ConnectionProfile?
     @State private var previousSelectedId: UUID?
 
+    // SSH tunnel form state
+    @State private var formUseSSHTunnel = false
+    @State private var formSSHHost = ""
+    @State private var formSSHPort = "22"
+    @State private var formSSHUser = ""
+    @State private var formSSHAuthMethod: SSHAuthMethod = .keyFile
+    @State private var formSSHKeyPath = ""
+    @State private var formSSHPassword = ""
+    @State private var showSSHPassword = false
+
     private var connectionListVM: ConnectionListViewModel {
         appVM.connectionListVM
     }
@@ -171,6 +181,47 @@ struct StartPageView: View {
                                 }
                             }
                         }
+
+                        Section {
+                            Toggle("Connect via SSH Tunnel", isOn: $formUseSSHTunnel.animation())
+
+                            if formUseSSHTunnel {
+                                HStack {
+                                    TextField("SSH Host:", text: $formSSHHost)
+                                    TextField("SSH Port:", text: $formSSHPort)
+                                        .frame(width: 70)
+                                }
+                                TextField("SSH User:", text: $formSSHUser)
+                                Picker("Auth Method:", selection: $formSSHAuthMethod) {
+                                    ForEach(SSHAuthMethod.allCases, id: \.self) { method in
+                                        Text(method.displayName).tag(method)
+                                    }
+                                }
+
+                                if formSSHAuthMethod == .keyFile {
+                                    TextField("Key Path:", text: $formSSHKeyPath)
+                                        .help("Path to SSH private key (e.g. ~/.ssh/id_rsa). Leave empty to use SSH agent.")
+                                }
+
+                                if formSSHAuthMethod == .password {
+                                    HStack {
+                                        if showSSHPassword {
+                                            TextField("SSH Password:", text: $formSSHPassword)
+                                        } else {
+                                            SecureField("SSH Password:", text: $formSSHPassword)
+                                        }
+                                        Button {
+                                            showSSHPassword.toggle()
+                                        } label: {
+                                            Image(systemName: showSSHPassword ? "eye.slash" : "eye")
+                                        }
+                                        .buttonStyle(.borderless)
+                                    }
+                                }
+                            }
+                        } header: {
+                            Text("SSH Tunnel")
+                        }
                     }
                     .formStyle(.grouped)
 
@@ -251,11 +302,21 @@ struct StartPageView: View {
         formSSLMode = profile.sslMode
         formPassword = connectionListVM.loadPasswordForProfile(profile)
         showPassword = false
+
+        formUseSSHTunnel = profile.useSSHTunnel
+        formSSHHost = profile.sshHost
+        formSSHPort = String(profile.sshPort)
+        formSSHUser = profile.sshUser
+        formSSHAuthMethod = profile.sshAuthMethod
+        formSSHKeyPath = profile.sshKeyPath
+        formSSHPassword = connectionListVM.loadSSHPasswordForProfile(profile)
+        showSSHPassword = false
     }
 
     private func saveFormToProfile(id: UUID) {
         guard let existing = connectionListVM.profiles.first(where: { $0.id == id }) else { return }
         let portInt = Int(formPort) ?? existing.port
+        let sshPortInt = Int(formSSHPort) ?? 22
         let updated = ConnectionProfile(
             id: id,
             name: formName.trimmingCharacters(in: .whitespaces),
@@ -263,15 +324,23 @@ struct StartPageView: View {
             port: portInt,
             database: formDatabase.trimmingCharacters(in: .whitespaces),
             username: formUsername.trimmingCharacters(in: .whitespaces),
-            sslMode: formSSLMode
+            sslMode: formSSLMode,
+            useSSHTunnel: formUseSSHTunnel,
+            sshHost: formSSHHost.trimmingCharacters(in: .whitespaces),
+            sshPort: sshPortInt,
+            sshUser: formSSHUser.trimmingCharacters(in: .whitespaces),
+            sshAuthMethod: formSSHAuthMethod,
+            sshKeyPath: formSSHKeyPath.trimmingCharacters(in: .whitespaces)
         )
-        connectionListVM.updateProfile(updated, password: formPassword)
+        let sshPass: String? = formUseSSHTunnel ? formSSHPassword : nil
+        connectionListVM.updateProfile(updated, password: formPassword, sshPassword: sshPass)
     }
 
     private func connectSelected() {
         guard let id = connectionListVM.selectedProfileId else { return }
 
         let portInt = Int(formPort) ?? 5432
+        let sshPortInt = Int(formSSHPort) ?? 22
         let profile = ConnectionProfile(
             id: id,
             name: formName.trimmingCharacters(in: .whitespaces),
@@ -279,7 +348,13 @@ struct StartPageView: View {
             port: portInt,
             database: formDatabase.trimmingCharacters(in: .whitespaces),
             username: formUsername.trimmingCharacters(in: .whitespaces),
-            sslMode: formSSLMode
+            sslMode: formSSLMode,
+            useSSHTunnel: formUseSSHTunnel,
+            sshHost: formSSHHost.trimmingCharacters(in: .whitespaces),
+            sshPort: sshPortInt,
+            sshUser: formSSHUser.trimmingCharacters(in: .whitespaces),
+            sshAuthMethod: formSSHAuthMethod,
+            sshKeyPath: formSSHKeyPath.trimmingCharacters(in: .whitespaces)
         )
 
         let errors = profile.validate()
@@ -289,7 +364,8 @@ struct StartPageView: View {
         }
 
         // Save before connecting
-        connectionListVM.updateProfile(profile, password: formPassword)
+        let sshPass: String? = formUseSSHTunnel ? formSSHPassword : nil
+        connectionListVM.updateProfile(profile, password: formPassword, sshPassword: sshPass)
         validationErrors = []
 
         Task {

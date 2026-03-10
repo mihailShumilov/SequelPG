@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var appVM = AppViewModel()
+    @EnvironmentObject var appVM: AppViewModel
 
     var body: some View {
         Group {

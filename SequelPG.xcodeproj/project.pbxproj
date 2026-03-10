@@ -48,6 +48,7 @@
 		AA10000000000000000027 /* AppViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000027; };
 		AA10000000000000000024A /* InsertDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000024A; };
 		AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000025A; };
+		AA1000000000000000002A /* SSHTunnelService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002A; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +103,7 @@
 		AB10000000000000000027 /* AppViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000024A /* InsertDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertDeleteTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000025A /* CascadeDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CascadeDeleteTests.swift; sourceTree = "<group>"; };
+		AB1000000000000000002A /* SSHTunnelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHTunnelService.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -167,6 +169,7 @@
 				AB10000000000000000009 /* ConnectionStore.swift */,
 				AB10000000000000000008 /* KeychainService.swift */,
 				AB1000000000000000000A /* PostgresClient.swift */,
+				AB1000000000000000002A /* SSHTunnelService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -372,6 +375,7 @@
 				AA1000000000000000001A /* QuoteIdent.swift in Sources */,
 				AA10000000000000000028 /* QuoteLiteral.swift in Sources */,
 				AA1000000000000000001B /* Logger.swift in Sources */,
+				AA1000000000000000002A /* SSHTunnelService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

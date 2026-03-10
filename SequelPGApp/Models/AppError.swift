@@ -9,6 +9,7 @@ enum AppError: LocalizedError, Sendable {
     case keychainError(String)
     case notConnected
     case foreignKeyViolation(String)
+    case sshTunnelFailed(String)
     case underlying(String)
 
     var errorDescription: String? {
@@ -27,6 +28,8 @@ enum AppError: LocalizedError, Sendable {
             return "Not connected to a database."
         case let .foreignKeyViolation(message):
             return "Foreign key violation: \(message)"
+        case let .sshTunnelFailed(message):
+            return "SSH tunnel failed: \(message)"
         case let .underlying(message):
             return message
         }
