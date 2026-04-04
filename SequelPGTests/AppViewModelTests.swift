@@ -139,32 +139,6 @@ actor MockDatabaseClient: PostgresClientProtocol {
     }
 }
 
-// MARK: - Mock Keychain Service
-
-/// Mock KeychainService that stores passwords in memory.
-final class MockKeychainService: KeychainServiceProtocol, @unchecked Sendable {
-    private var store: [String: String] = [:]
-    var shouldThrowOnLoad = false
-
-    func save(password: String, forKey key: String) throws {
-        store[key] = password
-    }
-
-    func load(forKey key: String) throws -> String? {
-        if shouldThrowOnLoad { throw AppError.keychainError("mock load error") }
-        return store[key]
-    }
-
-    func delete(forKey key: String) throws {
-        store.removeValue(forKey: key)
-    }
-
-    /// Convenience to pre-seed a password for a profile.
-    func seed(password: String, forProfile profile: ConnectionProfile) {
-        store[profile.keychainKey] = password
-    }
-}
-
 // MARK: - Tests
 
 @MainActor
@@ -181,7 +155,6 @@ final class AppViewModelTests: AppViewModelTestCase {
     }
 
     func testInitCreatesChildViewModels() {
-        XCTAssertNotNil(vm.connectionListVM)
         XCTAssertNotNil(vm.navigatorVM)
         XCTAssertNotNil(vm.tableVM)
         XCTAssertNotNil(vm.queryVM)
@@ -191,14 +164,14 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testConnectSetsIsConnectedTrue() async {
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertTrue(vm.isConnected)
     }
 
     func testConnectSetsConnectedProfileName() async {
         let profile = makeProfile(name: "My Production DB")
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertEqual(vm.connectedProfileName, "My Production DB")
     }
@@ -208,7 +181,7 @@ final class AppViewModelTests: AppViewModelTestCase {
         vm.errorMessage = "previous error"
 
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertNil(vm.errorMessage)
     }
@@ -216,26 +189,24 @@ final class AppViewModelTests: AppViewModelTestCase {
     func testConnectSwitchesSelectedTabToQuery() async {
         vm.selectedTab = .content
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertEqual(vm.selectedTab, .query)
     }
 
-    func testConnectPassesPasswordFromKeychain() async {
+    func testConnectPassesPasswordDirectly() async {
         let profile = makeProfile()
-        mockKeychain.seed(password: "s3cret", forProfile: profile)
 
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: "s3cret", sshPassword: nil)
 
         let lastPassword = await mockDB.lastConnectedPassword
         XCTAssertEqual(lastPassword, "s3cret")
     }
 
-    func testConnectPassesNilPasswordWhenKeychainEmpty() async {
+    func testConnectPassesNilPasswordWhenNoneProvided() async {
         let profile = makeProfile()
-        // No password seeded in mockKeychain
 
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         let lastPassword = await mockDB.lastConnectedPassword
         XCTAssertNil(lastPassword)
@@ -243,7 +214,7 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testConnectPassesProfileToDbClient() async {
         let profile = makeProfile(name: "ProdDB", host: "db.example.com", port: 5433, database: "prod")
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         let lastProfile = await mockDB.lastConnectedProfile
         XCTAssertEqual(lastProfile?.name, "ProdDB")
@@ -254,7 +225,7 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testConnectLoadsDatabases() async {
         let profile = makeProfile(database: "testdb")
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertEqual(vm.navigatorVM.databases, ["postgres", "testdb", "devdb"])
         XCTAssertEqual(vm.navigatorVM.selectedDatabase, "testdb")
@@ -262,57 +233,39 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testConnectLoadsSchemas() async {
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertEqual(vm.navigatorVM.schemas, ["public", "auth"])
         // NavigatorViewModel.setSchemas defaults to "public" when available
         XCTAssertEqual(vm.navigatorVM.selectedSchema, "public")
     }
 
-    func testConnectSetsConnectionStatusOnConnectionListVM() async {
-        let profile = makeProfile()
-        await vm.connect(profile: profile)
-
-        XCTAssertEqual(vm.connectionListVM.connectionStatuses[profile.id], .connected)
-    }
-
     func testConnectFailureSetsErrorMessage() async {
         await mockDB.setShouldThrowOnConnect(true)
 
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertFalse(vm.isConnected)
         XCTAssertNotNil(vm.errorMessage)
         XCTAssertTrue(vm.errorMessage?.contains("mock connection refused") ?? false)
     }
 
-    func testConnectFailureSetsErrorStatusOnConnectionListVM() async {
-        await mockDB.setShouldThrowOnConnect(true)
-
-        let profile = makeProfile()
-        await vm.connect(profile: profile)
-
-        XCTAssertEqual(vm.connectionListVM.connectionStatuses[profile.id], .error)
-    }
-
     func testConnectFailureDoesNotSetIsConnected() async {
         await mockDB.setShouldThrowOnConnect(true)
 
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertFalse(vm.isConnected)
         XCTAssertNil(vm.connectedProfileName)
     }
 
-    func testConnectWithKeychainErrorStillConnectsWithNilPassword() async {
-        mockKeychain.shouldThrowOnLoad = true
-
+    func testConnectWithNilPasswordStillConnects() async {
         let profile = makeProfile()
-        await vm.connect(profile: profile)
 
-        // keychainService.load throws, so password is nil (try? returns nil)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
+
         let lastPassword = await mockDB.lastConnectedPassword
         XCTAssertNil(lastPassword)
         // Connection should still succeed since dbClient.connect was called with nil password
@@ -384,15 +337,6 @@ final class AppViewModelTests: AppViewModelTestCase {
 
         let callCount = await mockDB.disconnectCallCount
         XCTAssertEqual(callCount, 1)
-    }
-
-    func testDisconnectClearsConnectionListVMStatuses() async {
-        await makeConnectedVM()
-        XCTAssertFalse(vm.connectionListVM.connectionStatuses.isEmpty)
-
-        await vm.disconnect()
-
-        XCTAssertTrue(vm.connectionListVM.connectionStatuses.isEmpty)
     }
 
     // MARK: - switchDatabase(_:)
@@ -1185,9 +1129,8 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testFullConnectThenSelectObjectFlow() async {
         let profile = makeProfile(name: "Integration Test", database: "mydb")
-        mockKeychain.seed(password: "pass123", forProfile: profile)
 
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: "pass123", sshPassword: nil)
 
         XCTAssertTrue(vm.isConnected)
         XCTAssertEqual(vm.connectedProfileName, "Integration Test")
@@ -1208,7 +1151,7 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testFullConnectThenSwitchDatabaseThenDisconnect() async {
         let profile = makeProfile(database: "db1")
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
 
         XCTAssertTrue(vm.isConnected)
         XCTAssertEqual(vm.navigatorVM.selectedDatabase, "db1")
@@ -1530,14 +1473,14 @@ final class AppViewModelTests: AppViewModelTestCase {
 
     func testReconnectAfterDisconnect() async {
         let profile = makeProfile()
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
         XCTAssertTrue(vm.isConnected)
 
         await vm.disconnect()
         XCTAssertFalse(vm.isConnected)
 
         // Reconnect
-        await vm.connect(profile: profile)
+        await vm.connect(profile: profile, password: nil, sshPassword: nil)
         XCTAssertTrue(vm.isConnected)
 
         let connectCount = await mockDB.connectCallCount

@@ -9,30 +9,16 @@ import XCTest
 class AppViewModelTestCase: XCTestCase {
 
     var mockDB: MockDatabaseClient!
-    var mockKeychain: MockKeychainService!
-    var connectionStore: ConnectionStore!
-    var testDefaults: UserDefaults!
     var vm: AppViewModel!
 
     override func setUp() {
         super.setUp()
         mockDB = MockDatabaseClient()
-        mockKeychain = MockKeychainService()
-        testDefaults = UserDefaults(suiteName: "com.sequelpg.tests.\(UUID().uuidString)")!
-        connectionStore = ConnectionStore(defaults: testDefaults)
-        vm = AppViewModel(
-            connectionStore: connectionStore,
-            keychainService: mockKeychain,
-            dbClient: mockDB
-        )
+        vm = AppViewModel(dbClient: mockDB)
     }
 
     override func tearDown() {
         vm = nil
-        connectionStore = nil
-        testDefaults.removePersistentDomain(forName: testDefaults.volatileDomainNames.first ?? "")
-        testDefaults = nil
-        mockKeychain = nil
         mockDB = nil
         super.tearDown()
     }
@@ -59,7 +45,6 @@ class AppViewModelTestCase: XCTestCase {
 
     func makeConnectedVM(profile: ConnectionProfile? = nil) async {
         let p = profile ?? makeProfile()
-        mockKeychain.seed(password: "secret", forProfile: p)
-        await vm.connect(profile: p)
+        await vm.connect(profile: p, password: "secret", sshPassword: nil)
     }
 }

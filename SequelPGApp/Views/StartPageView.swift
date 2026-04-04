@@ -345,8 +345,10 @@ struct StartPageView: View {
         connectionListVM.updateProfile(profile, password: formPassword, sshPassword: sshPass)
         validationErrors = []
 
+        // Connect in the current tab
+        let password: String? = formPassword.isEmpty ? nil : formPassword
         Task {
-            await appVM.connect(profile: profile)
+            await appVM.connect(profile: profile, password: password, sshPassword: sshPass)
         }
     }
 }

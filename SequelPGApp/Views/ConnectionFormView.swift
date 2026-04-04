@@ -7,7 +7,6 @@ struct ConnectionFormView: View {
     }
 
     let mode: Mode
-    @Environment(AppViewModel.self) var appVM
     @Environment(ConnectionListViewModel.self) var connectionListVM
     @Environment(\.dismiss) private var dismiss
 

@@ -253,6 +253,7 @@ struct ResultsGridView: View {
     @FocusState private var insertFieldFocused: Bool
     @State private var editingCell: (row: Int, col: Int)?
     @State private var editingText: String = ""
+    @State private var originalEditText: String = ""
     @State private var sortOrder: [ColumnSortComparator] = []
     private let columnMinWidth: CGFloat = 100
 
@@ -350,45 +351,77 @@ struct ResultsGridView: View {
 
     @ViewBuilder
     private func cellView(rowIdx: Int, colIdx: Int) -> some View {
-        let cell = result.rows[rowIdx][colIdx]
-
-        if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
-            TextField("", text: $editingText)
-                .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
-                .focused($editFieldFocused)
-                .onSubmit {
-                    commitEdit()
-                }
-                .onExitCommand {
-                    cancelEdit()
-                }
+        // Guard against stale row/column IDs that the Table may request
+        // after the result changes (e.g., when switching tabs).
+        if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count {
+            let cell = result.rows[rowIdx][colIdx]
+            if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
+                TextField("", text: $editingText)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .focused($editFieldFocused)
+                    .onSubmit {
+                        commitEdit()
+                    }
+                    .onExitCommand {
+                        cancelEdit()
+                    }
+                    .onChange(of: editFieldFocused) { _, focused in
+                        if !focused {
+                            commitEdit()
+                        }
+                    }
+            } else {
+                Text(cell.displayString)
+                    .lineLimit(1)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(cell.isNull ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 1) {
+                        // Select this row and update the inspector
+                        if selectedRowIndex != rowIdx {
+                            selectedRowIndex = rowIdx
+                            onRowSelected?(rowIdx)
+                        }
+                        guard isEditable else { return }
+                        if editingCell != nil {
+                            commitEdit()
+                        }
+                        startEditing(row: rowIdx, col: colIdx, cell: cell)
+                    }
+            }
         } else {
-            Text(cell.displayString)
-                .lineLimit(1)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(cell.isNull ? .secondary : .primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    guard isEditable else { return }
-                    editingText = cell.isNull ? "NULL" : cell.displayString
-                    editingCell = (row: rowIdx, col: colIdx)
-                    editFieldFocused = true
-                }
+            Text("")
         }
+    }
+
+    private func startEditing(row: Int, col: Int, cell: CellValue) {
+        let text = cell.isNull ? "NULL" : cell.displayString
+        editingText = text
+        originalEditText = text
+        editingCell = (row: row, col: col)
+        editFieldFocused = true
     }
 
     private func commitEdit() {
         guard let editing = editingCell else { return }
-        onCellEdited?(editing.row, editing.col, editingText)
+        let changed = editingText != originalEditText
+        let row = editing.row
+        let col = editing.col
         editingCell = nil
+        let text = editingText
         editingText = ""
+        originalEditText = ""
+        if changed {
+            onCellEdited?(row, col, text)
+        }
     }
 
     private func cancelEdit() {
         editingCell = nil
         editingText = ""
+        originalEditText = ""
     }
 
     @ViewBuilder

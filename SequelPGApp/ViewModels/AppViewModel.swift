@@ -11,14 +11,12 @@ struct CascadeDeleteContext {
     let source: AppViewModel.MainTab
 }
 
-/// Root application state coordinating connections and navigation.
+/// Per-session application state coordinating a single database connection.
+/// Each connection tab/window gets its own AppViewModel instance.
 @MainActor
 @Observable final class AppViewModel {
-    @ObservationIgnored let connectionStore: ConnectionStore
-    @ObservationIgnored let keychainService: KeychainServiceProtocol
     @ObservationIgnored let dbClient: any PostgresClientProtocol
 
-    let connectionListVM: ConnectionListViewModel
     let navigatorVM: NavigatorViewModel
     let tableVM: TableViewModel
     let queryVM: QueryViewModel
@@ -41,35 +39,17 @@ struct CascadeDeleteContext {
     }
 
     init(
-        connectionStore: ConnectionStore = ConnectionStore(),
-        keychainService: KeychainServiceProtocol = KeychainService.shared,
         dbClient: any PostgresClientProtocol = DatabaseClient()
     ) {
-        self.connectionStore = connectionStore
-        self.keychainService = keychainService
         self.dbClient = dbClient
 
-        self.connectionListVM = ConnectionListViewModel(
-            store: connectionStore,
-            keychainService: keychainService
-        )
         self.navigatorVM = NavigatorViewModel()
         self.tableVM = TableViewModel()
         self.queryVM = QueryViewModel()
-
-        // Child VMs are injected as separate @Environment values so views
-        // observe only the VM they need, avoiding whole-tree re-renders.
     }
 
-    func connect(profile: ConnectionProfile) async {
-        let password: String? = {
-            let p = connectionListVM.loadPasswordForProfile(profile)
-            return p.isEmpty ? nil : p
-        }()
-        let sshPassword: String? = profile.useSSHTunnel ? {
-            let p = connectionListVM.loadSSHPasswordForProfile(profile)
-            return p.isEmpty ? nil : p
-        }() : nil
+    /// Connects to a database using the given profile and credentials.
+    func connect(profile: ConnectionProfile, password: String?, sshPassword: String?) async {
         do {
             try await dbClient.connect(profile: profile, password: password, sshPassword: sshPassword)
             isConnected = true
@@ -77,7 +57,6 @@ struct CascadeDeleteContext {
             connectedPassword = password
             connectedSSHPassword = sshPassword
             connectedProfileName = profile.name
-            connectionListVM.setConnected(profileId: profile.id)
             selectedTab = .query
 
             // Load databases
@@ -92,7 +71,6 @@ struct CascadeDeleteContext {
             Log.ui.info("UI: connected to \(profile.name, privacy: .public)")
         } catch {
             errorMessage = error.localizedDescription
-            connectionListVM.setError(profileId: profile.id)
             Log.ui.error("UI: connection failed - \(error.localizedDescription)")
         }
     }
@@ -104,7 +82,6 @@ struct CascadeDeleteContext {
         connectedPassword = nil
         connectedSSHPassword = nil
         connectedProfileName = nil
-        connectionListVM.clearConnectionState()
         navigatorVM.clear()
         tableVM.clear()
         selectedTab = .query
@@ -339,12 +316,24 @@ struct CascadeDeleteContext {
         let pkColumns = tableVM.columns.filter { $0.isPrimaryKey }
         guard !pkColumns.isEmpty else { return }
 
-        await executeUpdate(
+        let newValue = Self.cellValueFromText(newText)
+
+        guard let sql = buildUpdateSQL(
             schema: object.schema, table: object.name,
-            columnIndex: columnIndex, rowIndex: rowIndex, newText: newText,
-            result: result, pkColumns: pkColumns, columnInfo: tableVM.columns
-        ) {
-            await self.loadContentPage()
+            columnName: result.columns[columnIndex], newValue: newValue,
+            originalRow: result.rows[rowIndex], resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name), columnInfo: tableVM.columns
+        ) else {
+            errorMessage = "Cannot update: primary key columns missing from result"
+            return
+        }
+
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            // Update in-place to preserve row order
+            tableVM.contentResult = result.replacingCell(row: rowIndex, column: columnIndex, with: newValue)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -359,30 +348,13 @@ struct CascadeDeleteContext {
         // rowIndex comes from the sorted display; map it back to the original position.
         let actualRowIndex = queryVM.originalRowIndex(rowIndex)
 
-        await executeUpdate(
-            schema: tableRef.schema, table: tableRef.table,
-            columnIndex: columnIndex, rowIndex: actualRowIndex, newText: newText,
-            result: result, pkColumns: pkColumns, columnInfo: queryVM.editableColumns
-        ) {
-            await self.executeQuery(self.queryVM.queryText)
-        }
-    }
-
-    private func executeUpdate(
-        schema: String, table: String,
-        columnIndex: Int, rowIndex: Int, newText: String,
-        result: QueryResult, pkColumns: [ColumnInfo], columnInfo: [ColumnInfo],
-        refresh: @escaping () async -> Void
-    ) async {
-        let columnName = result.columns[columnIndex]
-        let originalRow = result.rows[rowIndex]
-        let newValue: CellValue = newText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "NULL" ? .null : .text(newText)
+        let newValue = Self.cellValueFromText(newText)
 
         guard let sql = buildUpdateSQL(
-            schema: schema, table: table,
-            columnName: columnName, newValue: newValue,
-            originalRow: originalRow, resultColumns: result.columns,
-            pkColumnNames: pkColumns.map(\.name), columnInfo: columnInfo
+            schema: tableRef.schema, table: tableRef.table,
+            columnName: result.columns[columnIndex], newValue: newValue,
+            originalRow: result.rows[actualRowIndex], resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name), columnInfo: queryVM.editableColumns
         ) else {
             errorMessage = "Cannot update: primary key columns missing from result"
             return
@@ -390,10 +362,16 @@ struct CascadeDeleteContext {
 
         do {
             _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            await refresh()
+            // Update in-place to preserve row order
+            queryVM.result = result.replacingCell(row: actualRowIndex, column: columnIndex, with: newValue)
+            queryVM.invalidateSortCache()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private static func cellValueFromText(_ text: String) -> CellValue {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "NULL" ? .null : .text(text)
     }
 
     func updateInspectorCell(columnName: String, newText: String) async {
@@ -404,9 +382,9 @@ struct CascadeDeleteContext {
                   let colIndex = result.columns.firstIndex(of: columnName)
             else { return }
             await updateContentCell(rowIndex: rowIndex, columnIndex: colIndex, newText: newText)
-            // Re-select the row to refresh inspector data
-            if let updatedResult = tableVM.contentResult, rowIndex < updatedResult.rows.count {
-                selectRow(index: rowIndex, columns: updatedResult.columns, values: updatedResult.rows[rowIndex])
+            // Refresh inspector data from the in-place updated result
+            if let updated = tableVM.contentResult, rowIndex < updated.rows.count {
+                selectRow(index: rowIndex, columns: updated.columns, values: updated.rows[rowIndex])
             }
         } else if selectedTab == .query {
             guard let result = queryVM.result,
@@ -414,10 +392,9 @@ struct CascadeDeleteContext {
                   let colIndex = result.columns.firstIndex(of: columnName)
             else { return }
             await updateQueryCell(rowIndex: rowIndex, columnIndex: colIndex, newText: newText)
-            // Re-select the row to refresh inspector data — use sortedResult
-            // because rowIndex is a display index from the sorted view.
-            if let updatedResult = queryVM.sortedResult, rowIndex < updatedResult.rows.count {
-                selectRow(index: rowIndex, columns: updatedResult.columns, values: updatedResult.rows[rowIndex])
+            // Refresh inspector data from the in-place updated sorted result
+            if let updated = queryVM.sortedResult, rowIndex < updated.rows.count {
+                selectRow(index: rowIndex, columns: updated.columns, values: updated.rows[rowIndex])
             }
         }
     }

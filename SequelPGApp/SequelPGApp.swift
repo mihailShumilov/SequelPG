@@ -2,29 +2,30 @@ import SwiftUI
 
 @main
 struct SequelPGApp: App {
-    @State private var appVM = AppViewModel()
+    /// Shared connection list — all tabs read/write the same saved profiles.
+    @State private var connectionListVM = ConnectionListViewModel(
+        store: ConnectionStore(),
+        keychainService: KeychainService.shared
+    )
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(appVM)
-                .environment(appVM.connectionListVM)
-                .environment(appVM.navigatorVM)
-                .environment(appVM.tableVM)
-                .environment(appVM.queryVM)
+            TabRootView()
+                .environment(connectionListVM)
         }
         .commands {
             CommandGroup(after: .newItem) {
                 Divider()
 
-                Button("Disconnect") {
-                    Task {
-                        await appVM.disconnect()
-                    }
+                Button("New Tab") {
+                    NotificationCenter.default.post(name: .newTabRequested, object: nil)
                 }
-                .keyboardShortcut("w", modifiers: [.command, .shift])
-                .disabled(!appVM.isConnected)
+                .keyboardShortcut("t", modifiers: .command)
             }
         }
     }
+}
+
+extension Notification.Name {
+    static let newTabRequested = Notification.Name("com.sequelpg.newTabRequested")
 }
