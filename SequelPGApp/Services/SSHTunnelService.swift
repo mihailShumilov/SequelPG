@@ -113,7 +113,7 @@ actor SSHTunnelService {
 
             // Log full stderr for diagnostics
             if !stderrText.isEmpty {
-                Log.ssh.error("SSH stderr: \(stderrText, privacy: .public)")
+                Log.ssh.error("SSH stderr: \(stderrText, privacy: .private)")
             }
 
             // Detect unknown host key and provide actionable guidance

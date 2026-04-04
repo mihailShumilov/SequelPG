@@ -51,7 +51,7 @@ struct StructureTabView: View {
                             Toggle("", isOn: Binding(
                                 get: { col.isNullable },
                                 set: { newValue in
-                                    Task { await toggleNullable(column: col, nullable: newValue) }
+                                    Task { await appVM.toggleColumnNullable(columnName: col.name, nullable: newValue) }
                                 }
                             ))
                             .toggleStyle(.checkbox)
@@ -96,7 +96,7 @@ struct StructureTabView: View {
         }
         .sheet(isPresented: $showAddColumn) {
             AddColumnSheet { name, dataType, nullable, defaultValue in
-                Task { await addColumn(name: name, dataType: dataType, nullable: nullable, defaultValue: defaultValue) }
+                Task { await appVM.addColumn(name: name, dataType: dataType, nullable: nullable, defaultValue: defaultValue) }
             }
         }
         .alert("Drop Column?", isPresented: .init(
@@ -107,7 +107,7 @@ struct StructureTabView: View {
             Button("Drop", role: .destructive) {
                 if let col = dropConfirmColumn {
                     dropConfirmColumn = nil
-                    Task { await dropColumn(col) }
+                    Task { await appVM.dropColumn(col.name) }
                 }
             }
         } message: {
@@ -192,16 +192,16 @@ struct StructureTabView: View {
         switch field {
         case .name:
             if !newValue.isEmpty, newValue != column.name {
-                Task { await renameColumn(column: column, newName: newValue) }
+                Task { await appVM.renameColumn(oldName: column.name, newName: newValue) }
             }
         case .type:
             if !newValue.isEmpty, newValue != column.dataType {
-                Task { await changeType(column: column, newType: newValue) }
+                Task { await appVM.changeColumnType(columnName: column.name, newType: newValue) }
             }
         case .defaultValue:
             let oldDefault = column.columnDefault ?? ""
             if newValue != oldDefault {
-                Task { await changeDefault(column: column, newDefault: newValue) }
+                Task { await appVM.changeColumnDefault(columnName: column.name, newDefault: newValue) }
             }
         }
     }
@@ -211,81 +211,6 @@ struct StructureTabView: View {
         editingText = ""
     }
 
-    // MARK: - ALTER TABLE Operations
-
-    private func addColumn(name: String, dataType: String, nullable: Bool, defaultValue: String) async {
-        guard let object = navigatorVM.selectedObject else { return }
-
-        var sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ADD COLUMN \(quoteIdent(name)) \(dataType)"
-        if !nullable {
-            sql += " NOT NULL"
-        }
-        if !defaultValue.isEmpty {
-            sql += " DEFAULT \(defaultValue)"
-        }
-
-        await executeSchemaChange(sql)
-    }
-
-    private func dropColumn(_ column: ColumnInfo) async {
-        guard let object = navigatorVM.selectedObject else { return }
-
-        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) DROP COLUMN \(quoteIdent(column.name))"
-        await executeSchemaChange(sql)
-    }
-
-    private func renameColumn(column: ColumnInfo, newName: String) async {
-        guard let object = navigatorVM.selectedObject else { return }
-
-        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) RENAME COLUMN \(quoteIdent(column.name)) TO \(quoteIdent(newName))"
-        await executeSchemaChange(sql)
-    }
-
-    private func changeType(column: ColumnInfo, newType: String) async {
-        guard let object = navigatorVM.selectedObject else { return }
-
-        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(column.name)) TYPE \(newType) USING \(quoteIdent(column.name))::\(newType)"
-        await executeSchemaChange(sql)
-    }
-
-    private func toggleNullable(column: ColumnInfo, nullable: Bool) async {
-        guard let object = navigatorVM.selectedObject else { return }
-
-        let action = nullable ? "DROP NOT NULL" : "SET NOT NULL"
-        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(column.name)) \(action)"
-        await executeSchemaChange(sql)
-    }
-
-    private func changeDefault(column: ColumnInfo, newDefault: String) async {
-        guard let object = navigatorVM.selectedObject else { return }
-
-        let action: String
-        if newDefault.isEmpty {
-            action = "DROP DEFAULT"
-        } else {
-            action = "SET DEFAULT \(newDefault)"
-        }
-        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(column.name)) \(action)"
-        await executeSchemaChange(sql)
-    }
-
-    private func executeSchemaChange(_ sql: String) async {
-        do {
-            _ = try await appVM.dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            // Invalidate column cache and reload
-            await appVM.dbClient.invalidateCache()
-            if let object = navigatorVM.selectedObject {
-                let columns = try await appVM.dbClient.getColumns(
-                    schema: object.schema,
-                    table: object.name
-                )
-                tableVM.setColumns(columns)
-                tableVM.selectedObjectColumnCount = columns.count
-            }
-        } catch {
-            appVM.errorMessage = error.localizedDescription
-        }
-    }
 }
 
 // MARK: - Add Column Sheet

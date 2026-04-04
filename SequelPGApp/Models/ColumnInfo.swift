@@ -10,6 +10,11 @@ struct ColumnInfo: Identifiable, Sendable, Equatable {
     let columnDefault: String?
     let characterMaximumLength: Int?
     let isPrimaryKey: Bool
+    let udtName: String?
+    let numericPrecision: Int?
+    let numericScale: Int?
+    let isIdentity: Bool
+    let identityGeneration: String?
 
     init(
         name: String,
@@ -18,7 +23,12 @@ struct ColumnInfo: Identifiable, Sendable, Equatable {
         isNullable: Bool,
         columnDefault: String?,
         characterMaximumLength: Int?,
-        isPrimaryKey: Bool = false
+        isPrimaryKey: Bool = false,
+        udtName: String? = nil,
+        numericPrecision: Int? = nil,
+        numericScale: Int? = nil,
+        isIdentity: Bool = false,
+        identityGeneration: String? = nil
     ) {
         self.id = "\(ordinalPosition)_\(name)"
         self.name = name
@@ -28,5 +38,10 @@ struct ColumnInfo: Identifiable, Sendable, Equatable {
         self.columnDefault = columnDefault
         self.characterMaximumLength = characterMaximumLength
         self.isPrimaryKey = isPrimaryKey
+        self.udtName = udtName
+        self.numericPrecision = numericPrecision
+        self.numericScale = numericScale
+        self.isIdentity = isIdentity
+        self.identityGeneration = identityGeneration
     }
 }

@@ -57,7 +57,7 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         port: Int = 5432,
         database: String,
         username: String,
-        sslMode: SSLMode = .prefer,
+        sslMode: SSLMode = .require,
         useSSHTunnel: Bool = false,
         sshHost: String = "",
         sshPort: Int = 22,

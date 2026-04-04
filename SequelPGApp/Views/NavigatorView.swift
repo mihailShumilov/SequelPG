@@ -17,17 +17,17 @@ struct NavigatorView: View {
         }
         .sheet(isPresented: $showCreateDatabase) {
             CreateDatabaseSheet { name in
-                Task { await createDatabase(name: name) }
+                Task { await appVM.createDatabase(name: name) }
             }
         }
         .sheet(isPresented: $showCreateSchema) {
             CreateSchemaSheet { name in
-                Task { await createSchema(name: name) }
+                Task { await appVM.createSchema(name: name) }
             }
         }
         .sheet(isPresented: $showCreateTable) {
             CreateTableSheet(schema: createTableSchema) { name, columns in
-                Task { await createTable(schema: createTableSchema, name: name, columns: columns) }
+                Task { await appVM.createTable(schema: createTableSchema, name: name, columns: columns) }
             }
         }
     }
@@ -56,6 +56,7 @@ struct NavigatorView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel("Refresh navigator")
             .help("Refresh")
         }
         .padding(.horizontal, 12)
@@ -176,7 +177,7 @@ struct NavigatorView: View {
             isExpanded: categoryExpansionBinding(db, schema, category)
         ) {
             ForEach(objects) { obj in
-                Label(obj.name, systemImage: category.objectIcon)
+                Label(obj.name, systemImage: category.icon)
                     .tag(obj)
             }
             if category == .tables {
@@ -210,53 +211,6 @@ struct NavigatorView: View {
         )
     }
 
-    // MARK: - Create Operations
-
-    private func createDatabase(name: String) async {
-        let sql = "CREATE DATABASE \(quoteIdent(name))"
-        do {
-            _ = try await appVM.dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            let databases = try await appVM.dbClient.listDatabases()
-            navigatorVM.setDatabases(databases, current: navigatorVM.connectedDatabase)
-        } catch {
-            appVM.errorMessage = error.localizedDescription
-        }
-    }
-
-    private func createSchema(name: String) async {
-        let db = navigatorVM.connectedDatabase
-        let sql = "CREATE SCHEMA \(quoteIdent(name))"
-        do {
-            _ = try await appVM.dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            await appVM.dbClient.invalidateCache()
-            await appVM.refreshNavigator()
-            appVM.navigatorVM.setSchemaExpanded(db, name, true)
-            await appVM.loadSchemaObjects(db: db, schema: name)
-        } catch {
-            appVM.errorMessage = error.localizedDescription
-        }
-    }
-
-    private func createTable(schema: String, name: String, columns: [NewColumnDef]) async {
-        let db = navigatorVM.connectedDatabase
-        let colDefs = columns.map { col -> String in
-            var def = "\(quoteIdent(col.name)) \(col.dataType)"
-            if col.isPrimaryKey { def += " PRIMARY KEY" }
-            if !col.isNullable, !col.isPrimaryKey { def += " NOT NULL" }
-            if !col.defaultValue.isEmpty { def += " DEFAULT \(col.defaultValue)" }
-            return def
-        }
-
-        let sql = "CREATE TABLE \(quoteIdent(schema)).\(quoteIdent(name)) (\(colDefs.joined(separator: ", ")))"
-        do {
-            _ = try await appVM.dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            await appVM.dbClient.invalidateCache()
-            appVM.navigatorVM.invalidateSchema(db: db, schema: schema)
-            await appVM.loadSchemaObjects(db: db, schema: schema)
-        } catch {
-            appVM.errorMessage = error.localizedDescription
-        }
-    }
 }
 
 // MARK: - Column definition for new table

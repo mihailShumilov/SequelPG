@@ -26,8 +26,12 @@ struct TabRootView: View {
                 VStack(spacing: 0) {
                     tabBar
                     Divider()
-                    if let tab = tabs.first(where: { $0.id == selectedTabId }) ?? tabs.first {
-                        tabContent(tab)
+                    ZStack {
+                        ForEach(tabs) { tab in
+                            tabContent(tab)
+                                .opacity(tab.id == selectedTabId ? 1 : 0)
+                                .allowsHitTesting(tab.id == selectedTabId)
+                        }
                     }
                 }
             }
@@ -73,6 +77,7 @@ struct TabRootView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Close tab")
             }
         }
         .padding(.horizontal, 12)

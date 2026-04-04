@@ -6,7 +6,6 @@ import Foundation
     var queryText = ""
     var isExecuting = false
     var errorMessage: String?
-    var showErrorDetail = false
 
     /// Table context detected from the last executed query (for inline editing).
     var editableTableContext: (schema: String, table: String)?
@@ -95,6 +94,10 @@ import Foundation
         }
     }
 
+    private static let tableRefRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?i)\bFROM\s+(?:(?:"([^"]+)"|([^\s".,;()\[\]]+))\.)?(?:"([^"]+)"|([^\s".,;()\[\]]+))"#
+    )
+
     /// Attempts to extract a single table reference from a simple SELECT query.
     /// Returns nil for JOINs, subqueries, or queries without a FROM clause.
     /// Also returns nil for CTEs (`WITH ... SELECT`), `UNION`, `UPDATE ... RETURNING`,
@@ -112,8 +115,7 @@ import Foundation
         // Match: FROM [schema.]table — supports both quoted and unquoted identifiers
         // Group 1: quoted schema, Group 2: unquoted schema (Unicode-safe)
         // Group 3: quoted table, Group 4: unquoted table (Unicode-safe)
-        let pattern = #"(?i)\bFROM\s+(?:(?:"([^"]+)"|([^\s".,;()\[\]]+))\.)?(?:"([^"]+)"|([^\s".,;()\[\]]+))"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        guard let regex = Self.tableRefRegex,
               let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed))
         else {
             return nil

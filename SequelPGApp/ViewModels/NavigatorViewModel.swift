@@ -43,7 +43,6 @@ enum ObjectCategory: String, CaseIterable {
         }
     }
 
-    var objectIcon: String { icon }
 }
 
 /// Holds all cached objects for a single schema.
@@ -129,6 +128,9 @@ struct SchemaObjects: Sendable {
     // Selection
     var selectedObject: DBObject?
 
+    /// Databases currently being loaded (for showing loading indicators in the navigator).
+    var loadingDatabases: Set<String> = []
+
     // MARK: - Key Helpers
 
     func schemaKey(_ db: String, _ schema: String) -> String { "\(db)\0\(schema)" }
@@ -145,8 +147,14 @@ struct SchemaObjects: Sendable {
     }
 
     /// All tables across all loaded schemas (for SQL completion).
+    /// Cached to avoid recomputing on every access; invalidated when objectsPerKey changes.
+    @ObservationIgnored private var _allLoadedTablesCache: [DBObject]?
+
     var allLoadedTables: [DBObject] {
-        objectsPerKey.values.flatMap { $0.tables }
+        if let cached = _allLoadedTablesCache { return cached }
+        let result = objectsPerKey.values.flatMap { $0.tables }
+        _allLoadedTablesCache = result
+        return result
     }
 
     func isSchemaLoaded(db: String, schema: String) -> Bool {
@@ -199,12 +207,14 @@ struct SchemaObjects: Sendable {
         let key = schemaKey(db, schema)
         objectsPerKey[key] = objects
         loadedKeys.insert(key)
+        _allLoadedTablesCache = nil
     }
 
     func invalidateSchema(db: String, schema: String) {
         let key = schemaKey(db, schema)
         loadedKeys.remove(key)
         objectsPerKey.removeValue(forKey: key)
+        _allLoadedTablesCache = nil
     }
 
     func clear() {
@@ -212,6 +222,7 @@ struct SchemaObjects: Sendable {
         connectedDatabase = ""
         schemasPerDatabase.removeAll()
         objectsPerKey.removeAll()
+        _allLoadedTablesCache = nil
         loadedKeys.removeAll()
         expandedDatabases.removeAll()
         expandedSchemas.removeAll()
@@ -224,6 +235,7 @@ struct SchemaObjects: Sendable {
         schemasPerDatabase.removeValue(forKey: db)
         let prefix = "\(db)\0"
         objectsPerKey = objectsPerKey.filter { !$0.key.hasPrefix(prefix) }
+        _allLoadedTablesCache = nil
         loadedKeys = loadedKeys.filter { !$0.hasPrefix(prefix) }
         expandedSchemas = expandedSchemas.filter { !$0.hasPrefix(prefix) }
         expandedCategories = expandedCategories.filter { !$0.hasPrefix(prefix) }

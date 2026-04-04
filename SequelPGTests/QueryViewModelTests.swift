@@ -34,10 +34,6 @@ final class QueryViewModelTests: XCTestCase {
         XCTAssertNil(vm.errorMessage)
     }
 
-    func testInitialShowErrorDetailIsFalse() {
-        XCTAssertFalse(vm.showErrorDetail)
-    }
-
     // MARK: - queryText
 
     func testSetQueryText() {
@@ -193,19 +189,6 @@ final class QueryViewModelTests: XCTestCase {
         XCTAssertEqual(vm.errorMessage, longMessage)
     }
 
-    // MARK: - showErrorDetail
-
-    func testSetShowErrorDetailToTrue() {
-        vm.showErrorDetail = true
-        XCTAssertTrue(vm.showErrorDetail)
-    }
-
-    func testSetShowErrorDetailToFalse() {
-        vm.showErrorDetail = true
-        vm.showErrorDetail = false
-        XCTAssertFalse(vm.showErrorDetail)
-    }
-
     // MARK: - deleteConfirmationRowIndex
 
     func testInitialDeleteConfirmationRowIndexIsNil() {
@@ -308,18 +291,13 @@ final class QueryViewModelTests: XCTestCase {
         XCTAssertEqual(vm.result?.columns, ["b"])
     }
 
-    func testErrorDetailToggleDuringExecution() {
-        vm.showErrorDetail = true
+    func testErrorMessageDuringExecution() {
         vm.isExecuting = true
         vm.errorMessage = nil
         vm.result = nil
 
-        // showErrorDetail remains independently controlled
-        XCTAssertTrue(vm.showErrorDetail)
-
         vm.isExecuting = false
         vm.errorMessage = "Some error"
-        XCTAssertTrue(vm.showErrorDetail)
         XCTAssertEqual(vm.errorMessage, "Some error")
     }
 

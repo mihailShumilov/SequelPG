@@ -34,3 +34,29 @@ func quoteLiteralTyped(_ value: CellValue, dataType: String) -> String {
     // Append explicit cast so PostgreSQL doesn't rely on implicit coercion
     return "\(literal)::\(dataType)"
 }
+
+// MARK: - Type Name Validation
+
+/// SQL keywords that indicate injection when found as whole words in a type name.
+private let dangerousTypePatterns: Set<String> = [
+    "select", "insert", "update", "delete", "drop", "alter",
+    "create", "grant", "revoke", "truncate", "exec",
+]
+
+/// Validates a PostgreSQL type name to prevent SQL injection.
+/// Allows alphanumeric, underscores, spaces (for "character varying"), parentheses
+/// (for precision like "numeric(10,2)"), commas, brackets, and dots.
+/// Rejects semicolons, quotes, and SQL keywords that indicate injection.
+func isValidTypeName(_ type: String) -> Bool {
+    let trimmed = type.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    // Must match safe character pattern
+    let safePattern = /^[a-zA-Z_][a-zA-Z0-9_ ,.()\[\]]*$/
+    guard trimmed.wholeMatch(of: safePattern) != nil else { return false }
+    // Must not contain dangerous SQL keywords as whole words
+    let lower = trimmed.lowercased()
+    for keyword in dangerousTypePatterns {
+        if lower.range(of: "\\b\(keyword)\\b", options: .regularExpression) != nil { return false }
+    }
+    return true
+}

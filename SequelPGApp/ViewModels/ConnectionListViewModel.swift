@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 
 /// Connection status for display in the sidebar.
@@ -52,11 +53,19 @@ enum ConnectionStatus {
     func addProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.add(profile)
         if let password, !password.isEmpty {
-            try? keychainService.save(password: password, forKey: profile.keychainKey)
+            do {
+                try keychainService.save(password: password, forKey: profile.keychainKey)
+            } catch {
+                Log.app.error("Failed to save password to Keychain: \(error.localizedDescription)")
+            }
             passwordCache[profile.keychainKey] = password
         }
         if let sshPassword, !sshPassword.isEmpty {
-            try? keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+            do {
+                try keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+            } catch {
+                Log.app.error("Failed to save SSH password to Keychain: \(error.localizedDescription)")
+            }
             passwordCache[profile.sshKeychainKey] = sshPassword
         }
         reload()
@@ -66,17 +75,33 @@ enum ConnectionStatus {
     func updateProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.update(profile)
         if let password, !password.isEmpty {
-            try? keychainService.save(password: password, forKey: profile.keychainKey)
+            do {
+                try keychainService.save(password: password, forKey: profile.keychainKey)
+            } catch {
+                Log.app.error("Failed to save password to Keychain: \(error.localizedDescription)")
+            }
             passwordCache[profile.keychainKey] = password
         } else if password?.isEmpty == true {
-            try? keychainService.delete(forKey: profile.keychainKey)
+            do {
+                try keychainService.delete(forKey: profile.keychainKey)
+            } catch {
+                Log.app.error("Failed to delete password from Keychain: \(error.localizedDescription)")
+            }
             passwordCache.removeValue(forKey: profile.keychainKey)
         }
         if let sshPassword, !sshPassword.isEmpty {
-            try? keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+            do {
+                try keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
+            } catch {
+                Log.app.error("Failed to save SSH password to Keychain: \(error.localizedDescription)")
+            }
             passwordCache[profile.sshKeychainKey] = sshPassword
         } else if sshPassword?.isEmpty == true {
-            try? keychainService.delete(forKey: profile.sshKeychainKey)
+            do {
+                try keychainService.delete(forKey: profile.sshKeychainKey)
+            } catch {
+                Log.app.error("Failed to delete SSH password from Keychain: \(error.localizedDescription)")
+            }
             passwordCache.removeValue(forKey: profile.sshKeychainKey)
         }
         reload()
@@ -87,8 +112,16 @@ enum ConnectionStatus {
             selectedProfileId = nil
         }
         store.delete(id: profile.id)
-        try? keychainService.delete(forKey: profile.keychainKey)
-        try? keychainService.delete(forKey: profile.sshKeychainKey)
+        do {
+            try keychainService.delete(forKey: profile.keychainKey)
+        } catch {
+            Log.app.error("Failed to delete password from Keychain: \(error.localizedDescription)")
+        }
+        do {
+            try keychainService.delete(forKey: profile.sshKeychainKey)
+        } catch {
+            Log.app.error("Failed to delete SSH password from Keychain: \(error.localizedDescription)")
+        }
         passwordCache.removeValue(forKey: profile.keychainKey)
         passwordCache.removeValue(forKey: profile.sshKeychainKey)
         connectionStatuses.removeValue(forKey: profile.id)

@@ -356,7 +356,7 @@ struct ResultsGridView: View {
         if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count {
             let cell = result.rows[rowIdx][colIdx]
             if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
-                TextField("", text: $editingText)
+                TextField("NULL", text: $editingText)
                     .textFieldStyle(.plain)
                     .font(.system(.body, design: .monospaced))
                     .focused($editFieldFocused)
@@ -397,7 +397,7 @@ struct ResultsGridView: View {
     }
 
     private func startEditing(row: Int, col: Int, cell: CellValue) {
-        let text = cell.isNull ? "NULL" : cell.displayString
+        let text = cell.isNull ? "" : cell.displayString
         editingText = text
         originalEditText = text
         editingCell = (row: row, col: col)

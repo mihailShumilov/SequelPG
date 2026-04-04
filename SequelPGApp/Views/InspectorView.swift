@@ -53,6 +53,7 @@ struct InspectorView: View {
                                 .foregroundStyle(.red)
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Delete row")
                         .help("Delete this row")
                     }
                     Button {
@@ -62,6 +63,7 @@ struct InspectorView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Dismiss row detail")
                 }
 
                 ScrollView {

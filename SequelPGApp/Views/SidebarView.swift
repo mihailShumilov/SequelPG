@@ -1,8 +1,3 @@
 import SwiftUI
 
-struct SidebarView: View {
-    var body: some View {
-        NavigatorView()
-            .frame(minWidth: 200)
-    }
-}
+// SidebarView removed — NavigatorView is used directly in ConnectionWindowView/TabRootView.

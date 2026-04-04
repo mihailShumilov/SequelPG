@@ -15,6 +15,9 @@ struct CascadeDeleteContext {
 /// Each connection tab/window gets its own AppViewModel instance.
 @MainActor
 @Observable final class AppViewModel {
+    static let defaultQueryTimeout: TimeInterval = 10.0
+    static let maxQueryRows = 2000
+
     @ObservationIgnored let dbClient: any PostgresClientProtocol
 
     let navigatorVM: NavigatorViewModel
@@ -142,20 +145,23 @@ struct CascadeDeleteContext {
             return
         }
 
-        // Switch to the target database, fetch schemas, then switch back
+        // Switch to the target database, fetch schemas, then always switch back
         do {
             try await dbClient.switchDatabase(to: dbName, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
             let schemas = try await dbClient.listSchemas()
             navigatorVM.setSchemas(schemas, forDatabase: dbName)
             await loadExpandedSchemaObjects(forDatabase: dbName)
-
-            // Switch back to the original database
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        // Always switch back to the original database
+        do {
             try await dbClient.switchDatabase(to: currentDb, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
             var restoredProfile = profile
             restoredProfile.database = currentDb
             connectedProfile = restoredProfile
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Failed to restore connection to \(currentDb): \(error.localizedDescription)"
         }
     }
 
@@ -255,7 +261,7 @@ struct CascadeDeleteContext {
 
         do {
             tableVM.isLoadingContent = true
-            var result = try await dbClient.runQuery(sql, maxRows: limit, timeout: 10.0)
+            var result = try await dbClient.runQuery(sql, maxRows: limit, timeout: Self.defaultQueryTimeout)
 
             // When the table has zero rows, runQuery returns empty columns
             // because column names are derived from row data. Use the
@@ -301,7 +307,7 @@ struct CascadeDeleteContext {
         clearSelectedRow()
 
         do {
-            var result = try await dbClient.runQuery(sql, maxRows: 2000, timeout: 10.0)
+            var result = try await dbClient.runQuery(sql, maxRows: Self.maxQueryRows, timeout: Self.defaultQueryTimeout)
 
             // Detect table context for inline editing and resolve empty columns
             if let tableRef = queryVM.parseTableFromQuery() {
@@ -391,7 +397,7 @@ struct CascadeDeleteContext {
         }
 
         do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
             // Update in-place to preserve row order
             tableVM.contentResult = result.replacingCell(row: rowIndex, column: columnIndex, with: newValue)
         } catch {
@@ -423,7 +429,7 @@ struct CascadeDeleteContext {
         }
 
         do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
             // Update in-place to preserve row order
             queryVM.result = result.replacingCell(row: actualRowIndex, column: columnIndex, with: newValue)
             queryVM.invalidateSortCache()
@@ -509,7 +515,7 @@ struct CascadeDeleteContext {
         }
 
         do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
             clearSelectedRow()
             // Refresh row count and reload current page
             let approxRows = try await dbClient.getApproximateRowCount(
@@ -563,7 +569,7 @@ struct CascadeDeleteContext {
         }
 
         do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
             clearSelectedRow()
             // Re-execute the user's query to refresh results
             await executeQuery(queryVM.queryText)
@@ -662,7 +668,7 @@ struct CascadeDeleteContext {
         }
 
         do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
             // Refresh row count
             let approxRows = try await dbClient.getApproximateRowCount(
                 schema: object.schema,
@@ -798,7 +804,7 @@ struct CascadeDeleteContext {
             """
 
         do {
-            let fkResult = try await dbClient.runQuery(fkSQL, maxRows: 5000, timeout: 10.0)
+            let fkResult = try await dbClient.runQuery(fkSQL, maxRows: 5000, timeout: Self.defaultQueryTimeout)
             if fkResult.isTruncated {
                 errorMessage = "Too many foreign key relationships to cascade delete safely."
                 return
@@ -850,15 +856,16 @@ struct CascadeDeleteContext {
                 cteParts.append("del_child\(idx) AS (DELETE FROM \(quoteIdent(child.schema)).\(quoteIdent(child.table)) WHERE \(childWhere))")
             }
 
-            let cascadeSQL: String
+            let deleteSQL: String
             if cteParts.isEmpty {
                 // No children found, just retry the plain delete
-                cascadeSQL = "DELETE FROM \(quoteIdent(ctx.schema)).\(quoteIdent(ctx.table)) WHERE \(parentWhere)"
+                deleteSQL = "DELETE FROM \(quoteIdent(ctx.schema)).\(quoteIdent(ctx.table)) WHERE \(parentWhere)"
             } else {
-                cascadeSQL = "WITH \(cteParts.joined(separator: ", ")) DELETE FROM \(quoteIdent(ctx.schema)).\(quoteIdent(ctx.table)) WHERE \(parentWhere)"
+                deleteSQL = "WITH \(cteParts.joined(separator: ", ")) DELETE FROM \(quoteIdent(ctx.schema)).\(quoteIdent(ctx.table)) WHERE \(parentWhere)"
             }
+            let cascadeSQL = "BEGIN; \(deleteSQL); COMMIT;"
 
-            _ = try await dbClient.runQuery(cascadeSQL, maxRows: 0, timeout: 10.0)
+            _ = try await dbClient.runQuery(cascadeSQL, maxRows: 0, timeout: Self.defaultQueryTimeout)
             clearSelectedRow()
 
             // Refresh data based on source tab
@@ -880,6 +887,122 @@ struct CascadeDeleteContext {
             } else {
                 errorMessage = error.localizedDescription
             }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Schema Editing (ALTER TABLE)
+
+    func addColumn(name: String, dataType: String, nullable: Bool, defaultValue: String) async {
+        guard let object = navigatorVM.selectedObject else { return }
+        guard isValidTypeName(dataType) else {
+            errorMessage = "Invalid data type: \(dataType)"
+            return
+        }
+        var sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ADD COLUMN \(quoteIdent(name)) \(dataType)"
+        if !nullable { sql += " NOT NULL" }
+        if !defaultValue.isEmpty { sql += " DEFAULT \(defaultValue)" }
+        await executeSchemaChange(sql, schema: object.schema, table: object.name)
+    }
+
+    func dropColumn(_ columnName: String) async {
+        guard let object = navigatorVM.selectedObject else { return }
+        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) DROP COLUMN \(quoteIdent(columnName))"
+        await executeSchemaChange(sql, schema: object.schema, table: object.name)
+    }
+
+    func renameColumn(oldName: String, newName: String) async {
+        guard let object = navigatorVM.selectedObject else { return }
+        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) RENAME COLUMN \(quoteIdent(oldName)) TO \(quoteIdent(newName))"
+        await executeSchemaChange(sql, schema: object.schema, table: object.name)
+    }
+
+    func changeColumnType(columnName: String, newType: String) async {
+        guard let object = navigatorVM.selectedObject else { return }
+        guard isValidTypeName(newType) else {
+            errorMessage = "Invalid data type: \(newType)"
+            return
+        }
+        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(columnName)) TYPE \(newType) USING \(quoteIdent(columnName))::\(newType)"
+        await executeSchemaChange(sql, schema: object.schema, table: object.name)
+    }
+
+    func toggleColumnNullable(columnName: String, nullable: Bool) async {
+        guard let object = navigatorVM.selectedObject else { return }
+        let action = nullable ? "DROP NOT NULL" : "SET NOT NULL"
+        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(columnName)) \(action)"
+        await executeSchemaChange(sql, schema: object.schema, table: object.name)
+    }
+
+    func changeColumnDefault(columnName: String, newDefault: String) async {
+        guard let object = navigatorVM.selectedObject else { return }
+        let action = newDefault.isEmpty ? "DROP DEFAULT" : "SET DEFAULT \(newDefault)"
+        let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(columnName)) \(action)"
+        await executeSchemaChange(sql, schema: object.schema, table: object.name)
+    }
+
+    private func executeSchemaChange(_ sql: String, schema: String, table: String) async {
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            await dbClient.invalidateCache()
+            let columns = try await dbClient.getColumns(schema: schema, table: table)
+            tableVM.setColumns(columns)
+            tableVM.selectedObjectColumnCount = columns.count
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Create Operations
+
+    func createDatabase(name: String) async {
+        let sql = "CREATE DATABASE \(quoteIdent(name))"
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            let databases = try await dbClient.listDatabases()
+            navigatorVM.setDatabases(databases, current: navigatorVM.connectedDatabase)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func createSchema(name: String) async {
+        let sql = "CREATE SCHEMA \(quoteIdent(name))"
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            await dbClient.invalidateCache()
+            await refreshNavigator()
+            let db = navigatorVM.connectedDatabase
+            navigatorVM.setSchemaExpanded(db, name, true)
+            await loadSchemaObjects(db: db, schema: name)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func createTable(schema: String, name: String, columns: [NewColumnDef]) async {
+        let db = navigatorVM.connectedDatabase
+        // Validate all column types
+        for col in columns {
+            guard isValidTypeName(col.dataType) else {
+                errorMessage = "Invalid data type '\(col.dataType)' for column '\(col.name)'"
+                return
+            }
+        }
+        let colDefs = columns.map { col -> String in
+            var def = "\(quoteIdent(col.name)) \(col.dataType)"
+            if col.isPrimaryKey { def += " PRIMARY KEY" }
+            if !col.isNullable, !col.isPrimaryKey { def += " NOT NULL" }
+            if !col.defaultValue.isEmpty { def += " DEFAULT \(col.defaultValue)" }
+            return def
+        }
+        let sql = "CREATE TABLE \(quoteIdent(schema)).\(quoteIdent(name)) (\(colDefs.joined(separator: ", ")))"
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            await dbClient.invalidateCache()
+            navigatorVM.invalidateSchema(db: db, schema: schema)
+            await loadSchemaObjects(db: db, schema: schema)
         } catch {
             errorMessage = error.localizedDescription
         }

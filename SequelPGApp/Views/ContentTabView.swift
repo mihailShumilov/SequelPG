@@ -111,6 +111,7 @@ struct ContentTabView: View {
                 Image(systemName: "plus")
                     .frame(width: 16, height: 16)
             }
+            .accessibilityLabel("Insert row")
             .disabled(!appVM.canInsertContentRow || tableVM.isInsertingRow)
             .help("Insert a new row")
 
@@ -122,6 +123,7 @@ struct ContentTabView: View {
                 Image(systemName: "minus")
                     .frame(width: 16, height: 16)
             }
+            .accessibilityLabel("Delete row")
             .disabled(tableVM.selectedRowIndex == nil || !appVM.canDeleteContentRow || appVM.cascadeDeleteContext != nil || tableVM.isInsertingRow)
             .help("Delete the selected row")
 
@@ -165,6 +167,7 @@ struct ContentTabView: View {
             } label: {
                 Image(systemName: "chevron.left")
             }
+            .accessibilityLabel("Previous page")
             .disabled(tableVM.currentPage <= 0 || tableVM.isInsertingRow)
 
             Text("Page \(tableVM.currentPage + 1) of \(tableVM.totalPages)")
@@ -177,6 +180,7 @@ struct ContentTabView: View {
             } label: {
                 Image(systemName: "chevron.right")
             }
+            .accessibilityLabel("Next page")
             .disabled(tableVM.currentPage >= tableVM.totalPages - 1 || tableVM.isInsertingRow)
 
             Spacer()

@@ -31,6 +31,7 @@ actor DatabaseClient: PostgresClientProtocol {
     private let sshTunnel = SSHTunnelService()
 
     // Introspection cache
+    private var cachedServerVersion: Int?
     private var cachedSchemas: [String]?
     private var cachedTables: [String: [DBObject]] = [:]
     private var cachedViews: [String: [DBObject]] = [:]
@@ -67,19 +68,7 @@ actor DatabaseClient: PostgresClientProtocol {
             effectivePort = Int(localPort)
         }
 
-        let tls: PostgresClient.Configuration.TLS
-        switch profile.sslMode {
-        case .off:
-            tls = .disable
-        case .prefer:
-            tls = .prefer(.makeClientConfiguration())
-        case .require:
-            tls = .require(.makeClientConfiguration())
-        case .verifyCa, .verifyFull:
-            var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            tlsConfig.certificateVerification = .fullVerification
-            tls = .require(tlsConfig)
-        }
+        let tls = Self.makeTLS(for: profile.sslMode)
 
         let config = PostgresClient.Configuration(
             host: effectiveHost,
@@ -110,6 +99,26 @@ actor DatabaseClient: PostgresClientProtocol {
         Log.db.info("Connected to \(profile.host, privacy: .public):\(profile.port)/\(profile.database, privacy: .public)")
     }
 
+    /// Build TLS configuration for the given SSL mode.
+    private static func makeTLS(for sslMode: SSLMode) -> PostgresClient.Configuration.TLS {
+        switch sslMode {
+        case .off:
+            return .disable
+        case .prefer:
+            return .prefer(.makeClientConfiguration())
+        case .require:
+            return .require(.makeClientConfiguration())
+        case .verifyCa:
+            var c = TLSConfiguration.makeClientConfiguration()
+            c.certificateVerification = .noHostnameVerification
+            return .require(c)
+        case .verifyFull:
+            var c = TLSConfiguration.makeClientConfiguration()
+            c.certificateVerification = .fullVerification
+            return .require(c)
+        }
+    }
+
     func disconnect() async {
         runTask?.cancel()
         runTask = nil
@@ -120,6 +129,7 @@ actor DatabaseClient: PostgresClientProtocol {
     }
 
     func invalidateCache() async {
+        cachedServerVersion = nil
         cachedSchemas = nil
         cachedTables.removeAll()
         cachedViews.removeAll()
@@ -142,100 +152,107 @@ actor DatabaseClient: PostgresClientProtocol {
 
         let start = CFAbsoluteTimeGetCurrent()
 
-        let result: QueryResult = try await withThrowingTaskGroup(of: QueryResult.self) { group in
-            group.addTask { [client] in
-                try Task.checkCancellation()
-
-                // Set server-side statement timeout so the server cancels
-                // long-running queries even if the client-side cancellation
-                // doesn't reach the driver in time.
-                let timeoutMs = Int(timeout * 1000)
-                try await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = \(timeoutMs)"))
-
-                let rowSequence = try await client.query(PostgresQuery(unsafeSQL: sql))
-
-                var columns: [String] = []
-                var rows: [[CellValue]] = []
-                var isTruncated = false
-
-                for try await row in rowSequence {
+        let result: QueryResult
+        do {
+            result = try await withThrowingTaskGroup(of: QueryResult.self) { group in
+                group.addTask { [client] in
                     try Task.checkCancellation()
 
-                    let randomRow = PostgresRandomAccessRow(row)
+                    // Set server-side statement timeout so the server cancels
+                    // long-running queries even if the client-side cancellation
+                    // doesn't reach the driver in time.
+                    let timeoutMs = Int(timeout * 1000)
+                    try await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = \(timeoutMs)"))
 
-                    // Capture column names from first row
-                    if columns.isEmpty {
+                    let rowSequence = try await client.query(PostgresQuery(unsafeSQL: sql))
+
+                    var columns: [String] = []
+                    var rows: [[CellValue]] = []
+                    var isTruncated = false
+
+                    for try await row in rowSequence {
+                        try Task.checkCancellation()
+
+                        let randomRow = PostgresRandomAccessRow(row)
+
+                        // Capture column names from first row
+                        if columns.isEmpty {
+                            for i in 0 ..< randomRow.count {
+                                columns.append(randomRow[i].columnName)
+                            }
+                        }
+
+                        // Convert cells to CellValue using type-aware decoding
+                        var cellValues: [CellValue] = []
                         for i in 0 ..< randomRow.count {
-                            columns.append(randomRow[i].columnName)
+                            cellValues.append(Self.decodeCellValue(randomRow[i]))
+                        }
+
+                        rows.append(cellValues)
+
+                        if rows.count >= maxRows {
+                            isTruncated = true
+                            break
                         }
                     }
 
-                    // Convert cells to CellValue using type-aware decoding
-                    var cellValues: [CellValue] = []
-                    for i in 0 ..< randomRow.count {
-                        cellValues.append(Self.decodeCellValue(randomRow[i]))
-                    }
+                    let elapsed = CFAbsoluteTimeGetCurrent() - start
+                    Log.perf.info("Query: \(elapsed, format: .fixed(precision: 3))s, \(rows.count) rows")
 
-                    rows.append(cellValues)
-
-                    if rows.count >= maxRows {
-                        isTruncated = true
-                        break
-                    }
+                    return QueryResult(
+                        columns: columns,
+                        rows: rows,
+                        executionTime: elapsed,
+                        rowsAffected: nil,
+                        isTruncated: isTruncated
+                    )
                 }
 
-                // Reset statement timeout to avoid affecting introspection queries
-                try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
+                // Timeout task
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    throw AppError.queryTimeout
+                }
 
-                let elapsed = CFAbsoluteTimeGetCurrent() - start
-                Log.perf.info("Query: \(elapsed, format: .fixed(precision: 3))s, \(rows.count) rows")
-
-                return QueryResult(
-                    columns: columns,
-                    rows: rows,
-                    executionTime: elapsed,
-                    rowsAffected: nil,
-                    isTruncated: isTruncated
-                )
-            }
-
-            // Timeout task
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw AppError.queryTimeout
-            }
-
-            do {
                 guard let result = try await group.next() else {
                     throw AppError.queryTimeout
                 }
                 group.cancelAll()
                 return result
-            } catch let error as AppError {
-                throw error
-            } catch let error as PSQLError {
-                // Detect connection-loss conditions
-                if error.code == .serverClosedConnection || error.code == .connectionError {
-                    self.client = nil
-                    self.runTask?.cancel()
-                    self.runTask = nil
-                    throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
-                }
-                if error.serverInfo?[.sqlState] == "23503" {
-                    throw AppError.foreignKeyViolation(Self.formatPSQLError(error))
-                }
-                // Check for connection-loss SQL states (08xxx class)
-                if let sqlState = error.serverInfo?[.sqlState], sqlState.hasPrefix("08") {
-                    self.client = nil
-                    self.runTask?.cancel()
-                    self.runTask = nil
-                    throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
-                }
-                throw AppError.queryFailed(Self.formatPSQLError(error))
-            } catch {
-                throw AppError.queryFailed(error.localizedDescription)
             }
+        } catch let error as AppError {
+            // Always reset statement timeout, even on failure
+            try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
+            throw error
+        } catch let error as PSQLError {
+            // Always reset statement timeout, even on failure
+            try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
+            // Detect connection-loss conditions
+            if error.code == .serverClosedConnection || error.code == .connectionError {
+                self.client = nil
+                self.runTask?.cancel()
+                self.runTask = nil
+                throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
+            }
+            if error.serverInfo?[.sqlState] == "23503" {
+                throw AppError.foreignKeyViolation(Self.formatPSQLError(error))
+            }
+            // Check for connection-loss SQL states (08xxx class)
+            if let sqlState = error.serverInfo?[.sqlState], sqlState.hasPrefix("08") {
+                self.client = nil
+                self.runTask?.cancel()
+                self.runTask = nil
+                throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
+            }
+            throw AppError.queryFailed(Self.formatPSQLError(error))
+        } catch {
+            // Always reset statement timeout, even on failure
+            try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
+            throw AppError.queryFailed(error.localizedDescription)
         }
+
+        // Reset statement timeout to avoid affecting introspection queries
+        try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
 
         return result
     }
@@ -351,10 +368,11 @@ actor DatabaseClient: PostgresClientProtocol {
         if let cached = cachedTables[schema] { return cached }
         guard let client else { throw AppError.notConnected }
 
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
         let sql = """
             SELECT table_name
             FROM information_schema.tables
-            WHERE table_schema = '\(schema.replacingOccurrences(of: "'", with: "''"))'
+            WHERE table_schema = '\(escapedSchema)'
               AND table_type = 'BASE TABLE'
             ORDER BY table_name
             """
@@ -373,10 +391,11 @@ actor DatabaseClient: PostgresClientProtocol {
         if let cached = cachedViews[schema] { return cached }
         guard let client else { throw AppError.notConnected }
 
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
         let sql = """
             SELECT table_name
             FROM information_schema.views
-            WHERE table_schema = '\(schema.replacingOccurrences(of: "'", with: "''"))'
+            WHERE table_schema = '\(escapedSchema)'
             ORDER BY table_name
             """
         var views: [DBObject] = []
@@ -417,12 +436,18 @@ actor DatabaseClient: PostgresClientProtocol {
         guard let client else { throw AppError.notConnected }
 
         let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let pgVersion = await detectServerVersion(client: client)
+        let kindFilter = pgVersion >= 11
+            ? "p.prokind = 'f'"
+            : "NOT p.proisagg AND NOT p.proiswindow"
         let sql = """
-            SELECT DISTINCT routine_name
-            FROM information_schema.routines
-            WHERE routine_schema = '\(escapedSchema)'
-              AND routine_type = 'FUNCTION'
-            ORDER BY routine_name
+            SELECT p.proname || '(' || COALESCE(pg_get_function_identity_arguments(p.oid), '') || ')' AS func_sig
+            FROM pg_proc p
+            JOIN pg_namespace n ON p.pronamespace = n.oid
+            WHERE n.nspname = '\(escapedSchema)'
+              AND \(kindFilter)
+              AND NOT EXISTS (SELECT 1 FROM pg_type t WHERE t.oid = p.prorettype AND t.typname = 'trigger')
+            ORDER BY p.proname
             """
         var functions: [DBObject] = []
         let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
@@ -676,11 +701,14 @@ actor DatabaseClient: PostgresClientProtocol {
     }
 
     private func detectServerVersion(client: PostgresClient) async -> Int {
+        if let cached = cachedServerVersion { return cached }
         do {
             let rows = try await client.query("SHOW server_version_num")
             for try await row in rows {
                 if let (vStr,) = try? row.decode(String.self), let num = Int(vStr) {
-                    return num / 10000
+                    let version = num / 10000
+                    cachedServerVersion = version
+                    return version
                 }
             }
         } catch {}
@@ -699,7 +727,9 @@ actor DatabaseClient: PostgresClientProtocol {
         let escapedTable = table.replacingOccurrences(of: "'", with: "''")
 
         let sql = """
-            SELECT column_name, ordinal_position, data_type, is_nullable, column_default, character_maximum_length
+            SELECT column_name, ordinal_position, data_type, is_nullable, column_default,
+                   character_maximum_length, udt_name, numeric_precision, numeric_scale,
+                   is_identity, identity_generation
             FROM information_schema.columns
             WHERE table_schema = '\(escapedSchema)'
               AND table_name = '\(escapedTable)'
@@ -715,6 +745,11 @@ actor DatabaseClient: PostgresClientProtocol {
             let nullable = try randomRow["is_nullable"].decode(String.self)
             let defaultVal = try? randomRow["column_default"].decode(String?.self)
             let maxLength = try? randomRow["character_maximum_length"].decode(Int?.self)
+            let udtName = try? randomRow["udt_name"].decode(String?.self)
+            let numericPrecision = try? randomRow["numeric_precision"].decode(Int?.self)
+            let numericScale = try? randomRow["numeric_scale"].decode(Int?.self)
+            let isIdentityStr = try? randomRow["is_identity"].decode(String?.self)
+            let identityGeneration = try? randomRow["identity_generation"].decode(String?.self)
 
             columns.append(ColumnInfo(
                 name: name,
@@ -723,7 +758,12 @@ actor DatabaseClient: PostgresClientProtocol {
                 isNullable: nullable == "YES",
                 columnDefault: defaultVal ?? nil,
                 characterMaximumLength: maxLength ?? nil,
-                isPrimaryKey: pkSet.contains(name)
+                isPrimaryKey: pkSet.contains(name),
+                udtName: udtName ?? nil,
+                numericPrecision: numericPrecision ?? nil,
+                numericScale: numericScale ?? nil,
+                isIdentity: (isIdentityStr ?? nil) == "YES",
+                identityGeneration: identityGeneration ?? nil
             ))
         }
         cachedColumns[cacheKey] = columns
@@ -845,19 +885,7 @@ actor DatabaseClient: PostgresClientProtocol {
             effectivePort = Int(localPort)
         }
 
-        let tls: PostgresClient.Configuration.TLS
-        switch newProfile.sslMode {
-        case .off:
-            tls = .disable
-        case .prefer:
-            tls = .prefer(.makeClientConfiguration())
-        case .require:
-            tls = .require(.makeClientConfiguration())
-        case .verifyCa, .verifyFull:
-            var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            tlsConfig.certificateVerification = .fullVerification
-            tls = .require(tlsConfig)
-        }
+        let tls = Self.makeTLS(for: newProfile.sslMode)
 
         let config = PostgresClient.Configuration(
             host: effectiveHost,
