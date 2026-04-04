@@ -4,7 +4,7 @@ A lightweight, native macOS PostgreSQL client inspired by Sequel Pro.
 
 ## Requirements
 
-- macOS 13.0 (Ventura) or later
+- macOS 14.4 (Sonoma) or later
 - Xcode 15.0 or later
 - Swift 5.9+
 
@@ -34,18 +34,22 @@ Or use **Cmd+U** in Xcode.
 ## Feature Checklist
 
 - [x] Connection management (add, edit, delete, connect, disconnect)
-- [x] Keychain-backed password storage
-- [x] SSL mode toggle (Off / Prefer / Require)
+- [x] Keychain-backed password storage with in-memory caching
+- [x] SSL mode toggle (Off / Prefer / Require / Verify-CA / Verify-Full)
 - [x] SSH tunnel support (key file or password auth)
 - [x] Database navigator (schemas, tables, views)
+- [x] Database switcher
 - [x] Structure tab (column details)
 - [x] Content tab with pagination (50 / 100 / 200 rows)
-- [x] Query editor with Cmd+Enter execution
-- [x] Query timeout (10s default)
+- [x] Inline data editing, insert, and delete records
+- [x] SQL editor with syntax highlighting, autocompletion, and query formatter
+- [x] Query timeout (10s default, server-side `statement_timeout`)
 - [x] Query result row cap (2000 rows)
 - [x] Execution time display
+- [x] Native Table grid with column sorting
 - [x] Right inspector panel (object name, row count, column count)
 - [x] Connection status indicators
+- [x] Disconnect menu item (Cmd+Shift+W)
 
 ## Architecture Overview
 
@@ -76,11 +80,13 @@ PostgresNIO (database driver)
 - **Single PostgresNIO client** with connection pooling (max 4 connections).
 - **Schema/table/column caching** to avoid redundant introspection queries.
 - **Pagination** with LIMIT/OFFSET for content browsing (50/100/200 rows).
-- **Approximate row counts** via `pg_class.reltuples` instead of COUNT(*).
+- **Approximate row counts** via `pg_class.reltuples` instead of COUNT(*), with fallback to COUNT(*) when `reltuples = -1`.
 - **Hard cap of 2000 rows** on query results to prevent memory issues.
-- **10-second query timeout** with client-side Task cancellation.
+- **10-second query timeout** with server-side `statement_timeout` and client-side Task cancellation.
 - **Lazy string truncation** for large text fields (10K char limit in UI).
-- **Stable identifiers** in SwiftUI Table to minimize re-rendering.
+- **Native Table** with `TableColumnForEach` for dynamic columns, built-in cell reuse, and sort indicators.
+- **Per-property @Observable tracking** eliminates unnecessary view re-renders (no Combine dependency).
+- **Memoized sort results** with lazy cache and O(1) row index lookups.
 
 ## Code Style
 
@@ -92,7 +98,7 @@ SwiftFormat is used for consistent formatting. See [CONTRIBUTING.md](CONTRIBUTIN
 
 ## Known Limitations
 
-- No SSL certificate management (only mode toggle).
+- No custom SSL certificate management (verify-ca and verify-full modes available).
 - No CSV import/export.
 - No ER diagrams.
 - No user/role management.
