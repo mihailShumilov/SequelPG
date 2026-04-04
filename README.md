@@ -37,17 +37,22 @@ Or use **Cmd+U** in Xcode.
 - [x] Keychain-backed password storage with in-memory caching
 - [x] SSL mode toggle (Off / Prefer / Require / Verify-CA / Verify-Full)
 - [x] SSH tunnel support (key file or password auth)
-- [x] Database navigator (schemas, tables, views)
-- [x] Database switcher
+- [x] Hierarchical tree navigator (databases, schemas, 17 object categories)
+- [x] PG version-adaptive object categories (e.g., Procedures for PG 11+)
+- [x] Multi-database browsing (expand any database to see its schemas)
+- [x] iTerm2-style tabs (Cmd+T) for multiple connections in one window
 - [x] Structure tab (column details)
 - [x] Content tab with pagination (50 / 100 / 200 rows)
-- [x] Inline data editing, insert, and delete records
+- [x] Single-click inline cell editing with auto-save
+- [x] Insert and delete records
+- [x] Schema editing (add/drop/rename columns, change types, toggle nullable)
 - [x] SQL editor with syntax highlighting, autocompletion, and query formatter
 - [x] Query timeout (10s default, server-side `statement_timeout`)
 - [x] Query result row cap (2000 rows)
 - [x] Execution time display
 - [x] Native Table grid with column sorting
 - [x] Right inspector panel (object name, row count, column count)
+- [x] Create database, schema, and table from navigator
 - [x] Connection status indicators
 - [x] Disconnect menu item (Cmd+Shift+W)
 

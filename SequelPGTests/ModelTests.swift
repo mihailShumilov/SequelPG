@@ -127,7 +127,7 @@ final class DBObjectTests: XCTestCase {
 
     func testIdentity() {
         let obj = DBObject(schema: "public", name: "users", type: .table)
-        XCTAssertEqual(obj.id, "public\0users")
+        XCTAssertEqual(obj.id, "public\0users\0table")
     }
 
     func testEquality() {

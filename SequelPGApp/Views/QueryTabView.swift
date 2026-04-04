@@ -105,8 +105,8 @@ struct QueryTabView: View {
             SQLEditorView(
                 text: $queryVM.queryText,
                 completionMetadata: SQLCompletionProvider.Metadata(
-                    schemas: navigatorVM.schemas,
-                    tables: navigatorVM.tables,
+                    schemas: navigatorVM.schemas(for: navigatorVM.connectedDatabase),
+                    tables: navigatorVM.allLoadedTables,
                     columns: tableVM.columns
                 )
             )

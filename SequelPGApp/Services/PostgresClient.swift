@@ -11,6 +11,11 @@ protocol PostgresClientProtocol: Sendable {
     func listSchemas() async throws -> [String]
     func listTables(schema: String) async throws -> [DBObject]
     func listViews(schema: String) async throws -> [DBObject]
+    func listMaterializedViews(schema: String) async throws -> [DBObject]
+    func listFunctions(schema: String) async throws -> [DBObject]
+    func listSequences(schema: String) async throws -> [DBObject]
+    func listTypes(schema: String) async throws -> [DBObject]
+    func listAllSchemaObjects(schema: String) async throws -> SchemaObjects
     func getColumns(schema: String, table: String) async throws -> [ColumnInfo]
     func getPrimaryKeys(schema: String, table: String) async throws -> [String]
     func getApproximateRowCount(schema: String, table: String) async throws -> Int64
@@ -29,6 +34,10 @@ actor DatabaseClient: PostgresClientProtocol {
     private var cachedSchemas: [String]?
     private var cachedTables: [String: [DBObject]] = [:]
     private var cachedViews: [String: [DBObject]] = [:]
+    private var cachedMatViews: [String: [DBObject]] = [:]
+    private var cachedFunctions: [String: [DBObject]] = [:]
+    private var cachedSequences: [String: [DBObject]] = [:]
+    private var cachedTypes: [String: [DBObject]] = [:]
     private var cachedColumns: [String: [ColumnInfo]] = [:]
     private var cachedPrimaryKeys: [String: [String]] = [:]
 
@@ -114,6 +123,10 @@ actor DatabaseClient: PostgresClientProtocol {
         cachedSchemas = nil
         cachedTables.removeAll()
         cachedViews.removeAll()
+        cachedMatViews.removeAll()
+        cachedFunctions.removeAll()
+        cachedSequences.removeAll()
+        cachedTypes.removeAll()
         cachedColumns.removeAll()
         cachedPrimaryKeys.removeAll()
     }
@@ -375,6 +388,303 @@ actor DatabaseClient: PostgresClientProtocol {
         cachedViews[schema] = views
         Log.db.info("Loaded \(views.count) views in schema \(schema, privacy: .public)")
         return views
+    }
+
+    func listMaterializedViews(schema: String) async throws -> [DBObject] {
+        if let cached = cachedMatViews[schema] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let sql = """
+            SELECT matviewname
+            FROM pg_matviews
+            WHERE schemaname = '\(escapedSchema)'
+            ORDER BY matviewname
+            """
+        var matViews: [DBObject] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            matViews.append(DBObject(schema: schema, name: name, type: .materializedView))
+        }
+        cachedMatViews[schema] = matViews
+        Log.db.info("Loaded \(matViews.count) materialized views in schema \(schema, privacy: .public)")
+        return matViews
+    }
+
+    func listFunctions(schema: String) async throws -> [DBObject] {
+        if let cached = cachedFunctions[schema] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let sql = """
+            SELECT DISTINCT routine_name
+            FROM information_schema.routines
+            WHERE routine_schema = '\(escapedSchema)'
+              AND routine_type = 'FUNCTION'
+            ORDER BY routine_name
+            """
+        var functions: [DBObject] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            functions.append(DBObject(schema: schema, name: name, type: .function))
+        }
+        cachedFunctions[schema] = functions
+        Log.db.info("Loaded \(functions.count) functions in schema \(schema, privacy: .public)")
+        return functions
+    }
+
+    func listSequences(schema: String) async throws -> [DBObject] {
+        if let cached = cachedSequences[schema] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let sql = """
+            SELECT sequence_name
+            FROM information_schema.sequences
+            WHERE sequence_schema = '\(escapedSchema)'
+            ORDER BY sequence_name
+            """
+        var sequences: [DBObject] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            sequences.append(DBObject(schema: schema, name: name, type: .sequence))
+        }
+        cachedSequences[schema] = sequences
+        Log.db.info("Loaded \(sequences.count) sequences in schema \(schema, privacy: .public)")
+        return sequences
+    }
+
+    func listTypes(schema: String) async throws -> [DBObject] {
+        if let cached = cachedTypes[schema] { return cached }
+        guard let client else { throw AppError.notConnected }
+
+        let escapedSchema = schema.replacingOccurrences(of: "'", with: "''")
+        let sql = """
+            SELECT t.typname
+            FROM pg_type t
+            JOIN pg_namespace n ON t.typnamespace = n.oid
+            WHERE n.nspname = '\(escapedSchema)'
+              AND t.typtype IN ('e', 'c', 'd', 'r')
+              AND NOT EXISTS (SELECT 1 FROM pg_class c WHERE c.reltype = t.oid AND c.relkind IN ('r','v','m','S'))
+            ORDER BY t.typname
+            """
+        var types: [DBObject] = []
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            let (name,) = try row.decode(String.self)
+            types.append(DBObject(schema: schema, name: name, type: .type))
+        }
+        cachedTypes[schema] = types
+        Log.db.info("Loaded \(types.count) types in schema \(schema, privacy: .public)")
+        return types
+    }
+
+    func listAllSchemaObjects(schema: String) async throws -> SchemaObjects {
+        let esc = schema.replacingOccurrences(of: "'", with: "''")
+        guard let client else { throw AppError.notConnected }
+
+        // Detect server version for version-dependent queries
+        let pgVersion = await detectServerVersion(client: client)
+
+        // Run all queries in parallel
+        async let tables = listTables(schema: schema)
+        async let views = listViews(schema: schema)
+        async let matViews = listMaterializedViews(schema: schema)
+        async let functions = listFunctions(schema: schema)
+        async let sequences = listSequences(schema: schema)
+        async let types = listTypes(schema: schema)
+
+        // Aggregates
+        async let aggregates: [DBObject] = {
+            let aggFilter = pgVersion >= 11 ? "p.prokind = 'a'" : "p.proisagg = true"
+            let sql = """
+                SELECT p.proname FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND \(aggFilter)
+                ORDER BY p.proname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .aggregate)) }
+            return result
+        }()
+
+        // Collations
+        async let collations: [DBObject] = {
+            let sql = """
+                SELECT c.collname FROM pg_collation c
+                JOIN pg_namespace n ON c.collnamespace = n.oid
+                WHERE n.nspname = '\(esc)'
+                ORDER BY c.collname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .collation)) }
+            return result
+        }()
+
+        // Domains
+        async let domains: [DBObject] = {
+            let sql = """
+                SELECT domain_name FROM information_schema.domains
+                WHERE domain_schema = '\(esc)'
+                ORDER BY domain_name
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .domain)) }
+            return result
+        }()
+
+        // FTS Configurations
+        async let ftsConfigs: [DBObject] = {
+            let sql = """
+                SELECT cfgname FROM pg_ts_config c
+                JOIN pg_namespace n ON c.cfgnamespace = n.oid
+                WHERE n.nspname = '\(esc)'
+                ORDER BY cfgname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .ftsConfiguration)) }
+            return result
+        }()
+
+        // FTS Dictionaries
+        async let ftsDicts: [DBObject] = {
+            let sql = """
+                SELECT dictname FROM pg_ts_dict d
+                JOIN pg_namespace n ON d.dictnamespace = n.oid
+                WHERE n.nspname = '\(esc)'
+                ORDER BY dictname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .ftsDictionary)) }
+            return result
+        }()
+
+        // FTS Parsers
+        async let ftsParsers: [DBObject] = {
+            let sql = """
+                SELECT prsname FROM pg_ts_parser p
+                JOIN pg_namespace n ON p.prsnamespace = n.oid
+                WHERE n.nspname = '\(esc)'
+                ORDER BY prsname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .ftsParser)) }
+            return result
+        }()
+
+        // FTS Templates
+        async let ftsTemplates: [DBObject] = {
+            let sql = """
+                SELECT tmplname FROM pg_ts_template t
+                JOIN pg_namespace n ON t.tmplnamespace = n.oid
+                WHERE n.nspname = '\(esc)'
+                ORDER BY tmplname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .ftsTemplate)) }
+            return result
+        }()
+
+        // Foreign Tables
+        async let foreignTables: [DBObject] = {
+            let sql = """
+                SELECT c.relname FROM pg_class c
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND c.relkind = 'f'
+                ORDER BY c.relname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .foreignTable)) }
+            return result
+        }()
+
+        // Operators
+        async let operators: [DBObject] = {
+            let sql = """
+                SELECT oprname FROM pg_operator o
+                JOIN pg_namespace n ON o.oprnamespace = n.oid
+                WHERE n.nspname = '\(esc)'
+                ORDER BY oprname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .operator)) }
+            return result
+        }()
+
+        // Procedures (PG 11+, prokind = 'p')
+        async let procedures: [DBObject] = {
+            guard pgVersion >= 11 else { return [] }
+            let sql = """
+                SELECT p.proname FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND p.prokind = 'p'
+                ORDER BY p.proname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .procedure)) }
+            return result
+        }()
+
+        // Trigger Functions (return type is trigger)
+        async let triggerFunctions: [DBObject] = {
+            let kindFilter = pgVersion >= 11 ? "AND p.prokind = 'f'" : "AND NOT p.proisagg"
+            let sql = """
+                SELECT p.proname FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                JOIN pg_type t ON p.prorettype = t.oid
+                WHERE n.nspname = '\(esc)' AND t.typname = 'trigger' \(kindFilter)
+                ORDER BY p.proname
+                """
+            var result: [DBObject] = []
+            let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+            for try await row in rows { let (name,) = try row.decode(String.self); result.append(DBObject(schema: schema, name: name, type: .triggerFunction)) }
+            return result
+        }()
+
+        return SchemaObjects(
+            aggregates: try await aggregates,
+            collations: try await collations,
+            domains: try await domains,
+            ftsConfigurations: try await ftsConfigs,
+            ftsDictionaries: try await ftsDicts,
+            ftsParsers: try await ftsParsers,
+            ftsTemplates: try await ftsTemplates,
+            foreignTables: try await foreignTables,
+            functions: try await functions,
+            materializedViews: try await matViews,
+            operators: try await operators,
+            procedures: try await procedures,
+            sequences: try await sequences,
+            tables: try await tables,
+            triggerFunctions: try await triggerFunctions,
+            types: try await types,
+            views: try await views
+        )
+    }
+
+    private func detectServerVersion(client: PostgresClient) async -> Int {
+        do {
+            let rows = try await client.query("SHOW server_version_num")
+            for try await row in rows {
+                if let (vStr,) = try? row.decode(String.self), let num = Int(vStr) {
+                    return num / 10000
+                }
+            }
+        } catch {}
+        return 14
     }
 
     func getColumns(schema: String, table: String) async throws -> [ColumnInfo] {

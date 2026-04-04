@@ -46,5 +46,8 @@ class AppViewModelTestCase: XCTestCase {
     func makeConnectedVM(profile: ConnectionProfile? = nil) async {
         let p = profile ?? makeProfile()
         await vm.connect(profile: p, password: "secret", sshPassword: nil)
+        // Reset mock query state so tests only see queries from their actions,
+        // not from the connect flow (SHOW server_version_num, etc.)
+        await mockDB.resetQueryState()
     }
 }

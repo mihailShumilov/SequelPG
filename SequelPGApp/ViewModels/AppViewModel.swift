@@ -59,13 +59,23 @@ struct CascadeDeleteContext {
             connectedProfileName = profile.name
             selectedTab = .query
 
+            // Detect server version
+            let versionResult = try await dbClient.runQuery("SHOW server_version_num", maxRows: 1, timeout: 5.0)
+            if let versionStr = versionResult.rows.first?.first?.displayString,
+               let versionNum = Int(versionStr) {
+                navigatorVM.serverVersion = versionNum / 10000  // e.g. 160004 → 16
+            }
+
             // Load databases
             let databases = try await dbClient.listDatabases()
             navigatorVM.setDatabases(databases, current: profile.database)
 
-            // Load schemas
+            // Load schemas for the connected database
             let schemas = try await dbClient.listSchemas()
-            navigatorVM.setSchemas(schemas)
+            navigatorVM.setSchemas(schemas, forDatabase: profile.database)
+
+            // Load objects for the default expanded schemas
+            await loadExpandedSchemaObjects(forDatabase: profile.database)
 
             errorMessage = nil
             Log.ui.info("UI: connected to \(profile.name, privacy: .public)")
@@ -93,22 +103,17 @@ struct CascadeDeleteContext {
         do {
             try await dbClient.switchDatabase(to: name, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
 
-            // Update stored profile with the new database
             var updatedProfile = profile
             updatedProfile.database = name
             connectedProfile = updatedProfile
-
-            // Clear navigator (schemas/tables/views/selection) and table state
-            navigatorVM.clear()
+            navigatorVM.connectedDatabase = name
             tableVM.clear()
 
-            // Reload schemas and tables for the new database
-            let schemas = try await dbClient.listSchemas()
-            navigatorVM.setSchemas(schemas)
-            navigatorVM.selectedDatabase = name
-
-            if !navigatorVM.selectedSchema.isEmpty {
-                await loadTablesAndViews(forSchema: navigatorVM.selectedSchema)
+            // Load schemas if not already cached for this database
+            if !navigatorVM.hasSchemasLoaded(for: name) {
+                let schemas = try await dbClient.listSchemas()
+                navigatorVM.setSchemas(schemas, forDatabase: name)
+                await loadExpandedSchemaObjects(forDatabase: name)
             }
 
             errorMessage = nil
@@ -116,6 +121,41 @@ struct CascadeDeleteContext {
         } catch {
             errorMessage = error.localizedDescription
             Log.ui.error("UI: database switch failed - \(error.localizedDescription)")
+        }
+    }
+
+    /// Loads schemas for a database by temporarily switching to it, then switching back.
+    /// Used when expanding a non-connected database in the navigator tree.
+    func loadDatabaseSchemas(_ dbName: String) async {
+        guard let profile = connectedProfile else { return }
+        let currentDb = profile.database
+
+        // If this is the connected database, just load directly
+        if dbName == currentDb {
+            do {
+                let schemas = try await dbClient.listSchemas()
+                navigatorVM.setSchemas(schemas, forDatabase: dbName)
+                await loadExpandedSchemaObjects(forDatabase: dbName)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        // Switch to the target database, fetch schemas, then switch back
+        do {
+            try await dbClient.switchDatabase(to: dbName, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
+            let schemas = try await dbClient.listSchemas()
+            navigatorVM.setSchemas(schemas, forDatabase: dbName)
+            await loadExpandedSchemaObjects(forDatabase: dbName)
+
+            // Switch back to the original database
+            try await dbClient.switchDatabase(to: currentDb, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
+            var restoredProfile = profile
+            restoredProfile.database = currentDb
+            connectedProfile = restoredProfile
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -153,24 +193,46 @@ struct CascadeDeleteContext {
         }
     }
 
-    func loadTablesAndViews(forSchema schema: String) async {
+    /// Loads all objects for a schema in the specified database.
+    func loadSchemaObjects(db: String, schema: String) async {
+        guard !navigatorVM.isSchemaLoaded(db: db, schema: schema) else { return }
         do {
-            let tables = try await dbClient.listTables(schema: schema)
-            let views = try await dbClient.listViews(schema: schema)
-            navigatorVM.setObjects(tables: tables, views: views)
+            let objects = try await dbClient.listAllSchemaObjects(schema: schema)
+            navigatorVM.objectsPerKey[navigatorVM.schemaKey(db, schema)] = objects
+            navigatorVM.loadedKeys.insert(navigatorVM.schemaKey(db, schema))
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    /// Invalidates the introspection cache and reloads schemas, tables, and views.
+    /// Loads objects for all expanded schemas in a database.
+    private func loadExpandedSchemaObjects(forDatabase db: String) async {
+        let schemas = navigatorVM.schemas(for: db)
+        for schema in schemas {
+            let key = navigatorVM.schemaKey(db, schema)
+            if navigatorVM.expandedSchemas.contains(key) {
+                await loadSchemaObjects(db: db, schema: schema)
+            }
+        }
+    }
+
+    /// Invalidates the introspection cache and reloads the navigator tree.
     func refreshNavigator() async {
         await dbClient.invalidateCache()
+        guard let db = connectedProfile?.database else { return }
+        let previouslyExpanded = navigatorVM.expandedSchemas
+        navigatorVM.clearDatabase(db)
         do {
             let schemas = try await dbClient.listSchemas()
-            navigatorVM.setSchemas(schemas)
-            if !navigatorVM.selectedSchema.isEmpty {
-                await loadTablesAndViews(forSchema: navigatorVM.selectedSchema)
+            navigatorVM.setSchemas(schemas, forDatabase: db)
+            // Reload objects for previously expanded schemas
+            for key in previouslyExpanded {
+                let parts = key.split(separator: "\0", maxSplits: 1)
+                guard parts.count == 2, String(parts[0]) == db else { continue }
+                let schema = String(parts[1])
+                guard schemas.contains(schema) else { continue }
+                navigatorVM.setSchemaExpanded(db, schema, true)
+                await loadSchemaObjects(db: db, schema: schema)
             }
         } catch {
             errorMessage = error.localizedDescription

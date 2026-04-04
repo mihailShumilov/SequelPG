@@ -4,6 +4,32 @@ All notable changes to SequelPG will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- iTerm2-style tabs: Cmd+T opens a new tab within the same window, each with its own independent database connection.
+- Hierarchical tree navigator with DisclosureGroups: databases > schemas > object categories > objects.
+- 17 pgAdmin-style object categories: Aggregates, Collations, Domains, FTS Configurations, FTS Dictionaries, FTS Parsers, FTS Templates, Foreign Tables, Functions, Materialized Views, Operators, Procedures, Sequences, Tables, Trigger Functions, Types, Views.
+- PG version-adaptive categories: Procedures category only shown for PostgreSQL 11+; aggregate/trigger queries adapt to pre-11 catalog schema.
+- Server version detection on connect via `SHOW server_version_num`.
+- Multi-database browsing: expanding any database in the tree fetches its schemas (switches connection temporarily if needed).
+- Create database, schema, and table from the navigator "+" menu.
+- Schema editing in Structure tab: add/drop columns, rename, change type, toggle nullable, change default via ALTER TABLE.
+- Single-click cell editing with auto-save on focus loss (replaces double-click + Enter).
+- In-place cell updates after edit (preserves row order instead of re-fetching).
+- `listAllSchemaObjects(schema:)` bulk protocol method for parallel fetching of all object types.
+
+### Changed
+- Navigator is now a tree view replacing the flat database/schema pickers.
+- AppViewModel is per-tab (no longer owns ConnectionListViewModel); shared ConnectionListViewModel injected via environment.
+- Connected sidebar only shows the Navigator tree (connection list removed).
+- Cell editing: clicking a cell selects the row and updates the Inspector panel.
+- `QueryResult.rows` changed from `let` to `var` to support in-place cell updates.
+
+### Removed
+- Flat database and schema picker dropdowns (replaced by tree navigator).
+- ConnectionListView from the connected sidebar.
+
 ## [0.1.7] - 2026-04-04
 
 ### Changed
