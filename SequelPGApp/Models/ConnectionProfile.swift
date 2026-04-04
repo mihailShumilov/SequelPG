@@ -5,12 +5,16 @@ enum SSLMode: String, Codable, CaseIterable, Sendable {
     case off = "off"
     case prefer = "prefer"
     case require = "require"
+    case verifyCa = "verify-ca"
+    case verifyFull = "verify-full"
 
     var displayName: String {
         switch self {
         case .off: return "Off"
         case .prefer: return "Prefer"
         case .require: return "Require"
+        case .verifyCa: return "Verify CA"
+        case .verifyFull: return "Verify Full"
         }
     }
 }

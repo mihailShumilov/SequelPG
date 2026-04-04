@@ -4,7 +4,6 @@ import Foundation
 @MainActor
 final class QueryViewModel: ObservableObject {
     @Published var queryText = ""
-    @Published var result: QueryResult?
     @Published var isExecuting = false
     @Published var errorMessage: String?
     @Published var showErrorDetail = false
@@ -21,15 +20,51 @@ final class QueryViewModel: ObservableObject {
     @Published var sortColumn: String?
     @Published var sortAscending: Bool = true
 
-    /// Returns the result rows sorted client-side when a sort column is set.
+    @Published var result: QueryResult?
+
+    /// Cached sorted result, rebuilt lazily when accessed after invalidation.
+    private var _sortedResult: QueryResult?
+    private var _sortedIndexMap: [Int] = []
+    private var _sortCacheValid = false
+
     var sortedResult: QueryResult? {
-        guard let result else { return nil }
+        if !_sortCacheValid {
+            rebuildSortCache()
+        }
+        return _sortedResult
+    }
+
+    /// Maps a display row index (from `sortedResult`) back to the original
+    /// row index in `result`. O(1) lookup into the cached index map.
+    func originalRowIndex(_ displayIndex: Int) -> Int {
+        if !_sortCacheValid {
+            rebuildSortCache()
+        }
+        guard displayIndex < _sortedIndexMap.count else { return displayIndex }
+        return _sortedIndexMap[displayIndex]
+    }
+
+    /// Invalidates the sort cache. Call when result, sortColumn, or sortAscending change.
+    func invalidateSortCache() {
+        _sortCacheValid = false
+    }
+
+    private func rebuildSortCache() {
+        guard let result else {
+            _sortedResult = nil
+            _sortedIndexMap = []
+            _sortCacheValid = true
+            return
+        }
         guard let sortCol = sortColumn,
               let colIdx = result.columns.firstIndex(of: sortCol)
-        else { return result }
+        else {
+            _sortedResult = result
+            _sortedIndexMap = Array(0 ..< result.rows.count)
+            _sortCacheValid = true
+            return
+        }
 
-        // Use enumerated + stable tiebreaker so the order is identical
-        // to originalRowIndex() even when values compare equal.
         let sorted = result.rows.enumerated().sorted { a, b in
             let lhs = a.element[colIdx]
             let rhs = b.element[colIdx]
@@ -40,40 +75,16 @@ final class QueryViewModel: ObservableObject {
             if cmp == .orderedSame { return a.offset < b.offset }
             return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }
-        return QueryResult(
+
+        _sortedResult = QueryResult(
             columns: result.columns,
             rows: sorted.map(\.element),
             executionTime: result.executionTime,
             rowsAffected: result.rowsAffected,
             isTruncated: result.isTruncated
         )
-    }
-
-    /// Maps a display row index (from `sortedResult`) back to the original
-    /// row index in `result`. When no client-side sort is active, returns
-    /// the index unchanged.
-    func originalRowIndex(_ displayIndex: Int) -> Int {
-        guard let result,
-              let sortCol = sortColumn,
-              let colIdx = result.columns.firstIndex(of: sortCol)
-        else { return displayIndex }
-
-        let indexed = result.rows.enumerated().map { ($0.offset, $0.element) }
-        // Must use the same stable tiebreaker as sortedResult so the
-        // mapping is consistent even when values compare equal.
-        let sorted = indexed.sorted { a, b in
-            let lhs = a.1[colIdx]
-            let rhs = b.1[colIdx]
-            if lhs.isNull && rhs.isNull { return a.0 < b.0 }
-            if lhs.isNull { return !sortAscending }
-            if rhs.isNull { return sortAscending }
-            let cmp = lhs.displayString.localizedStandardCompare(rhs.displayString)
-            if cmp == .orderedSame { return a.0 < b.0 }
-            return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
-        }
-
-        guard displayIndex < sorted.count else { return displayIndex }
-        return sorted[displayIndex].0
+        _sortedIndexMap = sorted.map(\.offset)
+        _sortCacheValid = true
     }
 
     /// Formats the current query text using the SQL formatter.
@@ -86,6 +97,8 @@ final class QueryViewModel: ObservableObject {
 
     /// Attempts to extract a single table reference from a simple SELECT query.
     /// Returns nil for JOINs, subqueries, or queries without a FROM clause.
+    /// Also returns nil for CTEs (`WITH ... SELECT`), `UNION`, `UPDATE ... RETURNING`,
+    /// `DELETE ... RETURNING`, and multi-table `FROM` clauses.
     func parseTableFromQuery() -> (schema: String, table: String)? {
         let trimmed = queryText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -97,9 +110,9 @@ final class QueryViewModel: ObservableObject {
         }
 
         // Match: FROM [schema.]table — supports both quoted and unquoted identifiers
-        // Group 1: quoted schema, Group 2: unquoted schema
-        // Group 3: quoted table, Group 4: unquoted table
-        let pattern = #"(?i)\bFROM\s+(?:(?:"([^"]+)"|(\w+))\.)?(?:"([^"]+)"|(\w+))"#
+        // Group 1: quoted schema, Group 2: unquoted schema (Unicode-safe)
+        // Group 3: quoted table, Group 4: unquoted table (Unicode-safe)
+        let pattern = #"(?i)\bFROM\s+(?:(?:"([^"]+)"|([^\s".,;()\[\]]+))\.)?(?:"([^"]+)"|([^\s".,;()\[\]]+))"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed))
         else {

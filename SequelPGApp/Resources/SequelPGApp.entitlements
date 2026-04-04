@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- App Sandbox is intentionally disabled because the SSH tunnel feature
+	     spawns /usr/bin/ssh via Process(), which is blocked in a sandboxed app.
+	     Enabling the sandbox requires migrating to a pure-Swift SSH library
+	     (e.g. Citadel/NIOSSHClient) or an XPC helper tool. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
 </dict>

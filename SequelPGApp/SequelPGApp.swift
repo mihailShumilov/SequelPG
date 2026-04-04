@@ -8,6 +8,10 @@ struct SequelPGApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appVM)
+                .environmentObject(appVM.connectionListVM)
+                .environmentObject(appVM.navigatorVM)
+                .environmentObject(appVM.tableVM)
+                .environmentObject(appVM.queryVM)
         }
         .commands {
             CommandGroup(after: .newItem) {

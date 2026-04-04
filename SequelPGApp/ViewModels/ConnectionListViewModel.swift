@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Connection status for display in the sidebar.
 enum ConnectionStatus {
@@ -95,20 +96,19 @@ final class ConnectionListViewModel: ObservableObject {
     }
 
     func loadPasswordForProfile(_ profile: ConnectionProfile) -> String {
-        if let cached = passwordCache[profile.keychainKey] {
-            return cached
-        }
-        let password = (try? keychainService.load(forKey: profile.keychainKey)) ?? ""
-        passwordCache[profile.keychainKey] = password
-        return password
+        loadCachedPassword(forKey: profile.keychainKey)
     }
 
     func loadSSHPasswordForProfile(_ profile: ConnectionProfile) -> String {
-        if let cached = passwordCache[profile.sshKeychainKey] {
+        loadCachedPassword(forKey: profile.sshKeychainKey)
+    }
+
+    private func loadCachedPassword(forKey key: String) -> String {
+        if let cached = passwordCache[key] {
             return cached
         }
-        let password = (try? keychainService.load(forKey: profile.sshKeychainKey)) ?? ""
-        passwordCache[profile.sshKeychainKey] = password
+        let password = (try? keychainService.load(forKey: key)) ?? ""
+        passwordCache[key] = password
         return password
     }
 
@@ -125,13 +125,14 @@ final class ConnectionListViewModel: ObservableObject {
 
     func clearConnectionState() {
         connectionStatuses.removeAll()
+        passwordCache.removeAll()
     }
 
-    func statusColor(for profileId: UUID) -> String {
+    func statusColor(for profileId: UUID) -> Color {
         switch connectionStatuses[profileId] {
-        case .connected: return "green"
-        case .error: return "red"
-        default: return "gray"
+        case .connected: return .green
+        case .error: return .red
+        default: return .gray
         }
     }
 }

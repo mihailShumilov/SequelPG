@@ -48,6 +48,8 @@
 		AA10000000000000000027 /* AppViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000027; };
 		AA10000000000000000024A /* InsertDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000024A; };
 		AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000025A; };
+		AA10000000000000000026C /* AppViewModelTestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000026C; };
+		AA10000000000000000030 /* SSHTunnelFormSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000030; };
 		AA1000000000000000002A /* SSHTunnelService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002A; };
 		AA1000000000000000002B /* SQLFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002B; };
 		AA1000000000000000002C /* SQLSyntaxColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002C; };
@@ -108,6 +110,8 @@
 		AB10000000000000000027 /* AppViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000024A /* InsertDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertDeleteTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000025A /* CascadeDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CascadeDeleteTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000026C /* AppViewModelTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelTestCase.swift; sourceTree = "<group>"; };
+		AB10000000000000000030 /* SSHTunnelFormSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHTunnelFormSection.swift; sourceTree = "<group>"; };
 		AB1000000000000000002A /* SSHTunnelService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHTunnelService.swift; sourceTree = "<group>"; };
 		AB1000000000000000002B /* SQLFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLFormatter.swift; sourceTree = "<group>"; };
 		AB1000000000000000002C /* SQLSyntaxColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLSyntaxColors.swift; sourceTree = "<group>"; };
@@ -210,6 +214,7 @@
 				AB1000000000000000002F /* SQLEditorView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
 				AB10000000000000000029 /* StartPageView.swift */,
+				AB10000000000000000030 /* SSHTunnelFormSection.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
 			);
 			path = Views;
@@ -248,6 +253,7 @@
 				AB10000000000000000024 /* NavigatorViewModelTests.swift */,
 				AB10000000000000000025 /* QueryViewModelTests.swift */,
 				AB10000000000000000026 /* ConnectionListViewModelTests.swift */,
+				AB10000000000000000026C /* AppViewModelTestCase.swift */,
 				AB10000000000000000027 /* AppViewModelTests.swift */,
 				AB10000000000000000024A /* InsertDeleteTests.swift */,
 				AB10000000000000000025A /* CascadeDeleteTests.swift */,
@@ -387,6 +393,7 @@
 				AA10000000000000000018 /* InspectorView.swift in Sources */,
 				AA10000000000000000019 /* MainAreaView.swift in Sources */,
 				AA10000000000000000029 /* StartPageView.swift in Sources */,
+				AA10000000000000000030 /* SSHTunnelFormSection.swift in Sources */,
 				AA1000000000000000001A /* QuoteIdent.swift in Sources */,
 				AA10000000000000000028 /* QuoteLiteral.swift in Sources */,
 				AA1000000000000000001B /* Logger.swift in Sources */,
@@ -410,6 +417,7 @@
 				AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */,
 				AA10000000000000000025 /* QueryViewModelTests.swift in Sources */,
 				AA10000000000000000026 /* ConnectionListViewModelTests.swift in Sources */,
+				AA10000000000000000026C /* AppViewModelTestCase.swift in Sources */,
 				AA10000000000000000027 /* AppViewModelTests.swift in Sources */,
 				AA10000000000000000024A /* InsertDeleteTests.swift in Sources */,
 				AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */,

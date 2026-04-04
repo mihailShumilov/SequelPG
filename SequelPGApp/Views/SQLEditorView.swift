@@ -65,6 +65,23 @@ struct SQLEditorView: NSViewRepresentable {
               let storage = textView.textStorage as? SQLTextStorage
         else { return }
 
+        guard context.coordinator.metadata != completionMetadata else {
+            // Still check text sync even if metadata hasn't changed
+            if storage.string != text {
+                let savedRange = textView.selectedRange()
+                storage.replaceCharacters(
+                    in: NSRange(location: 0, length: storage.length),
+                    with: text
+                )
+                let clamped = NSRange(
+                    location: min(savedRange.location, storage.length),
+                    length: 0
+                )
+                textView.setSelectedRange(clamped)
+            }
+            return
+        }
+
         // Only update when the binding changed externally (e.g., beautify, clear)
         if storage.string != text {
             let savedRange = textView.selectedRange()

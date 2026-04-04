@@ -2,6 +2,9 @@ import SwiftUI
 
 struct QueryTabView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var queryVM: QueryViewModel
+    @EnvironmentObject var navigatorVM: NavigatorViewModel
+    @EnvironmentObject var tableVM: TableViewModel
 
     var body: some View {
         VSplitView {
@@ -14,16 +17,16 @@ struct QueryTabView: View {
         .alert(
             "Delete Row?",
             isPresented: Binding<Bool>(
-                get: { appVM.queryVM.deleteConfirmationRowIndex != nil },
-                set: { if !$0 { appVM.queryVM.deleteConfirmationRowIndex = nil } }
+                get: { queryVM.deleteConfirmationRowIndex != nil },
+                set: { if !$0 { queryVM.deleteConfirmationRowIndex = nil } }
             )
         ) {
             Button("Cancel", role: .cancel) {
-                appVM.queryVM.deleteConfirmationRowIndex = nil
+                queryVM.deleteConfirmationRowIndex = nil
             }
             Button("Delete", role: .destructive) {
-                if let idx = appVM.queryVM.deleteConfirmationRowIndex {
-                    appVM.queryVM.deleteConfirmationRowIndex = nil
+                if let idx = queryVM.deleteConfirmationRowIndex {
+                    queryVM.deleteConfirmationRowIndex = nil
                     Task { await appVM.deleteQueryRow(rowIndex: idx) }
                 }
             }
@@ -52,12 +55,12 @@ struct QueryTabView: View {
         VStack(spacing: 0) {
             HStack {
                 Button {
-                    Task { await appVM.executeQuery(appVM.queryVM.queryText) }
+                    Task { await appVM.executeQuery(queryVM.queryText) }
                 } label: {
                     Label("Run", systemImage: "play.fill")
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(appVM.queryVM.isExecuting || !appVM.isConnected)
+                .disabled(queryVM.isExecuting || !appVM.isConnected)
 
                 Button(role: .destructive) {
                     // Stop is disabled; client-side cancellation is not
@@ -69,24 +72,24 @@ struct QueryTabView: View {
                 .help("Stop is not supported by the current driver configuration.")
 
                 Button {
-                    appVM.queryVM.queryText = ""
-                    appVM.queryVM.result = nil
-                    appVM.queryVM.errorMessage = nil
+                    queryVM.queryText = ""
+                    queryVM.result = nil
+                    queryVM.errorMessage = nil
                 } label: {
                     Label("Clear", systemImage: "trash")
                 }
 
                 Button {
-                    appVM.queryVM.beautify()
+                    queryVM.beautify()
                 } label: {
                     Label("Beautify", systemImage: "wand.and.stars")
                 }
-                .disabled(appVM.queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .help("Format SQL query")
 
                 Spacer()
 
-                if appVM.queryVM.isExecuting {
+                if queryVM.isExecuting {
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -97,11 +100,11 @@ struct QueryTabView: View {
             Divider()
 
             SQLEditorView(
-                text: $appVM.queryVM.queryText,
+                text: $queryVM.queryText,
                 completionMetadata: SQLCompletionProvider.Metadata(
-                    schemas: appVM.navigatorVM.schemas,
-                    tables: appVM.navigatorVM.tables,
-                    columns: appVM.tableVM.columns
+                    schemas: navigatorVM.schemas,
+                    tables: navigatorVM.tables,
+                    columns: tableVM.columns
                 )
             )
         }
@@ -109,11 +112,11 @@ struct QueryTabView: View {
 
     private var resultsArea: some View {
         VStack(spacing: 0) {
-            if let error = appVM.queryVM.errorMessage {
+            if let error = queryVM.errorMessage {
                 errorBanner(error)
             }
 
-            if let result = appVM.queryVM.sortedResult {
+            if let result = queryVM.sortedResult {
                 if result.columns.isEmpty {
                     VStack {
                         Text("Query executed successfully.")
@@ -126,23 +129,23 @@ struct QueryTabView: View {
                     VStack(spacing: 0) {
                         ResultsGridView(
                             result: result,
-                            columns: appVM.queryVM.editableColumns,
-                            isEditable: appVM.queryVM.editableTableContext != nil,
+                            columns: queryVM.editableColumns,
+                            isEditable: queryVM.editableTableContext != nil,
                             onRowSelected: { rowIdx in
                                 appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
                             },
                             onCellEdited: { row, col, text in
                                 Task { await appVM.updateQueryCell(rowIndex: row, columnIndex: col, newText: text) }
                             },
-                            sortColumn: appVM.queryVM.sortColumn,
-                            sortAscending: appVM.queryVM.sortAscending,
+                            sortColumn: queryVM.sortColumn,
+                            sortAscending: queryVM.sortAscending,
                             onColumnHeaderTapped: { column in
                                 appVM.toggleQuerySort(column: column)
                             },
                             onDeleteRow: appVM.canDeleteQueryRow ? { rowIdx in
-                                appVM.queryVM.deleteConfirmationRowIndex = rowIdx
+                                queryVM.deleteConfirmationRowIndex = rowIdx
                             } : nil,
-                            selectedRowIndex: $appVM.tableVM.selectedRowIndex
+                            selectedRowIndex: $tableVM.selectedRowIndex
                         )
 
                         Divider()
@@ -162,7 +165,7 @@ struct QueryTabView: View {
                         .padding(.vertical, 4)
                     }
                 }
-            } else if !appVM.queryVM.isExecuting {
+            } else if !queryVM.isExecuting {
                 Text("Enter a query and press Cmd+Enter to execute.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -178,7 +181,7 @@ struct QueryTabView: View {
                 .lineLimit(2)
             Spacer()
             Button("Dismiss") {
-                appVM.queryVM.errorMessage = nil
+                queryVM.errorMessage = nil
             }
             .buttonStyle(.borderless)
         }
@@ -264,7 +267,7 @@ struct ResultsGridView: View {
                             }
                             Divider()
                         }
-                        ForEach(0 ..< result.rows.count, id: \.self) { rowIdx in
+                        ForEach(Array(result.rows.enumerated()), id: \.offset) { rowIdx, _ in
                             HStack(spacing: 0) {
                                 ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
                                     cellView(rowIdx: rowIdx, colIdx: colIdx)
@@ -385,9 +388,7 @@ struct ResultsGridView: View {
                     guard isEditable else { return }
                     editingText = cell.isNull ? "NULL" : cell.displayString
                     editingCell = (row: rowIdx, col: colIdx)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        editFieldFocused = true
-                    }
+                    editFieldFocused = true
                 }
         }
     }
@@ -406,10 +407,11 @@ struct ResultsGridView: View {
 
     @ViewBuilder
     private func insertRowView(binding: Binding<[String: String]>) -> some View {
+        let colInfoByName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         HStack(spacing: 0) {
             ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
                 let colName = result.columns[colIdx]
-                let colInfo = columns.first { $0.name == colName }
+                let colInfo = colInfoByName[colName]
                 let placeholder = colInfo.map { info -> String in
                     var parts: [String] = [info.dataType]
                     if info.isNullable { parts.append("nullable") }

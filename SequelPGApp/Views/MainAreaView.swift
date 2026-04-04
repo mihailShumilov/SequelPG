@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainAreaView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var navigatorVM: NavigatorViewModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,7 +50,7 @@ struct MainAreaView: View {
     private func isTabEnabled(_ tab: AppViewModel.MainTab) -> Bool {
         switch tab {
         case .structure, .content:
-            return appVM.navigatorVM.selectedObject != nil
+            return navigatorVM.selectedObject != nil
         case .query:
             return appVM.isConnected
         }

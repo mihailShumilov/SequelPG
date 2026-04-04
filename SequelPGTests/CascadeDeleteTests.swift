@@ -8,62 +8,9 @@ import XCTest
 /// - executeCascadeDelete builds CTE SQL, clears context, and refreshes data
 /// - executeCascadeDelete handles errors and nil context gracefully
 @MainActor
-final class CascadeDeleteTests: XCTestCase {
+final class CascadeDeleteTests: AppViewModelTestCase {
 
-    private var mockDB: MockDatabaseClient!
-    private var mockKeychain: MockKeychainService!
-    private var connectionStore: ConnectionStore!
-    private var testDefaults: UserDefaults!
-    private var vm: AppViewModel!
-
-    override func setUp() {
-        super.setUp()
-        mockDB = MockDatabaseClient()
-        mockKeychain = MockKeychainService()
-        testDefaults = UserDefaults(suiteName: "com.sequelpg.cascadedelete.\(UUID().uuidString)")!
-        connectionStore = ConnectionStore(defaults: testDefaults)
-        vm = AppViewModel(
-            connectionStore: connectionStore,
-            keychainService: mockKeychain,
-            dbClient: mockDB
-        )
-    }
-
-    override func tearDown() {
-        vm = nil
-        connectionStore = nil
-        testDefaults.removePersistentDomain(forName: testDefaults.volatileDomainNames.first ?? "")
-        testDefaults = nil
-        mockKeychain = nil
-        mockDB = nil
-        super.tearDown()
-    }
-
-    // MARK: - Helpers
-
-    private func makeProfile(
-        name: String = "Test DB",
-        host: String = "localhost",
-        port: Int = 5432,
-        database: String = "testdb",
-        username: String = "testuser",
-        sslMode: SSLMode = .prefer
-    ) -> ConnectionProfile {
-        ConnectionProfile(
-            name: name,
-            host: host,
-            port: port,
-            database: database,
-            username: username,
-            sslMode: sslMode
-        )
-    }
-
-    private func makeConnectedVM(profile: ConnectionProfile? = nil) async {
-        let p = profile ?? makeProfile()
-        mockKeychain.seed(password: "secret", forProfile: p)
-        await vm.connect(profile: p)
-    }
+    // MARK: - Helpers (file-specific)
 
     private func makePKColumn(
         name: String,
@@ -391,7 +338,7 @@ final class CascadeDeleteTests: XCTestCase {
         setupContentState()
 
         // Set up cascade context as if deleteContentRow had set it
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -423,7 +370,7 @@ final class CascadeDeleteTests: XCTestCase {
         await makeConnectedVM()
         setupContentState()
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("42"))],
@@ -452,17 +399,17 @@ final class CascadeDeleteTests: XCTestCase {
         XCTAssertNotNil(cascadeSQL, "Expected a CTE cascade DELETE SQL")
         // Verify it deletes from child table
         XCTAssertTrue(cascadeSQL?.contains("\"orders\"") ?? false)
-        XCTAssertTrue(cascadeSQL?.contains("\"user_id\" = '42'") ?? false)
+        XCTAssertTrue(cascadeSQL?.contains("\"user_id\" = E'42'") ?? false)
         // Verify it deletes the parent row
         XCTAssertTrue(cascadeSQL?.contains("DELETE FROM \"public\".\"users\"") ?? false)
-        XCTAssertTrue(cascadeSQL?.contains("\"id\" = '42'") ?? false)
+        XCTAssertTrue(cascadeSQL?.contains("\"id\" = E'42'") ?? false)
     }
 
     func testExecuteCascadeDeleteWithNoChildrenRunsPlainDelete() async {
         await makeConnectedVM()
         setupContentState()
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -491,14 +438,14 @@ final class CascadeDeleteTests: XCTestCase {
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") && !$0.contains("WITH") }
         XCTAssertNotNil(deleteSQL, "Expected a plain DELETE SQL when no children found")
         XCTAssertTrue(deleteSQL?.contains("\"public\".\"users\"") ?? false)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'1'") ?? false)
     }
 
     func testExecuteCascadeDeleteWithMultipleChildTables() async {
         await makeConnectedVM()
         setupContentState()
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -542,7 +489,7 @@ final class CascadeDeleteTests: XCTestCase {
         await makeConnectedVM()
         setupContentState()
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -568,7 +515,7 @@ final class CascadeDeleteTests: XCTestCase {
         vm.tableVM.approximateRowCount = 100
         await mockDB.setStubbedApproximateRowCount(99)
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -592,7 +539,7 @@ final class CascadeDeleteTests: XCTestCase {
         setupQueryState()
         vm.queryVM.queryText = "SELECT * FROM users"
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -623,7 +570,7 @@ final class CascadeDeleteTests: XCTestCase {
         vm.queryVM.queryText = "SELECT * FROM users"
         vm.tableVM.approximateRowCount = 100
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -647,7 +594,7 @@ final class CascadeDeleteTests: XCTestCase {
     func testExecuteCascadeDeleteSetsErrorOnFKMetadataQueryFailure() async {
         await makeConnectedVM()
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -671,7 +618,7 @@ final class CascadeDeleteTests: XCTestCase {
         await makeConnectedVM()
         setupContentState()
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -712,7 +659,7 @@ final class CascadeDeleteTests: XCTestCase {
         setupContentState()
         vm.selectRow(index: 0, columns: ["id", "name"], values: [.text("1"), .text("Alice")])
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .text("1"))],
@@ -744,7 +691,7 @@ final class CascadeDeleteTests: XCTestCase {
             )
         )
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "public",
             table: "users",
             pkValues: [(column: "id", value: .null)],
@@ -770,7 +717,7 @@ final class CascadeDeleteTests: XCTestCase {
         await makeConnectedVM()
         setupContentState(schema: "my schema", tableName: "my table")
 
-        vm.cascadeDeleteContext = AppViewModel.CascadeDeleteContext(
+        vm.cascadeDeleteContext = CascadeDeleteContext(
             schema: "my schema",
             table: "my table",
             pkValues: [(column: "id", value: .text("1"))],

@@ -26,8 +26,12 @@ final class TableViewModel: ObservableObject {
 
     var pageSizeOptions: [Int] { [50, 100, 200] }
 
+    /// Whether any column is a primary key (cached on setColumns).
+    @Published private(set) var hasPrimaryKey = false
+
     func setColumns(_ cols: [ColumnInfo]) {
         columns = cols
+        hasPrimaryKey = cols.contains { $0.isPrimaryKey }
     }
 
     func setContentResult(_ result: QueryResult) {

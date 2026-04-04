@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import SequelPG
 
@@ -230,13 +231,14 @@ final class ConnectionListViewModelTests: XCTestCase {
         let profile = makeProfile(name: "Clear Password")
         sut.addProfile(profile, password: "oldpassword")
         keychain.deleteCalls.removeAll() // Reset after addProfile
+        keychain.saveCalls.removeAll() // Reset after addProfile
 
         sut.updateProfile(profile, password: "")
 
         XCTAssertEqual(keychain.deleteCalls.count, 1)
         XCTAssertEqual(keychain.deleteCalls.first, profile.keychainKey)
         // Should not have saved a new password
-        XCTAssertEqual(keychain.saveCalls.count, 1) // Only the original addProfile save
+        XCTAssertEqual(keychain.saveCalls.count, 0)
     }
 
     func testUpdateProfileWithNilPasswordDoesNotTouchKeychain() {
@@ -485,27 +487,27 @@ final class ConnectionListViewModelTests: XCTestCase {
         let id = UUID()
         sut.connectionStatuses[id] = .connected
 
-        XCTAssertEqual(sut.statusColor(for: id), "green")
+        XCTAssertEqual(sut.statusColor(for: id), .green)
     }
 
     func testStatusColorReturnsRedForError() {
         let id = UUID()
         sut.connectionStatuses[id] = .error
 
-        XCTAssertEqual(sut.statusColor(for: id), "red")
+        XCTAssertEqual(sut.statusColor(for: id), .red)
     }
 
     func testStatusColorReturnsGrayForDisconnected() {
         let id = UUID()
         sut.connectionStatuses[id] = .disconnected
 
-        XCTAssertEqual(sut.statusColor(for: id), "gray")
+        XCTAssertEqual(sut.statusColor(for: id), .gray)
     }
 
     func testStatusColorReturnsGrayForUnknownProfile() {
         let unknownId = UUID()
 
-        XCTAssertEqual(sut.statusColor(for: unknownId), "gray")
+        XCTAssertEqual(sut.statusColor(for: unknownId), .gray)
     }
 
     // MARK: - @Published properties behavior
@@ -606,13 +608,13 @@ final class ConnectionListViewModelTests: XCTestCase {
         let id = UUID()
 
         sut.setConnected(profileId: id)
-        XCTAssertEqual(sut.statusColor(for: id), "green")
+        XCTAssertEqual(sut.statusColor(for: id), .green)
 
         sut.setError(profileId: id)
-        XCTAssertEqual(sut.statusColor(for: id), "red")
+        XCTAssertEqual(sut.statusColor(for: id), .red)
 
         sut.clearConnectionState()
-        XCTAssertEqual(sut.statusColor(for: id), "gray")
+        XCTAssertEqual(sut.statusColor(for: id), .gray)
     }
 
     func testMultipleProfilesWithMixedStatuses() {
@@ -627,8 +629,8 @@ final class ConnectionListViewModelTests: XCTestCase {
         sut.setError(profileId: p2.id)
         // p3 has no status
 
-        XCTAssertEqual(sut.statusColor(for: p1.id), "green")
-        XCTAssertEqual(sut.statusColor(for: p2.id), "red")
-        XCTAssertEqual(sut.statusColor(for: p3.id), "gray")
+        XCTAssertEqual(sut.statusColor(for: p1.id), .green)
+        XCTAssertEqual(sut.statusColor(for: p2.id), .red)
+        XCTAssertEqual(sut.statusColor(for: p3.id), .gray)
     }
 }

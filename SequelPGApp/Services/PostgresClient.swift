@@ -66,6 +66,10 @@ actor DatabaseClient: PostgresClientProtocol {
             tls = .prefer(.makeClientConfiguration())
         case .require:
             tls = .require(.makeClientConfiguration())
+        case .verifyCa, .verifyFull:
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = .fullVerification
+            tls = .require(tlsConfig)
         }
 
         let config = PostgresClient.Configuration(
@@ -129,6 +133,12 @@ actor DatabaseClient: PostgresClientProtocol {
             group.addTask { [client] in
                 try Task.checkCancellation()
 
+                // Set server-side statement timeout so the server cancels
+                // long-running queries even if the client-side cancellation
+                // doesn't reach the driver in time.
+                let timeoutMs = Int(timeout * 1000)
+                try await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = \(timeoutMs)"))
+
                 let rowSequence = try await client.query(PostgresQuery(unsafeSQL: sql))
 
                 var columns: [String] = []
@@ -161,6 +171,9 @@ actor DatabaseClient: PostgresClientProtocol {
                     }
                 }
 
+                // Reset statement timeout to avoid affecting introspection queries
+                try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
+
                 let elapsed = CFAbsoluteTimeGetCurrent() - start
                 Log.perf.info("Query: \(elapsed, format: .fixed(precision: 3))s, \(rows.count) rows")
 
@@ -188,16 +201,26 @@ actor DatabaseClient: PostgresClientProtocol {
             } catch let error as AppError {
                 throw error
             } catch let error as PSQLError {
-                // Note: PSQLError does not expose sqlState directly, so we
-                // parse String(reflecting:). This may break if PostgresNIO
-                // changes its debug description format.
-                let reflected = String(reflecting: error)
-                if reflected.contains("sqlState: 23503") {
+                // Detect connection-loss conditions
+                if error.code == .serverClosedConnection || error.code == .connectionError {
+                    self.client = nil
+                    self.runTask?.cancel()
+                    self.runTask = nil
+                    throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
+                }
+                if error.serverInfo?[.sqlState] == "23503" {
                     throw AppError.foreignKeyViolation(Self.formatPSQLError(error))
+                }
+                // Check for connection-loss SQL states (08xxx class)
+                if let sqlState = error.serverInfo?[.sqlState], sqlState.hasPrefix("08") {
+                    self.client = nil
+                    self.runTask?.cancel()
+                    self.runTask = nil
+                    throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
                 }
                 throw AppError.queryFailed(Self.formatPSQLError(error))
             } catch {
-                throw AppError.queryFailed(String(reflecting: error))
+                throw AppError.queryFailed(error.localizedDescription)
             }
         }
 
@@ -209,6 +232,13 @@ actor DatabaseClient: PostgresClientProtocol {
     private static let dateFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let dateOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
 
@@ -228,7 +258,7 @@ actor DatabaseClient: PostgresClientProtocol {
         case .int8:
             if let v = try? cell.decode(Int64.self) { return .text(String(v)) }
         case .float4:
-            if let v = try? cell.decode(Float.self) { return .text(String(v)) }
+            if let v = try? cell.decode(Float.self) { return .text(String(Double(v))) }
         case .float8:
             if let v = try? cell.decode(Double.self) { return .text(String(v)) }
         case .numeric:
@@ -239,9 +269,7 @@ actor DatabaseClient: PostgresClientProtocol {
             if let v = try? cell.decode(Date.self) { return .text(dateFormatter.string(from: v)) }
         case .date:
             if let v = try? cell.decode(Date.self) {
-                let fmt = DateFormatter()
-                fmt.dateFormat = "yyyy-MM-dd"
-                return .text(fmt.string(from: v))
+                return .text(dateOnlyFormatter.string(from: v))
             }
         case .bytea:
             return .text("<binary>")
@@ -250,37 +278,36 @@ actor DatabaseClient: PostgresClientProtocol {
         }
 
         // Fallback: try String decoding (works for text, varchar, json, jsonb, etc.)
-        if let v = try? cell.decode(String.self) { return .text(v) }
+        // Unknown binary-encoded types that can't be decoded as String fall through
+        // to "<binary>". When adding support for new PostgreSQL types, add explicit
+        // cases above to prevent them from hitting this fallback silently.
+        if let v = try? cell.decode(String.self) {
+            if v.count > 10_000 {
+                return .text(String(v.prefix(10_000)) + "…")
+            }
+            return .text(v)
+        }
         return .text("<binary>")
     }
 
     // MARK: - Error Formatting
 
     /// Extracts the human-readable message and detail from a PSQLError,
-    /// falling back to the full reflected description.
+    /// falling back to the localized description.
     private static func formatPSQLError(_ error: PSQLError) -> String {
-        // PSQLError exposes server info via String(reflecting:).
-        // Parse out just the message and detail fields for a clean UX.
-        let full = String(reflecting: error)
+        guard let serverInfo = error.serverInfo else {
+            return error.localizedDescription
+        }
 
-        // Try to extract "message: ..." from serverInfo
         var parts: [String] = []
-        if let msgRange = full.range(of: "message: ") {
-            let start = msgRange.upperBound
-            let rest = full[start...]
-            if let end = rest.range(of: ", ")?.lowerBound ?? rest.range(of: "]")?.lowerBound {
-                parts.append(String(rest[..<end]))
-            }
+        if let message = serverInfo[.message] {
+            parts.append(message)
         }
-        if let detRange = full.range(of: "detail: ") {
-            let start = detRange.upperBound
-            let rest = full[start...]
-            if let end = rest.range(of: ", ")?.lowerBound ?? rest.range(of: "]")?.lowerBound {
-                parts.append(String(rest[..<end]))
-            }
+        if let detail = serverInfo[.detail] {
+            parts.append(detail)
         }
 
-        return parts.isEmpty ? full : parts.joined(separator: "\n")
+        return parts.isEmpty ? error.localizedDescription : parts.joined(separator: "\n")
     }
 
     // MARK: - Introspection
@@ -293,6 +320,7 @@ actor DatabaseClient: PostgresClientProtocol {
             SELECT schema_name
             FROM information_schema.schemata
             WHERE schema_name NOT IN ('pg_catalog', 'information_schema')
+              AND schema_name NOT LIKE 'pg_%'
             ORDER BY schema_name
             """
         var schemas: [String] = []
@@ -372,7 +400,7 @@ actor DatabaseClient: PostgresClientProtocol {
         for try await row in rows {
             let randomRow = PostgresRandomAccessRow(row)
             let name = try randomRow["column_name"].decode(String.self)
-            let ordinal = try randomRow["ordinal_position"].decode(Int.self)
+            let ordinal = Int(try randomRow["ordinal_position"].decode(Int32.self))
             let dataType = try randomRow["data_type"].decode(String.self)
             let nullable = try randomRow["is_nullable"].decode(String.self)
             let defaultVal = try? randomRow["column_default"].decode(String?.self)
@@ -439,7 +467,16 @@ actor DatabaseClient: PostgresClientProtocol {
         let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
         for try await row in rows {
             let (count,) = try row.decode(Int64.self)
-            return max(count, 0)
+            if count >= 0 {
+                return count
+            }
+            // reltuples = -1 means ANALYZE has never run; fall back to exact count
+            let countSQL = "SELECT COUNT(*) FROM \(quoteIdent(schema)).\(quoteIdent(table))"
+            let countRows = try await client.query(PostgresQuery(unsafeSQL: countSQL))
+            for try await countRow in countRows {
+                let (exact,) = try countRow.decode(Int64.self)
+                return exact
+            }
         }
         return 0
     }
@@ -464,8 +501,80 @@ actor DatabaseClient: PostgresClientProtocol {
     }
 
     func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String? = nil) async throws {
+        // Tear down only the PostgreSQL client — leave the SSH tunnel running.
+        runTask?.cancel()
+        runTask = nil
+        client = nil
+        await invalidateCache()
+        Log.db.info("PostgreSQL client disconnected for database switch (tunnel preserved)")
+
         var newProfile = profile
         newProfile.database = database
-        try await connect(profile: newProfile, password: password, sshPassword: sshPassword)
+
+        // Determine effective host/port: reuse the active tunnel if present.
+        var effectiveHost = newProfile.host
+        var effectivePort = newProfile.port
+
+        let tunnelIsActive = await sshTunnel.isActive
+        if newProfile.useSSHTunnel && tunnelIsActive {
+            effectiveHost = "127.0.0.1"
+            effectivePort = Int(await sshTunnel.tunnelLocalPort)
+        } else if newProfile.useSSHTunnel {
+            // Tunnel is not active — start it now.
+            let localPort = try await sshTunnel.start(
+                sshHost: newProfile.sshHost,
+                sshPort: newProfile.sshPort,
+                sshUser: newProfile.sshUser,
+                sshAuthMethod: newProfile.sshAuthMethod,
+                sshKeyPath: newProfile.sshKeyPath,
+                sshPassword: sshPassword,
+                remoteHost: newProfile.host,
+                remotePort: newProfile.port
+            )
+            effectiveHost = "127.0.0.1"
+            effectivePort = Int(localPort)
+        }
+
+        let tls: PostgresClient.Configuration.TLS
+        switch newProfile.sslMode {
+        case .off:
+            tls = .disable
+        case .prefer:
+            tls = .prefer(.makeClientConfiguration())
+        case .require:
+            tls = .require(.makeClientConfiguration())
+        case .verifyCa, .verifyFull:
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.certificateVerification = .fullVerification
+            tls = .require(tlsConfig)
+        }
+
+        let config = PostgresClient.Configuration(
+            host: effectiveHost,
+            port: effectivePort,
+            username: newProfile.username,
+            password: password,
+            database: newProfile.database,
+            tls: tls
+        )
+
+        let newClient = PostgresClient(configuration: config)
+        self.client = newClient
+
+        runTask = Task {
+            await newClient.run()
+        }
+
+        do {
+            let rows = try await newClient.query("SELECT 1 AS ok")
+            for try await _ in rows {}
+        } catch {
+            runTask?.cancel()
+            runTask = nil
+            client = nil
+            throw AppError.connectionFailed(error.localizedDescription)
+        }
+
+        Log.db.info("Switched to database \(database, privacy: .public) on \(effectiveHost, privacy: .public):\(effectivePort)")
     }
 }

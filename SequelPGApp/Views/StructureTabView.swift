@@ -2,14 +2,15 @@ import SwiftUI
 
 struct StructureTabView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var tableVM: TableViewModel
 
     var body: some View {
-        if appVM.tableVM.columns.isEmpty {
+        if tableVM.columns.isEmpty {
             Text("Select a table or view to see its structure.")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Table(appVM.tableVM.columns) {
+            Table(tableVM.columns) {
                 TableColumn("#") { col in
                     Text("\(col.ordinalPosition)")
                         .monospacedDigit()

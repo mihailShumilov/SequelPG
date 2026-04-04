@@ -11,11 +11,12 @@ final class CellValueTests: XCTestCase {
         XCTAssertEqual(CellValue.text("hello").displayString, "hello")
     }
 
-    func testLargeTextTruncation() {
+    func testLargeTextDisplayString() {
+        // Truncation now happens at decode time in PostgresClient, not in displayString.
+        // CellValue.displayString returns the stored text as-is.
         let largeText = String(repeating: "x", count: 15_000)
         let display = CellValue.text(largeText).displayString
-        XCTAssertEqual(display.count, 10_003) // 10000 + "..."
-        XCTAssertTrue(display.hasSuffix("..."))
+        XCTAssertEqual(display.count, 15_000)
     }
 
     func testIsNull() {
@@ -100,13 +101,15 @@ final class AppErrorTests: XCTestCase {
 final class SSLModeTests: XCTestCase {
 
     func testAllCases() {
-        XCTAssertEqual(SSLMode.allCases.count, 3)
+        XCTAssertEqual(SSLMode.allCases.count, 5)
     }
 
     func testDisplayNames() {
         XCTAssertEqual(SSLMode.off.displayName, "Off")
         XCTAssertEqual(SSLMode.prefer.displayName, "Prefer")
         XCTAssertEqual(SSLMode.require.displayName, "Require")
+        XCTAssertEqual(SSLMode.verifyCa.displayName, "Verify CA")
+        XCTAssertEqual(SSLMode.verifyFull.displayName, "Verify Full")
     }
 
     func testCodable() throws {
@@ -124,7 +127,7 @@ final class DBObjectTests: XCTestCase {
 
     func testIdentity() {
         let obj = DBObject(schema: "public", name: "users", type: .table)
-        XCTAssertEqual(obj.id, "public.users")
+        XCTAssertEqual(obj.id, "public\0users")
     }
 
     func testEquality() {

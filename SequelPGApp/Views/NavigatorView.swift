@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NavigatorView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var navigatorVM: NavigatorViewModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -9,68 +10,77 @@ struct NavigatorView: View {
                 Text("Navigator")
                     .font(.headline)
                 Spacer()
+                Button {
+                    Task { await appVM.refreshNavigator() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh schemas, tables, and views")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            if !appVM.navigatorVM.databases.isEmpty {
-                Picker("Database", selection: $appVM.navigatorVM.selectedDatabase) {
-                    ForEach(appVM.navigatorVM.databases, id: \.self) { db in
+            if !navigatorVM.databases.isEmpty {
+                Picker("Database", selection: $navigatorVM.selectedDatabase) {
+                    ForEach(navigatorVM.databases, id: \.self) { db in
                         Text(db).tag(db)
                     }
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
-                .onChange(of: appVM.navigatorVM.selectedDatabase) { newValue in
+                .onChange(of: navigatorVM.selectedDatabase) { newValue in
                     if !newValue.isEmpty {
                         Task { await appVM.switchDatabase(newValue) }
                     }
                 }
             }
 
-            if !appVM.navigatorVM.schemas.isEmpty {
-                Picker("Schema", selection: $appVM.navigatorVM.selectedSchema) {
-                    ForEach(appVM.navigatorVM.schemas, id: \.self) { schema in
+            if !navigatorVM.schemas.isEmpty {
+                Picker("Schema", selection: $navigatorVM.selectedSchema) {
+                    ForEach(navigatorVM.schemas, id: \.self) { schema in
                         Text(schema).tag(schema)
                     }
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
-                .onChange(of: appVM.navigatorVM.selectedSchema) { newValue in
+                .onChange(of: navigatorVM.selectedSchema) { newValue in
                     if !newValue.isEmpty {
                         Task { await appVM.loadTablesAndViews(forSchema: newValue) }
                     }
                 }
                 .onAppear {
-                    let schema = appVM.navigatorVM.selectedSchema
-                    if !schema.isEmpty {
+                    // Only load if we have a schema but no tables yet —
+                    // avoids double-loading when onChange also fires.
+                    let schema = navigatorVM.selectedSchema
+                    if !schema.isEmpty, navigatorVM.tables.isEmpty, navigatorVM.views.isEmpty {
                         Task { await appVM.loadTablesAndViews(forSchema: schema) }
                     }
                 }
             }
 
             List(selection: Binding<DBObject?>(
-                get: { appVM.navigatorVM.selectedObject },
+                get: { navigatorVM.selectedObject },
                 set: { obj in
                     if let obj {
                         Task { await appVM.selectObject(obj) }
                     }
                 }
             )) {
-                if !appVM.navigatorVM.tables.isEmpty {
+                if !navigatorVM.tables.isEmpty {
                     Section("Tables") {
-                        ForEach(appVM.navigatorVM.tables) { table in
+                        ForEach(navigatorVM.tables) { table in
                             Label(table.name, systemImage: "tablecells")
                                 .tag(table)
                         }
                     }
                 }
 
-                if !appVM.navigatorVM.views.isEmpty {
+                if !navigatorVM.views.isEmpty {
                     Section("Views") {
-                        ForEach(appVM.navigatorVM.views) { view in
+                        ForEach(navigatorVM.views) { view in
                             Label(view.name, systemImage: "eye")
                                 .tag(view)
                         }

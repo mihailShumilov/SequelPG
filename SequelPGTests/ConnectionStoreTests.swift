@@ -81,6 +81,11 @@ final class ConnectionStoreTests: XCTestCase {
         )
         let errors = invalid.validate()
         XCTAssertEqual(errors.count, 5)
+        XCTAssertTrue(errors.contains { $0.contains("Name") })
+        XCTAssertTrue(errors.contains { $0.contains("Host") })
+        XCTAssertTrue(errors.contains { $0.contains("Database") })
+        XCTAssertTrue(errors.contains { $0.contains("Username") })
+        XCTAssertTrue(errors.contains { $0.contains("Port") })
     }
 
     func testKeychainKey() {

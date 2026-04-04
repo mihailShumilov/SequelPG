@@ -12,8 +12,18 @@ SequelPG is a native macOS PostgreSQL client built with SwiftUI, targeting macOS
 # Build from command line
 xcodebuild -project SequelPG.xcodeproj -scheme SequelPG -configuration Debug build
 
-# Run tests
+# Run all tests
 xcodebuild test -project SequelPG.xcodeproj -scheme SequelPG -destination 'platform=macOS'
+
+# Run a single test class
+xcodebuild test -project SequelPG.xcodeproj -scheme SequelPG \
+  -destination 'platform=macOS' \
+  -only-testing:SequelPGTests/TableViewModelTests
+
+# Run a single test method
+xcodebuild test -project SequelPG.xcodeproj -scheme SequelPG \
+  -destination 'platform=macOS' \
+  -only-testing:SequelPGTests/TableViewModelTests/testSomething
 
 # Format code (requires: brew install swiftformat)
 ./Scripts/format.sh
@@ -29,7 +39,7 @@ Views (SwiftUI) → ViewModels (@MainActor, ObservableObject) → Services → P
 
 **Key rules:**
 - Views must never make direct DB or storage calls
-- Only `PostgresClient` (an actor, `DatabaseClient`) touches PostgresNIO
+- Only `DatabaseClient` (an actor implementing `PostgresClientProtocol`) touches PostgresNIO
 - Only `ConnectionStore` touches UserDefaults
 - Only `KeychainService` touches the Keychain
 - `AppViewModel` is the root coordinator — it owns `ConnectionListViewModel`, `NavigatorViewModel`, `TableViewModel`, and `QueryViewModel`, forwarding their `objectWillChange` to trigger SwiftUI updates
@@ -50,4 +60,12 @@ Views (SwiftUI) → ViewModels (@MainActor, ObservableObject) → Services → P
 
 ## Testing
 
-Tests are in `SequelPGTests/` and use mock implementations of `PostgresClientProtocol`. No live database is needed for tests.
+Tests are in `SequelPGTests/` and use mock implementations of `PostgresClientProtocol`. No live database is needed for tests. Import with `@testable import SequelPG`.
+
+**Key patterns:**
+- ViewModels are `@MainActor`, so test classes must also be `@MainActor`
+- `DatabaseClient` mock is an `actor MockDatabaseClient: PostgresClientProtocol` — use `await` setter methods to mutate properties from `@MainActor` tests
+- `ConnectionStore` uses DI via `UserDefaults(suiteName:)` — use an ephemeral suite per test
+- `KeychainService` mock uses in-memory dict conforming to `KeychainServiceProtocol`
+
+**Adding new test files:** New `.swift` test files must be registered in `project.pbxproj` in 4 places (PBXBuildFile, PBXFileReference, SequelPGTests PBXGroup children, test target PBXSourcesBuildPhase). See existing entries for the ID naming pattern.

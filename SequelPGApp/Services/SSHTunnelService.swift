@@ -39,7 +39,7 @@ actor SSHTunnelService {
             "-o", "ServerAliveInterval=30",
             "-o", "ServerAliveCountMax=3",
             "-o", "ConnectTimeout=10",
-            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "StrictHostKeyChecking=yes",
             "-L", "\(port):\(remoteHost):\(remotePort)",
             "-p", "\(sshPort)",
         ]
@@ -49,6 +49,9 @@ actor SSHTunnelService {
         case .keyFile:
             if !sshKeyPath.isEmpty {
                 let expandedPath = NSString(string: sshKeyPath).expandingTildeInPath
+                guard FileManager.default.isReadableFile(atPath: expandedPath) else {
+                    throw AppError.sshTunnelFailed("SSH key file not found or not readable: \(sshKeyPath)")
+                }
                 args += ["-i", expandedPath]
             }
             // Disable password auth when using key file
@@ -107,7 +110,33 @@ actor SSHTunnelService {
             let stderrData = stderrPipe.fileHandleForReading.availableData
             let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             await stop()
-            let detail = stderrText.isEmpty ? error.localizedDescription : stderrText
+
+            // Log full stderr for diagnostics
+            if !stderrText.isEmpty {
+                Log.ssh.error("SSH stderr: \(stderrText, privacy: .public)")
+            }
+
+            // Detect unknown host key and provide actionable guidance
+            if stderrText.contains("Host key verification failed") || stderrText.contains("No matching host key") {
+                throw AppError.sshTunnelFailed(
+                    "SSH host key verification failed for \(sshHost). "
+                        + "The server's host key is not in your known_hosts file. "
+                        + "To trust this host, run in Terminal:\n"
+                        + "  ssh-keyscan -p \(sshPort) \(sshHost) >> ~/.ssh/known_hosts\n"
+                        + "Then retry the connection."
+                )
+            }
+
+            // Filter out SSH banner/debug lines — only surface error-indicative lines
+            let errorLines = stderrText.components(separatedBy: .newlines).filter { line in
+                let lower = line.lowercased()
+                return lower.contains("error") || lower.contains("denied") || lower.contains("refused")
+                    || lower.contains("failed") || lower.contains("timeout") || lower.contains("no route")
+                    || lower.contains("could not") || lower.contains("permission")
+            }
+            let filteredStderr = errorLines.isEmpty ? stderrText : errorLines.joined(separator: "\n")
+
+            let detail = filteredStderr.isEmpty ? error.localizedDescription : filteredStderr
             throw AppError.sshTunnelFailed(detail)
         }
 
@@ -133,7 +162,9 @@ actor SSHTunnelService {
 
     private func cleanupAskpass() {
         if let url = askpassURL {
-            try? FileManager.default.removeItem(at: url)
+            // Remove the entire askpass directory (contains the script and FIFO)
+            let dir = url.deletingLastPathComponent()
+            try? FileManager.default.removeItem(at: dir)
             askpassURL = nil
         }
     }
@@ -175,20 +206,46 @@ actor SSHTunnelService {
         return UInt16(bigEndian: boundAddr.sin_port)
     }
 
-    /// Creates a temporary executable script that echoes the password for SSH_ASKPASS.
+    /// Creates a temporary executable script that reads the password from a FIFO
+    /// for SSH_ASKPASS. The password is never written to a regular file on disk.
     private static func createAskpassScript(password: String) throws -> URL {
         let tempDir = FileManager.default.temporaryDirectory
-        let scriptURL = tempDir.appendingPathComponent("sequelpg-askpass-\(UUID().uuidString).sh")
+        let uniqueID = UUID().uuidString
 
-        // Escape single quotes in password for shell safety
-        let escapedPassword = password.replacingOccurrences(of: "'", with: "'\\''")
-        let script = "#!/bin/sh\necho '\(escapedPassword)'\n"
+        // Create a private directory to hold the FIFO and script
+        let askpassDir = tempDir.appendingPathComponent("sequelpg-askpass-\(uniqueID)")
+        try FileManager.default.createDirectory(
+            at: askpassDir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
 
+        let fifoPath = askpassDir.appendingPathComponent("pw").path
+        guard mkfifo(fifoPath, 0o600) == 0 else {
+            throw AppError.sshTunnelFailed("Failed to create FIFO for SSH_ASKPASS.")
+        }
+
+        // The script reads the password from the FIFO instead of embedding it
+        let scriptURL = askpassDir.appendingPathComponent("askpass.sh")
+        let script = "#!/bin/sh\ncat '\(fifoPath.replacingOccurrences(of: "'", with: "'\\''"))'\n"
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o700],
             ofItemAtPath: scriptURL.path
         )
+
+        // Write the password to the FIFO in a background thread.
+        // The write blocks until SSH reads from the FIFO via the askpass script,
+        // so the password only exists transiently in memory, never on disk.
+        let pw = password
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let fd = fopen(fifoPath, "w") else { return }
+            defer { fclose(fd) }
+            pw.withCString { ptr in
+                _ = fputs(ptr, fd)
+            }
+        }
+
         return scriptURL
     }
 

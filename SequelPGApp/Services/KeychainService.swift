@@ -25,6 +25,8 @@ final class KeychainService: KeychainServiceProtocol, Sendable {
             kSecAttrService as String: "com.sequelpg.app",
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrSynchronizable as String: false,
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)

@@ -2,7 +2,7 @@ import Foundation
 
 /// Provides SQL autocompletion candidates from keywords and database metadata.
 enum SQLCompletionProvider {
-    struct Metadata {
+    struct Metadata: Equatable {
         var schemas: [String]
         var tables: [DBObject]
         var columns: [ColumnInfo]

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct InspectorView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var tableVM: TableViewModel
     @State private var editingColumn: String?
     @State private var editingText: String = ""
     @State private var showDeleteConfirmation = false
@@ -12,19 +13,19 @@ struct InspectorView: View {
             Text("Inspector")
                 .font(.headline)
 
-            if let name = appVM.tableVM.selectedObjectName {
+            if let name = tableVM.selectedObjectName {
                 LabeledContent("Object") {
                     Text(name)
                         .fontWeight(.medium)
                 }
 
                 LabeledContent("Approx. Rows") {
-                    Text("\(appVM.tableVM.approximateRowCount)")
+                    Text("\(tableVM.approximateRowCount)")
                         .monospacedDigit()
                 }
 
                 LabeledContent("Columns") {
-                    Text("\(appVM.tableVM.selectedObjectColumnCount)")
+                    Text("\(tableVM.selectedObjectColumnCount)")
                         .monospacedDigit()
                 }
             } else {
@@ -33,8 +34,8 @@ struct InspectorView: View {
                     .font(.caption)
             }
 
-            if let rowData = appVM.tableVM.selectedRowData,
-               let rowIndex = appVM.tableVM.selectedRowIndex {
+            if let rowData = tableVM.selectedRowData,
+               let rowIndex = tableVM.selectedRowIndex {
                 Divider()
 
                 HStack {
@@ -65,9 +66,9 @@ struct InspectorView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(0 ..< rowData.count, id: \.self) { idx in
-                            let column = rowData[idx].column
-                            let value = rowData[idx].value
+                        ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
+                            let column = item.column
+                            let value = item.value
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(column)
                                     .font(.caption)
@@ -93,9 +94,7 @@ struct InspectorView: View {
                                         .onTapGesture(count: 2) {
                                             editingText = value.isNull ? "NULL" : value.displayString
                                             editingColumn = column
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                                editFieldFocused = true
-                                            }
+                                            editFieldFocused = true
                                         }
                                 } else {
                                     Text(value.displayString)
@@ -105,7 +104,7 @@ struct InspectorView: View {
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
-                            if idx < rowData.count - 1 {
+                            if column != rowData.last?.column {
                                 Divider()
                             }
                         }

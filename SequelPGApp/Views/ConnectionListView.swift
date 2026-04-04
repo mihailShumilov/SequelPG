@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectionListView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var connectionListVM: ConnectionListViewModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -10,7 +11,7 @@ struct ConnectionListView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    appVM.connectionListVM.showAddForm = true
+                    connectionListVM.showAddForm = true
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -20,7 +21,7 @@ struct ConnectionListView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            List(appVM.connectionListVM.profiles) { profile in
+            List(connectionListVM.profiles) { profile in
                 HStack {
                     Circle()
                         .fill(statusColor(for: profile.id))
@@ -46,43 +47,39 @@ struct ConnectionListView: View {
                     }
                     Divider()
                     Button("Edit") {
-                        appVM.connectionListVM.editingProfile = profile
+                        connectionListVM.editingProfile = profile
                     }
                     Button("Delete", role: .destructive) {
-                        appVM.connectionListVM.deleteTarget = profile
+                        connectionListVM.deleteTarget = profile
                     }
                 }
             }
             .listStyle(.sidebar)
         }
-        .sheet(isPresented: $appVM.connectionListVM.showAddForm) {
+        .sheet(isPresented: $connectionListVM.showAddForm) {
             ConnectionFormView(mode: .add)
                 .environmentObject(appVM)
         }
-        .sheet(item: $appVM.connectionListVM.editingProfile) { profile in
+        .sheet(item: $connectionListVM.editingProfile) { profile in
             ConnectionFormView(mode: .edit(profile))
                 .environmentObject(appVM)
         }
         .alert("Delete Connection?", isPresented: .init(
-            get: { appVM.connectionListVM.deleteTarget != nil },
-            set: { if !$0 { appVM.connectionListVM.deleteTarget = nil } }
+            get: { connectionListVM.deleteTarget != nil },
+            set: { if !$0 { connectionListVM.deleteTarget = nil } }
         )) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
-                if let target = appVM.connectionListVM.deleteTarget {
-                    appVM.connectionListVM.deleteProfile(target)
+                if let target = connectionListVM.deleteTarget {
+                    connectionListVM.deleteProfile(target)
                 }
             }
         } message: {
-            Text("Are you sure you want to delete \"\(appVM.connectionListVM.deleteTarget?.name ?? "")\"?")
+            Text("Are you sure you want to delete \"\(connectionListVM.deleteTarget?.name ?? "")\"?")
         }
     }
 
     private func statusColor(for profileId: UUID) -> Color {
-        switch appVM.connectionListVM.connectionStatuses[profileId] {
-        case .connected: return .green
-        case .error: return .red
-        default: return .gray
-        }
+        connectionListVM.statusColor(for: profileId)
     }
 }

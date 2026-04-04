@@ -42,6 +42,8 @@ final class SQLTextStorage: NSTextStorage {
         let mask = editedMask
         super.processEditing()
 
+        // Guard against re-entrancy: attribute changes during highlighting
+        // trigger another processEditing round; skip it to avoid infinite loops.
         guard !isHighlighting else { return }
         isHighlighting = true
         defer { isHighlighting = false }

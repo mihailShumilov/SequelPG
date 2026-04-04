@@ -14,7 +14,7 @@ struct DBObject: Identifiable, Sendable, Equatable, Hashable {
     let type: DBObjectType
 
     init(schema: String, name: String, type: DBObjectType) {
-        self.id = "\(schema).\(name)"
+        self.id = "\(schema)\0\(name)"
         self.schema = schema
         self.name = name
         self.type = type

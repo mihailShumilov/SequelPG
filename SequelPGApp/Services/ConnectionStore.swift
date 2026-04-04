@@ -11,6 +11,7 @@ protocol ConnectionStoreProtocol: Sendable {
 }
 
 /// Persists connection profiles to UserDefaults (without passwords).
+/// `@unchecked Sendable` is safe because `UserDefaults` is documented as thread-safe.
 final class ConnectionStore: ConnectionStoreProtocol, @unchecked Sendable {
     private let defaults: UserDefaults
     private let key = "com.sequelpg.connections"

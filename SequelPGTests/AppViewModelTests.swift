@@ -168,62 +168,7 @@ final class MockKeychainService: KeychainServiceProtocol, @unchecked Sendable {
 // MARK: - Tests
 
 @MainActor
-final class AppViewModelTests: XCTestCase {
-
-    private var mockDB: MockDatabaseClient!
-    private var mockKeychain: MockKeychainService!
-    private var connectionStore: ConnectionStore!
-    private var testDefaults: UserDefaults!
-    private var vm: AppViewModel!
-
-    override func setUp() {
-        super.setUp()
-        mockDB = MockDatabaseClient()
-        mockKeychain = MockKeychainService()
-        testDefaults = UserDefaults(suiteName: "com.sequelpg.tests.\(UUID().uuidString)")!
-        connectionStore = ConnectionStore(defaults: testDefaults)
-        vm = AppViewModel(
-            connectionStore: connectionStore,
-            keychainService: mockKeychain,
-            dbClient: mockDB
-        )
-    }
-
-    override func tearDown() {
-        vm = nil
-        connectionStore = nil
-        testDefaults.removePersistentDomain(forName: testDefaults.volatileDomainNames.first ?? "")
-        testDefaults = nil
-        mockKeychain = nil
-        mockDB = nil
-        super.tearDown()
-    }
-
-    // MARK: - Helpers
-
-    private func makeProfile(
-        name: String = "Test DB",
-        host: String = "localhost",
-        port: Int = 5432,
-        database: String = "testdb",
-        username: String = "testuser",
-        sslMode: SSLMode = .prefer
-    ) -> ConnectionProfile {
-        ConnectionProfile(
-            name: name,
-            host: host,
-            port: port,
-            database: database,
-            username: username,
-            sslMode: sslMode
-        )
-    }
-
-    private func makeConnectedVM(profile: ConnectionProfile? = nil) async {
-        let p = profile ?? makeProfile()
-        mockKeychain.seed(password: "secret", forProfile: p)
-        await vm.connect(profile: p)
-    }
+final class AppViewModelTests: AppViewModelTestCase {
 
     // MARK: - Initialization
 
@@ -1387,7 +1332,7 @@ final class AppViewModelTests: XCTestCase {
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL, "Expected a DELETE SQL to be executed")
         // The DELETE should target id=1 (Alice), not id=3 (Charlie at original index 0)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false,
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'1'") ?? false,
                        "Expected DELETE to target id=1 (Alice), got: \(deleteSQL ?? "nil")")
     }
 
@@ -1427,7 +1372,7 @@ final class AppViewModelTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false,
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'1'") ?? false,
                        "Expected DELETE to target id=1 (A), got: \(deleteSQL ?? "nil")")
     }
 
@@ -1456,7 +1401,7 @@ final class AppViewModelTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '20'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'20'") ?? false)
     }
 
     // MARK: - updateQueryCell with active sort
@@ -1499,9 +1444,9 @@ final class AppViewModelTests: XCTestCase {
         let updateSQL = allSQLs.first { $0.contains("UPDATE") }
         XCTAssertNotNil(updateSQL, "Expected an UPDATE SQL to be executed")
         // Should target id=2 (Bob at original index 2), not id=1 (Alice at original index 1)
-        XCTAssertTrue(updateSQL?.contains("\"id\" = '2'") ?? false,
+        XCTAssertTrue(updateSQL?.contains("\"id\" = E'2'") ?? false,
                        "Expected UPDATE to target id=2 (Bob), got: \(updateSQL ?? "nil")")
-        XCTAssertTrue(updateSQL?.contains("\"name\" = 'Bobby'") ?? false)
+        XCTAssertTrue(updateSQL?.contains("\"name\" = E'Bobby'") ?? false)
     }
 
     func testUpdateQueryCellWithNoSortActiveUsesIndexDirectly() async {
@@ -1536,8 +1481,8 @@ final class AppViewModelTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let updateSQL = allSQLs.first { $0.contains("UPDATE") }
         XCTAssertNotNil(updateSQL)
-        XCTAssertTrue(updateSQL?.contains("\"id\" = '2'") ?? false)
-        XCTAssertTrue(updateSQL?.contains("\"name\" = 'Bobby'") ?? false)
+        XCTAssertTrue(updateSQL?.contains("\"id\" = E'2'") ?? false)
+        XCTAssertTrue(updateSQL?.contains("\"name\" = E'Bobby'") ?? false)
     }
 
     func testUpdateQueryCellWithNullSortedValueTargetsCorrectRow() async {
@@ -1577,7 +1522,7 @@ final class AppViewModelTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let updateSQL = allSQLs.first { $0.contains("UPDATE") }
         XCTAssertNotNil(updateSQL)
-        XCTAssertTrue(updateSQL?.contains("\"id\" = '1'") ?? false,
+        XCTAssertTrue(updateSQL?.contains("\"id\" = E'1'") ?? false,
                        "Expected UPDATE to target id=1 (NULL row), got: \(updateSQL ?? "nil")")
     }
 

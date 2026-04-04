@@ -3,6 +3,15 @@ import Foundation
 import OSLog
 import SwiftUI
 
+/// Context for a pending cascade delete operation.
+struct CascadeDeleteContext {
+    let schema: String
+    let table: String
+    let pkValues: [(column: String, value: CellValue)]
+    let errorMessage: String
+    let source: AppViewModel.MainTab
+}
+
 /// Root application state coordinating connections and navigation.
 @MainActor
 final class AppViewModel: ObservableObject {
@@ -21,14 +30,6 @@ final class AppViewModel: ObservableObject {
     @Published var connectedProfileName: String?
     @Published var errorMessage: String?
     @Published var cascadeDeleteContext: CascadeDeleteContext?
-
-    struct CascadeDeleteContext {
-        let schema: String
-        let table: String
-        let pkValues: [(column: String, value: CellValue)]
-        let errorMessage: String
-        let source: MainTab
-    }
 
     private var connectedProfile: ConnectionProfile?
     private var connectedPassword: String?
@@ -58,27 +59,8 @@ final class AppViewModel: ObservableObject {
         self.tableVM = TableViewModel()
         self.queryVM = QueryViewModel()
 
-        // Forward child VM objectWillChange to parent so SwiftUI
-        // views observing this AppViewModel re-render on nested changes.
-        connectionListVM.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
-
-        navigatorVM.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
-
-        tableVM.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
-
-        queryVM.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
+        // Child VMs are injected as separate @EnvironmentObject so views
+        // observe only the VM they need, avoiding whole-tree re-renders.
     }
 
     func connect(profile: ConnectionProfile) async {
@@ -142,11 +124,7 @@ final class AppViewModel: ObservableObject {
             connectedProfile = updatedProfile
 
             // Clear navigator (schemas/tables/views/selection) and table state
-            navigatorVM.schemas = []
-            navigatorVM.selectedSchema = ""
-            navigatorVM.tables = []
-            navigatorVM.views = []
-            navigatorVM.selectedObject = nil
+            navigatorVM.clear()
             tableVM.clear()
 
             // Reload schemas and tables for the new database
@@ -167,6 +145,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func selectObject(_ object: DBObject) async {
+        guard navigatorVM.selectedObject != object else { return }
         navigatorVM.selectedObject = object
         tableVM.clear()
 
@@ -204,6 +183,20 @@ final class AppViewModel: ObservableObject {
             let tables = try await dbClient.listTables(schema: schema)
             let views = try await dbClient.listViews(schema: schema)
             navigatorVM.setObjects(tables: tables, views: views)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Invalidates the introspection cache and reloads schemas, tables, and views.
+    func refreshNavigator() async {
+        await dbClient.invalidateCache()
+        do {
+            let schemas = try await dbClient.listSchemas()
+            navigatorVM.setSchemas(schemas)
+            if !navigatorVM.selectedSchema.isEmpty {
+                await loadTablesAndViews(forSchema: navigatorVM.selectedSchema)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -264,6 +257,7 @@ final class AppViewModel: ObservableObject {
         queryVM.isExecuting = true
         queryVM.errorMessage = nil
         queryVM.result = nil
+        queryVM.invalidateSortCache()
         queryVM.editableTableContext = nil
         queryVM.editableColumns = []
         queryVM.deleteConfirmationRowIndex = nil
@@ -305,6 +299,7 @@ final class AppViewModel: ObservableObject {
             }
 
             queryVM.result = result
+            queryVM.invalidateSortCache()
             queryVM.isExecuting = false
         } catch {
             queryVM.errorMessage = error.localizedDescription
@@ -315,25 +310,25 @@ final class AppViewModel: ObservableObject {
     // MARK: - Column Sorting
 
     func toggleContentSort(column: String) {
-        if tableVM.sortColumn == column {
-            tableVM.sortAscending.toggle()
-        } else {
-            tableVM.sortColumn = column
-            tableVM.sortAscending = true
-        }
+        applySort(column: column, currentColumn: &tableVM.sortColumn, ascending: &tableVM.sortAscending)
         tableVM.currentPage = 0
         clearSelectedRow()
         Task { await loadContentPage() }
     }
 
     func toggleQuerySort(column: String) {
-        if queryVM.sortColumn == column {
-            queryVM.sortAscending.toggle()
-        } else {
-            queryVM.sortColumn = column
-            queryVM.sortAscending = true
-        }
+        applySort(column: column, currentColumn: &queryVM.sortColumn, ascending: &queryVM.sortAscending)
+        queryVM.invalidateSortCache()
         clearSelectedRow()
+    }
+
+    private func applySort(column: String, currentColumn: inout String?, ascending: inout Bool) {
+        if currentColumn == column {
+            ascending.toggle()
+        } else {
+            currentColumn = column
+            ascending = true
+        }
     }
 
     // MARK: - Inline Cell Editing
@@ -346,28 +341,12 @@ final class AppViewModel: ObservableObject {
         let pkColumns = tableVM.columns.filter { $0.isPrimaryKey }
         guard !pkColumns.isEmpty else { return }
 
-        let columnName = result.columns[columnIndex]
-        let originalRow = result.rows[rowIndex]
-        let newValue: CellValue = newText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "NULL" ? .null : .text(newText)
-
-        guard let sql = buildUpdateSQL(
-            schema: object.schema,
-            table: object.name,
-            columnName: columnName,
-            newValue: newValue,
-            originalRow: originalRow,
-            resultColumns: result.columns,
-            pkColumnNames: pkColumns.map(\.name)
-        ) else {
-            errorMessage = "Cannot update: primary key columns missing from result"
-            return
-        }
-
-        do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            await loadContentPage()
-        } catch {
-            errorMessage = error.localizedDescription
+        await executeUpdate(
+            schema: object.schema, table: object.name,
+            columnIndex: columnIndex, rowIndex: rowIndex, newText: newText,
+            result: result, pkColumns: pkColumns, columnInfo: tableVM.columns
+        ) {
+            await self.loadContentPage()
         }
     }
 
@@ -379,21 +358,33 @@ final class AppViewModel: ObservableObject {
         let pkColumns = queryVM.editableColumns.filter { $0.isPrimaryKey }
         guard !pkColumns.isEmpty else { return }
 
-        // rowIndex comes from the sorted display; map it back to the
-        // original position in queryVM.result.
+        // rowIndex comes from the sorted display; map it back to the original position.
         let actualRowIndex = queryVM.originalRowIndex(rowIndex)
+
+        await executeUpdate(
+            schema: tableRef.schema, table: tableRef.table,
+            columnIndex: columnIndex, rowIndex: actualRowIndex, newText: newText,
+            result: result, pkColumns: pkColumns, columnInfo: queryVM.editableColumns
+        ) {
+            await self.executeQuery(self.queryVM.queryText)
+        }
+    }
+
+    private func executeUpdate(
+        schema: String, table: String,
+        columnIndex: Int, rowIndex: Int, newText: String,
+        result: QueryResult, pkColumns: [ColumnInfo], columnInfo: [ColumnInfo],
+        refresh: @escaping () async -> Void
+    ) async {
         let columnName = result.columns[columnIndex]
-        let originalRow = result.rows[actualRowIndex]
+        let originalRow = result.rows[rowIndex]
         let newValue: CellValue = newText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "NULL" ? .null : .text(newText)
 
         guard let sql = buildUpdateSQL(
-            schema: tableRef.schema,
-            table: tableRef.table,
-            columnName: columnName,
-            newValue: newValue,
-            originalRow: originalRow,
-            resultColumns: result.columns,
-            pkColumnNames: pkColumns.map(\.name)
+            schema: schema, table: table,
+            columnName: columnName, newValue: newValue,
+            originalRow: originalRow, resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name), columnInfo: columnInfo
         ) else {
             errorMessage = "Cannot update: primary key columns missing from result"
             return
@@ -401,8 +392,7 @@ final class AppViewModel: ObservableObject {
 
         do {
             _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: 10.0)
-            // Re-execute the user's query to refresh results
-            await executeQuery(queryVM.queryText)
+            await refresh()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -437,7 +427,7 @@ final class AppViewModel: ObservableObject {
     /// Whether the inspector row detail should allow editing.
     var isInspectorEditable: Bool {
         if selectedTab == .content {
-            return tableVM.columns.contains { $0.isPrimaryKey }
+            return tableVM.hasPrimaryKey
         } else if selectedTab == .query {
             return queryVM.editableTableContext != nil
         }
@@ -449,7 +439,7 @@ final class AppViewModel: ObservableObject {
     var canDeleteContentRow: Bool {
         guard cascadeDeleteContext == nil else { return false }
         guard navigatorVM.selectedObject?.type == .table else { return false }
-        return tableVM.columns.contains { $0.isPrimaryKey }
+        return tableVM.hasPrimaryKey
     }
 
     var canDeleteQueryRow: Bool {
@@ -592,6 +582,17 @@ final class AppViewModel: ObservableObject {
         let columns = tableVM.columns
         let values = tableVM.newRowValues
 
+        // Pre-flight: check for NOT NULL columns without defaults that have empty values
+        let missingRequired = columns.filter { col in
+            !col.isNullable && col.columnDefault == nil
+                && (values[col.name]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+        }
+        if !missingRequired.isEmpty {
+            let names = missingRequired.map(\.name).joined(separator: ", ")
+            errorMessage = "Required columns cannot be empty: \(names)"
+            return
+        }
+
         // Build column/value lists, skipping empty values for columns that
         // have a default or are nullable (let the DB fill them in).
         var insertColumns: [String] = []
@@ -610,7 +611,7 @@ final class AppViewModel: ObservableObject {
             if rawValue.uppercased() == "NULL" {
                 insertValues.append("NULL")
             } else {
-                insertValues.append(quoteLiteral(.text(rawValue)))
+                insertValues.append(quoteLiteralTyped(.text(rawValue), dataType: col.dataType))
             }
         }
 
@@ -648,31 +649,58 @@ final class AppViewModel: ObservableObject {
         tableVM.newRowValues = [:]
     }
 
+    // MARK: - Date Formatters (static, allocated once)
+
+    private static let timestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    private static let timestampTZFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ssXXXXX"
+        return f
+    }()
+
+    private static let insertDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    private static let timeTZFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm:ssXXXXX"
+        return f
+    }()
+
     /// Returns a pre-filled default value for date/time/timestamp columns,
     /// or an empty string for all other types.
     private func defaultInsertValue(for dataType: String, now: Date) -> String {
         let type = dataType.lowercased()
         let hasTimeZone = type.contains("with time zone") || type.contains("tz")
 
-        let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "en_US_POSIX")
-
-        // Check timestamp first — "timestamp" also starts with "time"
         if type.contains("timestamp") {
-            fmt.dateFormat = hasTimeZone ? "yyyy-MM-dd HH:mm:ssXXXXX" : "yyyy-MM-dd HH:mm:ss"
-            return fmt.string(from: now)
+            return (hasTimeZone ? Self.timestampTZFormatter : Self.timestampFormatter).string(from: now)
         }
-
         if type == "date" {
-            fmt.dateFormat = "yyyy-MM-dd"
-            return fmt.string(from: now)
+            return Self.insertDateFormatter.string(from: now)
         }
-
         if type.hasPrefix("time") {
-            fmt.dateFormat = hasTimeZone ? "HH:mm:ssXXXXX" : "HH:mm:ss"
-            return fmt.string(from: now)
+            return (hasTimeZone ? Self.timeTZFormatter : Self.timeFormatter).string(from: now)
         }
-
         return ""
     }
 
@@ -685,6 +713,13 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    /// Executes a cascading DELETE that removes direct child rows referencing
+    /// the parent row, then deletes the parent itself via a writable CTE.
+    ///
+    /// **Limitation:** Only handles direct (one-level) foreign key dependencies.
+    /// If a child table itself has child tables (grandchildren), the cascade
+    /// will fail with a foreign key violation. In that case, manually delete
+    /// the deeper dependencies first or use `ON DELETE CASCADE` constraints.
     func executeCascadeDelete() async {
         guard let ctx = cascadeDeleteContext else { return }
         let source = ctx.source
@@ -705,8 +740,6 @@ final class AppViewModel: ObservableObject {
         let parentWhere = parentWhereParts.joined(separator: " AND ")
 
         // Query FK metadata to find all child tables referencing this parent
-        let escapedSchema = ctx.schema.replacingOccurrences(of: "'", with: "''")
-        let escapedTable = ctx.table.replacingOccurrences(of: "'", with: "''")
         let fkSQL = """
             SELECT child_ns.nspname AS child_schema,
                    child_rel.relname AS child_table,
@@ -723,7 +756,7 @@ final class AppViewModel: ObservableObject {
               AND con.confrelid = (
                   SELECT c.oid FROM pg_class c
                   JOIN pg_namespace n ON c.relnamespace = n.oid
-                  WHERE c.relname = '\(escapedTable)' AND n.nspname = '\(escapedSchema)'
+                  WHERE c.relname = \(quoteLiteral(.text(ctx.table))) AND n.nspname = \(quoteLiteral(.text(ctx.schema)))
               )
             """
 
@@ -806,7 +839,7 @@ final class AppViewModel: ObservableObject {
             }
         } catch let error as AppError {
             if case .foreignKeyViolation = error {
-                errorMessage = "Cascade delete failed: new referencing rows may have been added. Please try again."
+                errorMessage = "Cascade delete failed: child tables may have their own foreign key dependencies (grandchildren) that must be deleted first. Alternatively, configure ON DELETE CASCADE on the database constraints."
             } else {
                 errorMessage = error.localizedDescription
             }
@@ -848,9 +881,17 @@ final class AppViewModel: ObservableObject {
         newValue: CellValue,
         originalRow: [CellValue],
         resultColumns: [String],
-        pkColumnNames: [String]
+        pkColumnNames: [String],
+        columnInfo: [ColumnInfo] = []
     ) -> String? {
-        let setClause = "\(quoteIdent(columnName)) = \(quoteLiteral(newValue))"
+        let columnInfoByName = Dictionary(columnInfo.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        let targetType = columnInfoByName[columnName]?.dataType
+        let setClause: String
+        if let dataType = targetType {
+            setClause = "\(quoteIdent(columnName)) = \(quoteLiteralTyped(newValue, dataType: dataType))"
+        } else {
+            setClause = "\(quoteIdent(columnName)) = \(quoteLiteral(newValue))"
+        }
 
         var whereParts: [String] = []
         for pkName in pkColumnNames {

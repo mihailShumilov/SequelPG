@@ -10,10 +10,6 @@ enum CellValue: Sendable, Equatable {
         case .null:
             return "NULL"
         case let .text(value):
-            // Truncate large text values for UI display
-            if value.count > 10_000 {
-                return String(value.prefix(10_000)) + "..."
-            }
             return value
         }
     }

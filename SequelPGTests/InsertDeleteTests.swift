@@ -11,74 +11,22 @@ import XCTest
 /// - deleteInspectorRow()
 /// - canDeleteContentRow, canDeleteQueryRow, canInsertContentRow
 @MainActor
-final class InsertDeleteTests: XCTestCase {
+final class InsertDeleteTests: AppViewModelTestCase {
 
-    private var mockDB: MockDatabaseClient!
-    private var mockKeychain: MockKeychainService!
-    private var connectionStore: ConnectionStore!
-    private var testDefaults: UserDefaults!
-    private var vm: AppViewModel!
-
-    override func setUp() {
-        super.setUp()
-        mockDB = MockDatabaseClient()
-        mockKeychain = MockKeychainService()
-        testDefaults = UserDefaults(suiteName: "com.sequelpg.insertdelete.\(UUID().uuidString)")!
-        connectionStore = ConnectionStore(defaults: testDefaults)
-        vm = AppViewModel(
-            connectionStore: connectionStore,
-            keychainService: mockKeychain,
-            dbClient: mockDB
-        )
-    }
-
-    override func tearDown() {
-        vm = nil
-        connectionStore = nil
-        testDefaults.removePersistentDomain(forName: testDefaults.volatileDomainNames.first ?? "")
-        testDefaults = nil
-        mockKeychain = nil
-        mockDB = nil
-        super.tearDown()
-    }
-
-    // MARK: - Helpers
-
-    private func makeProfile(
-        name: String = "Test DB",
-        host: String = "localhost",
-        port: Int = 5432,
-        database: String = "testdb",
-        username: String = "testuser",
-        sslMode: SSLMode = .prefer
-    ) -> ConnectionProfile {
-        ConnectionProfile(
-            name: name,
-            host: host,
-            port: port,
-            database: database,
-            username: username,
-            sslMode: sslMode
-        )
-    }
-
-    private func makeConnectedVM(profile: ConnectionProfile? = nil) async {
-        let p = profile ?? makeProfile()
-        mockKeychain.seed(password: "secret", forProfile: p)
-        await vm.connect(profile: p)
-    }
+    // MARK: - Helpers (file-specific)
 
     private func makePKColumn(
         name: String,
         position: Int,
-        dataType: String = "integer"
+        dataType: String = "integer",
+        columnDefault: String? = "nextval('seq'::regclass)"
     ) -> ColumnInfo {
         ColumnInfo(
             name: name,
             ordinalPosition: position,
             dataType: dataType,
             isNullable: false,
-            columnDefault: nil,
+            columnDefault: columnDefault,
             characterMaximumLength: nil,
             isPrimaryKey: true
         )
@@ -261,7 +209,7 @@ final class InsertDeleteTests: XCTestCase {
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
         XCTAssertTrue(deleteSQL?.contains("\"public\".\"users\"") ?? false)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'1'") ?? false)
     }
 
     func testDeleteContentRowGeneratesCorrectSQLForSecondRow() async {
@@ -273,7 +221,7 @@ final class InsertDeleteTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '2'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'2'") ?? false)
     }
 
     func testDeleteContentRowWithCompositePK() async {
@@ -300,8 +248,8 @@ final class InsertDeleteTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
-        XCTAssertTrue(deleteSQL?.contains("\"order_id\" = '10'") ?? false)
-        XCTAssertTrue(deleteSQL?.contains("\"product_id\" = '20'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"order_id\" = E'10'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"product_id\" = E'20'") ?? false)
         XCTAssertTrue(deleteSQL?.contains(" AND ") ?? false)
     }
 
@@ -355,7 +303,7 @@ final class InsertDeleteTests: XCTestCase {
         let allSQLs = await mockDB.getAllRunQuerySQLs()
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
-        XCTAssertTrue(deleteSQL?.contains("\"id\" = '1'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("\"id\" = E'1'") ?? false)
     }
 
     // MARK: - deleteContentRow(rowIndex:) - State Changes
@@ -499,7 +447,7 @@ final class InsertDeleteTests: XCTestCase {
         // So the last SQL should be the DELETE.
         XCTAssertTrue(lastSQL?.contains("DELETE FROM") ?? false)
         XCTAssertTrue(lastSQL?.contains("\"public\".\"users\"") ?? false)
-        XCTAssertTrue(lastSQL?.contains("\"id\" = '1'") ?? false)
+        XCTAssertTrue(lastSQL?.contains("\"id\" = E'1'") ?? false)
     }
 
     func testDeleteQueryRowWithCompositePK() async {
@@ -523,8 +471,8 @@ final class InsertDeleteTests: XCTestCase {
 
         let lastSQL = await mockDB.lastRunQuerySQL
         XCTAssertNotNil(lastSQL)
-        XCTAssertTrue(lastSQL?.contains("\"a_id\" = '100'") ?? false)
-        XCTAssertTrue(lastSQL?.contains("\"b_id\" = '200'") ?? false)
+        XCTAssertTrue(lastSQL?.contains("\"a_id\" = E'100'") ?? false)
+        XCTAssertTrue(lastSQL?.contains("\"b_id\" = E'200'") ?? false)
     }
 
     func testDeleteQueryRowClearsSelectedRow() async {
@@ -914,7 +862,7 @@ final class InsertDeleteTests: XCTestCase {
         let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
         XCTAssertNotNil(deleteSQL)
         // quoteLiteral escapes ' to ''
-        XCTAssertTrue(deleteSQL?.contains("'O''Reilly'") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("E'O''Reilly'") ?? false)
     }
 
     func testDeleteSQLWithDoubleQuoteInColumnName() async {

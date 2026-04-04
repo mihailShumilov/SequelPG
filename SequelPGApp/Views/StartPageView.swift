@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StartPageView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var connectionListVM: ConnectionListViewModel
 
     // MARK: - Form State
 
@@ -26,10 +27,6 @@ struct StartPageView: View {
     @State private var formSSHKeyPath = ""
     @State private var formSSHPassword = ""
     @State private var showSSHPassword = false
-
-    private var connectionListVM: ConnectionListViewModel {
-        appVM.connectionListVM
-    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -64,7 +61,7 @@ struct StartPageView: View {
 
             Spacer()
 
-            TextField("Filter...", text: $appVM.connectionListVM.filterText)
+            TextField("Filter...", text: $connectionListVM.filterText)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 12)
 
@@ -85,7 +82,7 @@ struct StartPageView: View {
     // MARK: - Center Column: Connection List
 
     private var connectionListColumn: some View {
-        List(connectionListVM.filteredProfiles, selection: $appVM.connectionListVM.selectedProfileId) { profile in
+        List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
             HStack(spacing: 8) {
                 Image(systemName: "server.rack")
                     .foregroundStyle(.secondary)
@@ -187,42 +184,16 @@ struct StartPageView: View {
                         }
 
                         Section {
-                            Toggle("Connect via SSH Tunnel", isOn: $formUseSSHTunnel.animation())
-
-                            if formUseSSHTunnel {
-                                HStack {
-                                    TextField("SSH Host:", text: $formSSHHost)
-                                    TextField("SSH Port:", text: $formSSHPort)
-                                        .frame(width: 70)
-                                }
-                                TextField("SSH User:", text: $formSSHUser)
-                                Picker("Auth Method:", selection: $formSSHAuthMethod) {
-                                    ForEach(SSHAuthMethod.allCases, id: \.self) { method in
-                                        Text(method.displayName).tag(method)
-                                    }
-                                }
-
-                                if formSSHAuthMethod == .keyFile {
-                                    TextField("Key Path:", text: $formSSHKeyPath)
-                                        .help("Path to SSH private key (e.g. ~/.ssh/id_rsa). Leave empty to use SSH agent.")
-                                }
-
-                                if formSSHAuthMethod == .password {
-                                    HStack {
-                                        if showSSHPassword {
-                                            TextField("SSH Password:", text: $formSSHPassword)
-                                        } else {
-                                            SecureField("SSH Password:", text: $formSSHPassword)
-                                        }
-                                        Button {
-                                            showSSHPassword.toggle()
-                                        } label: {
-                                            Image(systemName: showSSHPassword ? "eye.slash" : "eye")
-                                        }
-                                        .buttonStyle(.borderless)
-                                    }
-                                }
-                            }
+                            SSHTunnelFormSection(
+                                useSSHTunnel: $formUseSSHTunnel,
+                                sshHost: $formSSHHost,
+                                sshPort: $formSSHPort,
+                                sshUser: $formSSHUser,
+                                sshAuthMethod: $formSSHAuthMethod,
+                                sshKeyPath: $formSSHKeyPath,
+                                sshPassword: $formSSHPassword,
+                                showSSHPassword: $showSSHPassword
+                            )
                         } header: {
                             Text("SSH Tunnel")
                         }

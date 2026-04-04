@@ -2,36 +2,38 @@ import SwiftUI
 
 struct ContentTabView: View {
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var tableVM: TableViewModel
+    @EnvironmentObject var navigatorVM: NavigatorViewModel
 
     var body: some View {
         VStack(spacing: 0) {
-            if appVM.tableVM.isLoadingContent {
+            if tableVM.isLoadingContent {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let result = appVM.tableVM.contentResult {
+            } else if let result = tableVM.contentResult {
                 ResultsGridView(
                     result: result,
-                    columns: appVM.tableVM.columns,
-                    isEditable: appVM.tableVM.columns.contains { $0.isPrimaryKey },
+                    columns: tableVM.columns,
+                    isEditable: tableVM.columns.contains { $0.isPrimaryKey },
                     onRowSelected: { rowIdx in
                         appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
                     },
                     onCellEdited: { row, col, text in
                         Task { await appVM.updateContentCell(rowIndex: row, columnIndex: col, newText: text) }
                     },
-                    sortColumn: appVM.tableVM.sortColumn,
-                    sortAscending: appVM.tableVM.sortAscending,
+                    sortColumn: tableVM.sortColumn,
+                    sortAscending: tableVM.sortAscending,
                     onColumnHeaderTapped: { column in
                         appVM.toggleContentSort(column: column)
                     },
                     onDeleteRow: appVM.canDeleteContentRow ? { rowIdx in
-                        appVM.tableVM.deleteConfirmationRowIndex = rowIdx
+                        tableVM.deleteConfirmationRowIndex = rowIdx
                     } : nil,
-                    selectedRowIndex: $appVM.tableVM.selectedRowIndex,
-                    isInsertingRow: appVM.tableVM.isInsertingRow,
+                    selectedRowIndex: $tableVM.selectedRowIndex,
+                    isInsertingRow: tableVM.isInsertingRow,
                     insertRowValues: Binding(
-                        get: { appVM.tableVM.newRowValues },
-                        set: { appVM.tableVM.newRowValues = $0 }
+                        get: { tableVM.newRowValues },
+                        set: { tableVM.newRowValues = $0 }
                     ),
                     onInsertCommit: {
                         Task { await appVM.commitInsertRow() }
@@ -40,7 +42,7 @@ struct ContentTabView: View {
                         appVM.cancelInsertRow()
                     }
                 )
-            } else if appVM.navigatorVM.selectedObject != nil {
+            } else if navigatorVM.selectedObject != nil {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -53,28 +55,28 @@ struct ContentTabView: View {
             paginationBar
         }
         .onAppear {
-            if appVM.navigatorVM.selectedObject != nil, appVM.tableVM.contentResult == nil {
+            if navigatorVM.selectedObject != nil, tableVM.contentResult == nil {
                 Task { await appVM.loadContentPage() }
             }
         }
-        .onChange(of: appVM.navigatorVM.selectedObject) { _ in
-            if appVM.navigatorVM.selectedObject != nil, appVM.selectedTab == .content {
+        .onChange(of: navigatorVM.selectedObject) { _ in
+            if navigatorVM.selectedObject != nil, appVM.selectedTab == .content {
                 Task { await appVM.loadContentPage() }
             }
         }
         .alert(
             "Delete Row?",
             isPresented: Binding<Bool>(
-                get: { appVM.tableVM.deleteConfirmationRowIndex != nil },
-                set: { if !$0 { appVM.tableVM.deleteConfirmationRowIndex = nil } }
+                get: { tableVM.deleteConfirmationRowIndex != nil },
+                set: { if !$0 { tableVM.deleteConfirmationRowIndex = nil } }
             )
         ) {
             Button("Cancel", role: .cancel) {
-                appVM.tableVM.deleteConfirmationRowIndex = nil
+                tableVM.deleteConfirmationRowIndex = nil
             }
             Button("Delete", role: .destructive) {
-                if let idx = appVM.tableVM.deleteConfirmationRowIndex {
-                    appVM.tableVM.deleteConfirmationRowIndex = nil
+                if let idx = tableVM.deleteConfirmationRowIndex {
+                    tableVM.deleteConfirmationRowIndex = nil
                     Task { await appVM.deleteContentRow(rowIndex: idx) }
                 }
             }
@@ -107,21 +109,21 @@ struct ContentTabView: View {
                 Image(systemName: "plus")
                     .frame(width: 16, height: 16)
             }
-            .disabled(!appVM.canInsertContentRow || appVM.tableVM.isInsertingRow)
+            .disabled(!appVM.canInsertContentRow || tableVM.isInsertingRow)
             .help("Insert a new row")
 
             Button {
-                if let idx = appVM.tableVM.selectedRowIndex {
-                    appVM.tableVM.deleteConfirmationRowIndex = idx
+                if let idx = tableVM.selectedRowIndex {
+                    tableVM.deleteConfirmationRowIndex = idx
                 }
             } label: {
                 Image(systemName: "minus")
                     .frame(width: 16, height: 16)
             }
-            .disabled(appVM.tableVM.selectedRowIndex == nil || !appVM.canDeleteContentRow || appVM.cascadeDeleteContext != nil || appVM.tableVM.isInsertingRow)
+            .disabled(tableVM.selectedRowIndex == nil || !appVM.canDeleteContentRow || appVM.cascadeDeleteContext != nil || tableVM.isInsertingRow)
             .help("Delete the selected row")
 
-            if appVM.tableVM.isInsertingRow {
+            if tableVM.isInsertingRow {
                 Divider()
                     .frame(height: 16)
 
@@ -139,15 +141,15 @@ struct ContentTabView: View {
             Divider()
                 .frame(height: 16)
 
-            Picker("Rows:", selection: $appVM.tableVM.pageSize) {
-                ForEach(appVM.tableVM.pageSizeOptions, id: \.self) { size in
+            Picker("Rows:", selection: $tableVM.pageSize) {
+                ForEach(tableVM.pageSizeOptions, id: \.self) { size in
                     Text("\(size)").tag(size)
                 }
             }
             .frame(width: 130)
-            .disabled(appVM.tableVM.isInsertingRow)
-            .onChange(of: appVM.tableVM.pageSize) { _ in
-                appVM.tableVM.currentPage = 0
+            .disabled(tableVM.isInsertingRow)
+            .onChange(of: tableVM.pageSize) { _ in
+                tableVM.currentPage = 0
                 appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }
             }
@@ -155,29 +157,29 @@ struct ContentTabView: View {
             Spacer()
 
             Button {
-                appVM.tableVM.currentPage = max(0, appVM.tableVM.currentPage - 1)
+                tableVM.currentPage = max(0, tableVM.currentPage - 1)
                 appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }
             } label: {
                 Image(systemName: "chevron.left")
             }
-            .disabled(appVM.tableVM.currentPage <= 0 || appVM.tableVM.isInsertingRow)
+            .disabled(tableVM.currentPage <= 0 || tableVM.isInsertingRow)
 
-            Text("Page \(appVM.tableVM.currentPage + 1) of \(appVM.tableVM.totalPages)")
+            Text("Page \(tableVM.currentPage + 1) of \(tableVM.totalPages)")
                 .monospacedDigit()
 
             Button {
-                appVM.tableVM.currentPage = min(appVM.tableVM.totalPages - 1, appVM.tableVM.currentPage + 1)
+                tableVM.currentPage = min(tableVM.totalPages - 1, tableVM.currentPage + 1)
                 appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }
             } label: {
                 Image(systemName: "chevron.right")
             }
-            .disabled(appVM.tableVM.currentPage >= appVM.tableVM.totalPages - 1 || appVM.tableVM.isInsertingRow)
+            .disabled(tableVM.currentPage >= tableVM.totalPages - 1 || tableVM.isInsertingRow)
 
             Spacer()
 
-            Text("\u{2248} \(appVM.tableVM.approximateRowCount) rows")
+            Text("\u{2248} \(tableVM.approximateRowCount) rows")
                 .foregroundStyle(.secondary)
                 .font(.caption)
         }

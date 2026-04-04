@@ -8,6 +8,7 @@ struct ConnectionFormView: View {
 
     let mode: Mode
     @EnvironmentObject var appVM: AppViewModel
+    @EnvironmentObject var connectionListVM: ConnectionListViewModel
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
@@ -63,27 +64,15 @@ struct ConnectionFormView: View {
                         .padding(.vertical, 4)
 
                     Section {
-                        Toggle("Connect via SSH Tunnel", isOn: $useSSHTunnel.animation())
-
-                        if useSSHTunnel {
-                            TextField("SSH Host:", text: $sshHost)
-                            TextField("SSH Port:", text: $sshPort)
-                            TextField("SSH User:", text: $sshUser)
-                            Picker("Auth Method:", selection: $sshAuthMethod) {
-                                ForEach(SSHAuthMethod.allCases, id: \.self) { method in
-                                    Text(method.displayName).tag(method)
-                                }
-                            }
-
-                            if sshAuthMethod == .keyFile {
-                                TextField("Key Path:", text: $sshKeyPath)
-                                    .help("Path to SSH private key (e.g. ~/.ssh/id_rsa). Leave empty to use SSH agent.")
-                            }
-
-                            if sshAuthMethod == .password {
-                                SecureField("SSH Password:", text: $sshPassword)
-                            }
-                        }
+                        SSHTunnelFormSection(
+                            useSSHTunnel: $useSSHTunnel,
+                            sshHost: $sshHost,
+                            sshPort: $sshPort,
+                            sshUser: $sshUser,
+                            sshAuthMethod: $sshAuthMethod,
+                            sshKeyPath: $sshKeyPath,
+                            sshPassword: $sshPassword
+                        )
                     } header: {
                         Text("SSH Tunnel")
                             .font(.subheadline)
@@ -126,7 +115,7 @@ struct ConnectionFormView: View {
             database = profile.database
             username = profile.username
             sslMode = profile.sslMode
-            password = appVM.connectionListVM.loadPasswordForProfile(profile)
+            password = connectionListVM.loadPasswordForProfile(profile)
 
             useSSHTunnel = profile.useSSHTunnel
             sshHost = profile.sshHost
@@ -134,7 +123,7 @@ struct ConnectionFormView: View {
             sshUser = profile.sshUser
             sshAuthMethod = profile.sshAuthMethod
             sshKeyPath = profile.sshKeyPath
-            sshPassword = appVM.connectionListVM.loadSSHPasswordForProfile(profile)
+            sshPassword = connectionListVM.loadSSHPasswordForProfile(profile)
         }
     }
 
@@ -165,9 +154,9 @@ struct ConnectionFormView: View {
 
         let sshPass: String? = useSSHTunnel ? sshPassword : nil
         if isEditing {
-            appVM.connectionListVM.updateProfile(profile, password: password, sshPassword: sshPass)
+            connectionListVM.updateProfile(profile, password: password, sshPassword: sshPass)
         } else {
-            appVM.connectionListVM.addProfile(profile, password: password, sshPassword: sshPass)
+            connectionListVM.addProfile(profile, password: password, sshPassword: sshPass)
         }
         dismiss()
     }
