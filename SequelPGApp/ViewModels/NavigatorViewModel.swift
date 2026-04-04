@@ -2,14 +2,14 @@ import Foundation
 
 /// Manages the database navigator state (schemas, tables, views).
 @MainActor
-final class NavigatorViewModel: ObservableObject {
-    @Published var databases: [String] = []
-    @Published var selectedDatabase: String = ""
-    @Published var schemas: [String] = []
-    @Published var selectedSchema: String = ""
-    @Published var tables: [DBObject] = []
-    @Published var views: [DBObject] = []
-    @Published var selectedObject: DBObject?
+@Observable final class NavigatorViewModel {
+    var databases: [String] = []
+    var selectedDatabase: String = ""
+    var schemas: [String] = []
+    var selectedSchema: String = ""
+    var tables: [DBObject] = []
+    var views: [DBObject] = []
+    var selectedObject: DBObject?
 
     func setDatabases(_ databases: [String], current: String) {
         self.databases = databases

@@ -1,10 +1,11 @@
 import SwiftUI
 
 struct NavigatorView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var navigatorVM: NavigatorViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(NavigatorViewModel.self) var navigatorVM
 
     var body: some View {
+        @Bindable var navigatorVM = navigatorVM
         VStack(spacing: 0) {
             HStack {
                 Text("Navigator")
@@ -30,7 +31,7 @@ struct NavigatorView: View {
                 .pickerStyle(.menu)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
-                .onChange(of: navigatorVM.selectedDatabase) { newValue in
+                .onChange(of: navigatorVM.selectedDatabase) { _, newValue in
                     if !newValue.isEmpty {
                         Task { await appVM.switchDatabase(newValue) }
                     }
@@ -46,7 +47,7 @@ struct NavigatorView: View {
                 .pickerStyle(.menu)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
-                .onChange(of: navigatorVM.selectedSchema) { newValue in
+                .onChange(of: navigatorVM.selectedSchema) { _, newValue in
                     if !newValue.isEmpty {
                         Task { await appVM.loadTablesAndViews(forSchema: newValue) }
                     }

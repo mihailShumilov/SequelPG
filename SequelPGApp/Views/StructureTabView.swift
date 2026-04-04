@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct StructureTabView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var tableVM: TableViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(TableViewModel.self) var tableVM
 
     var body: some View {
         if tableVM.columns.isEmpty {

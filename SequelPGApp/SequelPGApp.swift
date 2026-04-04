@@ -2,16 +2,16 @@ import SwiftUI
 
 @main
 struct SequelPGApp: App {
-    @StateObject private var appVM = AppViewModel()
+    @State private var appVM = AppViewModel()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appVM)
-                .environmentObject(appVM.connectionListVM)
-                .environmentObject(appVM.navigatorVM)
-                .environmentObject(appVM.tableVM)
-                .environmentObject(appVM.queryVM)
+                .environment(appVM)
+                .environment(appVM.connectionListVM)
+                .environment(appVM.navigatorVM)
+                .environment(appVM.tableVM)
+                .environment(appVM.queryVM)
         }
         .commands {
             CommandGroup(after: .newItem) {

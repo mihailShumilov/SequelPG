@@ -2,30 +2,30 @@ import Foundation
 
 /// Manages the query editor state and results.
 @MainActor
-final class QueryViewModel: ObservableObject {
-    @Published var queryText = ""
-    @Published var isExecuting = false
-    @Published var errorMessage: String?
-    @Published var showErrorDetail = false
+@Observable final class QueryViewModel {
+    var queryText = ""
+    var isExecuting = false
+    var errorMessage: String?
+    var showErrorDetail = false
 
     /// Table context detected from the last executed query (for inline editing).
-    @Published var editableTableContext: (schema: String, table: String)?
+    var editableTableContext: (schema: String, table: String)?
     /// Column metadata for the detected table (includes PK info).
-    @Published var editableColumns: [ColumnInfo] = []
+    var editableColumns: [ColumnInfo] = []
 
     /// Row index pending delete confirmation in query results.
-    @Published var deleteConfirmationRowIndex: Int?
+    var deleteConfirmationRowIndex: Int?
 
     /// Client-side sort state for query results.
-    @Published var sortColumn: String?
-    @Published var sortAscending: Bool = true
+    var sortColumn: String?
+    var sortAscending: Bool = true
 
-    @Published var result: QueryResult?
+    var result: QueryResult?
 
     /// Cached sorted result, rebuilt lazily when accessed after invalidation.
-    private var _sortedResult: QueryResult?
-    private var _sortedIndexMap: [Int] = []
-    private var _sortCacheValid = false
+    @ObservationIgnored private var _sortedResult: QueryResult?
+    @ObservationIgnored private var _sortedIndexMap: [Int] = []
+    @ObservationIgnored private var _sortCacheValid = false
 
     var sortedResult: QueryResult? {
         if !_sortCacheValid {

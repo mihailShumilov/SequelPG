@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct QueryTabView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var queryVM: QueryViewModel
-    @EnvironmentObject var navigatorVM: NavigatorViewModel
-    @EnvironmentObject var tableVM: TableViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(QueryViewModel.self) var queryVM
+    @Environment(NavigatorViewModel.self) var navigatorVM
+    @Environment(TableViewModel.self) var tableVM
 
     var body: some View {
+        @Bindable var queryVM = queryVM
+        @Bindable var tableVM = tableVM
         VSplitView {
             editorArea
                 .frame(minHeight: 100)
@@ -52,7 +54,8 @@ struct QueryTabView: View {
     }
 
     private var editorArea: some View {
-        VStack(spacing: 0) {
+        @Bindable var queryVM = queryVM
+        return VStack(spacing: 0) {
             HStack {
                 Button {
                     Task { await appVM.executeQuery(queryVM.queryText) }
@@ -111,7 +114,8 @@ struct QueryTabView: View {
     }
 
     private var resultsArea: some View {
-        VStack(spacing: 0) {
+        @Bindable var tableVM = tableVM
+        return VStack(spacing: 0) {
             if let error = queryVM.errorMessage {
                 errorBanner(error)
             }
@@ -174,7 +178,8 @@ struct QueryTabView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack {
+        @Bindable var queryVM = queryVM
+        return HStack {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
             Text(message)
@@ -191,8 +196,43 @@ struct QueryTabView: View {
     }
 }
 
-/// Custom grid for displaying query results with dynamic columns.
-/// Uses ScrollView instead of Table to support arbitrary column counts on macOS 13.
+/// Wrapper that gives each row a stable identity for use with Table.
+struct IdentifiedRow: Identifiable {
+    let id: Int // row index
+    let cells: [CellValue]
+}
+
+/// Wrapper that gives each column a stable identity for TableColumnForEach.
+struct IdentifiedColumn: Identifiable {
+    let id: Int // column index
+    let name: String
+}
+
+/// Comparator that sorts IdentifiedRow values by a specific column index.
+struct ColumnSortComparator: SortComparator {
+    var columnIndex: Int
+    var columnName: String
+    var order: SortOrder
+
+    func compare(_ lhs: IdentifiedRow, _ rhs: IdentifiedRow) -> ComparisonResult {
+        let lVal = lhs.cells[columnIndex].displayString
+        let rVal = rhs.cells[columnIndex].displayString
+        let result = lVal.localizedStandardCompare(rVal)
+        return order == .forward ? result : result.reversed
+    }
+}
+
+private extension ComparisonResult {
+    var reversed: ComparisonResult {
+        switch self {
+        case .orderedAscending: return .orderedDescending
+        case .orderedDescending: return .orderedAscending
+        case .orderedSame: return .orderedSame
+        }
+    }
+}
+
+/// Native macOS Table-based grid for displaying query results with dynamic columns.
 struct ResultsGridView: View {
     let result: QueryResult
     var columns: [ColumnInfo]
@@ -213,6 +253,7 @@ struct ResultsGridView: View {
     @FocusState private var insertFieldFocused: Bool
     @State private var editingCell: (row: Int, col: Int)?
     @State private var editingText: String = ""
+    @State private var sortOrder: [ColumnSortComparator] = []
     private let columnMinWidth: CGFloat = 100
 
     init(
@@ -247,113 +288,63 @@ struct ResultsGridView: View {
         self.onInsertCancel = onInsertCancel
     }
 
+    private var identifiedRows: [IdentifiedRow] {
+        result.rows.enumerated().map { idx, cells in
+            IdentifiedRow(id: idx, cells: cells)
+        }
+    }
+
+    private var identifiedColumns: [IdentifiedColumn] {
+        result.columns.enumerated().map { idx, name in
+            IdentifiedColumn(id: idx, name: name)
+        }
+    }
+
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView([.horizontal, .vertical]) {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        if result.rows.isEmpty {
-                            HStack(spacing: 0) {
-                                ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                                    Text("")
-                                        .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-
-                                    if colIdx < result.columns.count - 1 {
-                                        Divider()
-                                    }
-                                }
-                            }
-                            Divider()
-                        }
-                        ForEach(Array(result.rows.enumerated()), id: \.offset) { rowIdx, _ in
-                            HStack(spacing: 0) {
-                                ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                                    cellView(rowIdx: rowIdx, colIdx: colIdx)
-
-                                    if colIdx < result.columns.count - 1 {
-                                        Divider()
-                                    }
-                                }
-                            }
-                            .background(selectedRowIndex == rowIdx ? Color.accentColor.opacity(0.15) : (rowIdx % 2 == 0 ? Color.clear : Color.gray.opacity(0.05)))
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                isFocused = true
-                                onRowSelected?(rowIdx)
-                            }
-                            .contextMenu {
-                                if onDeleteRow != nil {
-                                    Button(role: .destructive) {
-                                        onDeleteRow?(rowIdx)
-                                    } label: {
-                                        Label("Delete Row", systemImage: "trash")
-                                    }
-                                }
-                            }
-
-                            Divider()
-                        }
-
-                        if isInsertingRow, let binding = insertRowValues {
-                            insertRowView(binding: binding)
-                            Divider()
-                        }
-                    } header: {
-                        HStack(spacing: 0) {
-                            ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                                let colName = result.columns[colIdx]
-                                HStack(spacing: 3) {
-                                    Text(colName)
-                                        .fontWeight(.semibold)
-                                        .lineLimit(1)
-                                    if sortColumn == colName {
-                                        Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                }
-                                .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 4)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    onColumnHeaderTapped?(colName)
-                                }
-
-                                if colIdx < result.columns.count - 1 {
-                                    Divider()
-                                }
-                            }
-                        }
-                        .background(Color(nsColor: .controlBackgroundColor))
+        VStack(spacing: 0) {
+            Table(identifiedRows, selection: $selectedRowIndex, sortOrder: $sortOrder) {
+                TableColumnForEach(identifiedColumns) { column in
+                    TableColumn(column.name, sortUsing: ColumnSortComparator(
+                        columnIndex: column.id,
+                        columnName: column.name,
+                        order: .forward
+                    )) { row in
+                        cellView(rowIdx: row.id, colIdx: column.id)
+                    }
+                    .width(min: columnMinWidth)
+                }
+            }
+            .tableStyle(.bordered(alternatesRowBackgrounds: true))
+            .contextMenu(forSelectionType: IdentifiedRow.ID.self) { selectedIds in
+                if let onDeleteRow, let rowIdx = selectedIds.first {
+                    Button(role: .destructive) {
+                        onDeleteRow(rowIdx)
+                    } label: {
+                        Label("Delete Row", systemImage: "trash")
                     }
                 }
-                .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
             }
-        }
-        .focusable()
-        .focused($isFocused)
-        .onMoveCommand { direction in
-            guard !result.rows.isEmpty else { return }
-            let current = selectedRowIndex ?? -1
-            let newIndex: Int
-            switch direction {
-            case .up:
-                newIndex = current <= 0 ? 0 : current - 1
-            case .down:
-                newIndex = min(result.rows.count - 1, current + 1)
-            default:
-                return
+            .onChange(of: selectedRowIndex) { _, newValue in
+                if let newValue {
+                    onRowSelected?(newValue)
+                }
             }
-            guard newIndex >= 0, newIndex < result.rows.count else { return }
-            onRowSelected?(newIndex)
-        }
-        .onDeleteCommand {
-            guard let onDeleteRow, let idx = selectedRowIndex else { return }
-            onDeleteRow(idx)
+            .onChange(of: sortOrder) { _, newOrder in
+                if let first = newOrder.first {
+                    onColumnHeaderTapped?(first.columnName)
+                }
+            }
+            .focusable()
+            .focused($isFocused)
+            .onDeleteCommand {
+                guard let onDeleteRow, let idx = selectedRowIndex else { return }
+                onDeleteRow(idx)
+            }
+
+            if isInsertingRow, let binding = insertRowValues {
+                Divider()
+                insertRowView(binding: binding)
+            }
         }
     }
 
@@ -365,9 +356,6 @@ struct ResultsGridView: View {
             TextField("", text: $editingText)
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
-                .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
                 .focused($editFieldFocused)
                 .onSubmit {
                     commitEdit()
@@ -380,9 +368,7 @@ struct ResultsGridView: View {
                 .lineLimit(1)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(cell.isNull ? .secondary : .primary)
-                .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
                     guard isEditable else { return }

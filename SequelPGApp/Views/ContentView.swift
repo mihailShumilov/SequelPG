@@ -1,27 +1,24 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var appVM: AppViewModel
+    @Environment(AppViewModel.self) var appVM
 
     var body: some View {
         Group {
             if appVM.isConnected {
                 HStack(spacing: 0) {
                     SidebarView()
-                        .environmentObject(appVM)
                         .frame(minWidth: 200, idealWidth: 250, maxWidth: 350)
 
                     Divider()
 
                     MainAreaView()
-                        .environmentObject(appVM)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     if appVM.showInspector {
                         Divider()
 
                         InspectorView()
-                            .environmentObject(appVM)
                             .frame(minWidth: 180, idealWidth: 220, maxWidth: 300)
                     }
                 }
@@ -39,7 +36,6 @@ struct ContentView: View {
                 }
             } else {
                 StartPageView()
-                    .environmentObject(appVM)
             }
         }
         .frame(minWidth: 900, minHeight: 600)

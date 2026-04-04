@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct InspectorView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var tableVM: TableViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(TableViewModel.self) var tableVM
     @State private var editingColumn: String?
     @State private var editingText: String = ""
     @State private var showDeleteConfirmation = false

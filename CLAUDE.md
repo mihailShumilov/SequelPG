@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SequelPG is a native macOS PostgreSQL client built with SwiftUI, targeting macOS 13.0+ with Swift 5.9+ and Xcode 15+. It uses PostgresNIO as the database driver.
+SequelPG is a native macOS PostgreSQL client built with SwiftUI, targeting macOS 14.0+ with Swift 5.9+ and Xcode 15+. It uses PostgresNIO as the database driver.
 
 ## Build & Run
 
@@ -34,7 +34,7 @@ xcodebuild test -project SequelPG.xcodeproj -scheme SequelPG \
 Strict **MVVM** with enforced layer boundaries:
 
 ```
-Views (SwiftUI) → ViewModels (@MainActor, ObservableObject) → Services → PostgresNIO
+Views (SwiftUI) → ViewModels (@MainActor, @Observable) → Services → PostgresNIO
 ```
 
 **Key rules:**
@@ -42,7 +42,7 @@ Views (SwiftUI) → ViewModels (@MainActor, ObservableObject) → Services → P
 - Only `DatabaseClient` (an actor implementing `PostgresClientProtocol`) touches PostgresNIO
 - Only `ConnectionStore` touches UserDefaults
 - Only `KeychainService` touches the Keychain
-- `AppViewModel` is the root coordinator — it owns `ConnectionListViewModel`, `NavigatorViewModel`, `TableViewModel`, and `QueryViewModel`, forwarding their `objectWillChange` to trigger SwiftUI updates
+- `AppViewModel` is the root coordinator — it owns `ConnectionListViewModel`, `NavigatorViewModel`, `TableViewModel`, and `QueryViewModel`, injected into the SwiftUI environment via `.environment()`
 
 **Services layer:**
 - `DatabaseClient` — actor wrapping PostgresNIO with introspection caching (schemas, tables, views, columns, PKs). All DB access goes through `PostgresClientProtocol` for testability.

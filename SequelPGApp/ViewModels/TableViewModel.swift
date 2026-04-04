@@ -2,22 +2,22 @@ import Foundation
 
 /// Manages structure and content tab state for a selected table/view.
 @MainActor
-final class TableViewModel: ObservableObject {
-    @Published var columns: [ColumnInfo] = []
-    @Published var contentResult: QueryResult?
-    @Published var isLoadingContent = false
-    @Published var currentPage = 0
-    @Published var pageSize = 50
-    @Published var approximateRowCount: Int64 = 0
-    @Published var selectedObjectName: String?
-    @Published var selectedObjectColumnCount = 0
-    @Published var selectedRowIndex: Int?
-    @Published var selectedRowData: [(column: String, value: CellValue)]?
-    @Published var sortColumn: String?
-    @Published var sortAscending: Bool = true
-    @Published var deleteConfirmationRowIndex: Int?
-    @Published var isInsertingRow = false
-    @Published var newRowValues: [String: String] = [:]
+@Observable final class TableViewModel {
+    var columns: [ColumnInfo] = []
+    var contentResult: QueryResult?
+    var isLoadingContent = false
+    var currentPage = 0
+    var pageSize = 50
+    var approximateRowCount: Int64 = 0
+    var selectedObjectName: String?
+    var selectedObjectColumnCount = 0
+    var selectedRowIndex: Int?
+    var selectedRowData: [(column: String, value: CellValue)]?
+    var sortColumn: String?
+    var sortAscending: Bool = true
+    var deleteConfirmationRowIndex: Int?
+    var isInsertingRow = false
+    var newRowValues: [String: String] = [:]
 
     var totalPages: Int {
         guard pageSize > 0 else { return 0 }
@@ -27,7 +27,7 @@ final class TableViewModel: ObservableObject {
     var pageSizeOptions: [Int] { [50, 100, 200] }
 
     /// Whether any column is a primary key (cached on setColumns).
-    @Published private(set) var hasPrimaryKey = false
+    private(set) var hasPrimaryKey = false
 
     func setColumns(_ cols: [ColumnInfo]) {
         columns = cols

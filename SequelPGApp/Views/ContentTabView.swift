@@ -1,11 +1,12 @@
 import SwiftUI
 
 struct ContentTabView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var tableVM: TableViewModel
-    @EnvironmentObject var navigatorVM: NavigatorViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(TableViewModel.self) var tableVM
+    @Environment(NavigatorViewModel.self) var navigatorVM
 
     var body: some View {
+        @Bindable var tableVM = tableVM
         VStack(spacing: 0) {
             if tableVM.isLoadingContent {
                 ProgressView("Loading...")
@@ -59,7 +60,7 @@ struct ContentTabView: View {
                 Task { await appVM.loadContentPage() }
             }
         }
-        .onChange(of: navigatorVM.selectedObject) { _ in
+        .onChange(of: navigatorVM.selectedObject) { _, _ in
             if navigatorVM.selectedObject != nil, appVM.selectedTab == .content {
                 Task { await appVM.loadContentPage() }
             }
@@ -102,7 +103,8 @@ struct ContentTabView: View {
     }
 
     private var paginationBar: some View {
-        HStack {
+        @Bindable var tableVM = tableVM
+        return HStack {
             Button {
                 appVM.startInsertRow()
             } label: {
@@ -148,7 +150,7 @@ struct ContentTabView: View {
             }
             .frame(width: 130)
             .disabled(tableVM.isInsertingRow)
-            .onChange(of: tableVM.pageSize) { _ in
+            .onChange(of: tableVM.pageSize) { _, _ in
                 tableVM.currentPage = 0
                 appVM.clearSelectedRow()
                 Task { await appVM.loadContentPage() }

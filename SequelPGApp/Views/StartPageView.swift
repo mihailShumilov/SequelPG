@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct StartPageView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var connectionListVM: ConnectionListViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(ConnectionListViewModel.self) var connectionListVM
 
     // MARK: - Form State
 
@@ -41,7 +41,8 @@ struct StartPageView: View {
     // MARK: - Left Column: Branding
 
     private var brandingColumn: some View {
-        VStack(spacing: 12) {
+        @Bindable var connectionListVM = connectionListVM
+        return VStack(spacing: 12) {
             Spacer()
 
             Image(nsImage: NSApp.applicationIconImage)
@@ -82,7 +83,8 @@ struct StartPageView: View {
     // MARK: - Center Column: Connection List
 
     private var connectionListColumn: some View {
-        List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
+        @Bindable var connectionListVM = connectionListVM
+        return List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
             HStack(spacing: 8) {
                 Image(systemName: "server.rack")
                     .foregroundStyle(.secondary)
@@ -114,7 +116,7 @@ struct StartPageView: View {
         }
         .listStyle(.sidebar)
         .frame(minWidth: 250)
-        .onChange(of: connectionListVM.selectedProfileId) { newId in
+        .onChange(of: connectionListVM.selectedProfileId) { _, newId in
             // Auto-save previous profile before switching
             if let prevId = previousSelectedId, prevId != newId {
                 saveFormToProfile(id: prevId)

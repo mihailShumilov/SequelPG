@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct MainAreaView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var navigatorVM: NavigatorViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(NavigatorViewModel.self) var navigatorVM
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,13 +34,10 @@ struct MainAreaView: View {
                 switch appVM.selectedTab {
                 case .structure:
                     StructureTabView()
-                        .environmentObject(appVM)
                 case .content:
                     ContentTabView()
-                        .environmentObject(appVM)
                 case .query:
                     QueryTabView()
-                        .environmentObject(appVM)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

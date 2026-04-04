@@ -10,21 +10,21 @@ enum ConnectionStatus {
 
 /// Manages the list of saved connections and their UI state.
 @MainActor
-final class ConnectionListViewModel: ObservableObject {
-    private let store: ConnectionStore
-    private let keychainService: KeychainServiceProtocol
+@Observable final class ConnectionListViewModel {
+    @ObservationIgnored private let store: ConnectionStore
+    @ObservationIgnored private let keychainService: KeychainServiceProtocol
 
     /// In-memory password cache to avoid repeated Keychain reads.
     /// Populated lazily on first access per profile; written through on save.
-    private var passwordCache: [String: String] = [:]
+    @ObservationIgnored private var passwordCache: [String: String] = [:]
 
-    @Published var profiles: [ConnectionProfile] = []
-    @Published var connectionStatuses: [UUID: ConnectionStatus] = [:]
-    @Published var showAddForm = false
-    @Published var editingProfile: ConnectionProfile?
-    @Published var deleteTarget: ConnectionProfile?
-    @Published var selectedProfileId: UUID?
-    @Published var filterText: String = ""
+    var profiles: [ConnectionProfile] = []
+    var connectionStatuses: [UUID: ConnectionStatus] = [:]
+    var showAddForm = false
+    var editingProfile: ConnectionProfile?
+    var deleteTarget: ConnectionProfile?
+    var selectedProfileId: UUID?
+    var filterText: String = ""
 
     var filteredProfiles: [ConnectionProfile] {
         if filterText.isEmpty { return profiles }

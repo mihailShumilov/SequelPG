@@ -1,4 +1,3 @@
-import Combine
 import XCTest
 @testable import SequelPG
 
@@ -322,68 +321,6 @@ final class QueryViewModelTests: XCTestCase {
         vm.errorMessage = "Some error"
         XCTAssertTrue(vm.showErrorDetail)
         XCTAssertEqual(vm.errorMessage, "Some error")
-    }
-
-    // MARK: - ObservableObject / Combine Publisher
-
-    func testObjectWillChangePublishesOnQueryTextChange() {
-        let expectation = expectation(description: "objectWillChange fires for queryText")
-        let cancellable = vm.objectWillChange.sink { _ in
-            expectation.fulfill()
-        }
-
-        vm.queryText = "SELECT 1"
-
-        wait(for: [expectation], timeout: 1.0)
-        cancellable.cancel()
-    }
-
-    func testObjectWillChangePublishesOnResultChange() {
-        let expectation = expectation(description: "objectWillChange fires for result")
-        let cancellable = vm.objectWillChange.sink { _ in
-            expectation.fulfill()
-        }
-
-        vm.result = makeQueryResult(columns: ["x"], rows: [])
-
-        wait(for: [expectation], timeout: 1.0)
-        cancellable.cancel()
-    }
-
-    func testObjectWillChangePublishesOnIsExecutingChange() {
-        let expectation = expectation(description: "objectWillChange fires for isExecuting")
-        let cancellable = vm.objectWillChange.sink { _ in
-            expectation.fulfill()
-        }
-
-        vm.isExecuting = true
-
-        wait(for: [expectation], timeout: 1.0)
-        cancellable.cancel()
-    }
-
-    func testObjectWillChangePublishesOnErrorMessageChange() {
-        let expectation = expectation(description: "objectWillChange fires for errorMessage")
-        let cancellable = vm.objectWillChange.sink { _ in
-            expectation.fulfill()
-        }
-
-        vm.errorMessage = "error"
-
-        wait(for: [expectation], timeout: 1.0)
-        cancellable.cancel()
-    }
-
-    func testObjectWillChangePublishesOnShowErrorDetailChange() {
-        let expectation = expectation(description: "objectWillChange fires for showErrorDetail")
-        let cancellable = vm.objectWillChange.sink { _ in
-            expectation.fulfill()
-        }
-
-        vm.showErrorDetail = true
-
-        wait(for: [expectation], timeout: 1.0)
-        cancellable.cancel()
     }
 
     // MARK: - Multiple Instances

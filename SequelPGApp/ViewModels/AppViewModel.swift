@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 import OSLog
 import SwiftUI
@@ -14,27 +13,26 @@ struct CascadeDeleteContext {
 
 /// Root application state coordinating connections and navigation.
 @MainActor
-final class AppViewModel: ObservableObject {
-    let connectionStore: ConnectionStore
-    let keychainService: KeychainServiceProtocol
-    let dbClient: any PostgresClientProtocol
+@Observable final class AppViewModel {
+    @ObservationIgnored let connectionStore: ConnectionStore
+    @ObservationIgnored let keychainService: KeychainServiceProtocol
+    @ObservationIgnored let dbClient: any PostgresClientProtocol
 
-    @Published var connectionListVM: ConnectionListViewModel
-    @Published var navigatorVM: NavigatorViewModel
-    @Published var tableVM: TableViewModel
-    @Published var queryVM: QueryViewModel
+    let connectionListVM: ConnectionListViewModel
+    let navigatorVM: NavigatorViewModel
+    let tableVM: TableViewModel
+    let queryVM: QueryViewModel
 
-    @Published var selectedTab: MainTab = .query
-    @Published var showInspector = true
-    @Published var isConnected = false
-    @Published var connectedProfileName: String?
-    @Published var errorMessage: String?
-    @Published var cascadeDeleteContext: CascadeDeleteContext?
+    var selectedTab: MainTab = .query
+    var showInspector = true
+    var isConnected = false
+    var connectedProfileName: String?
+    var errorMessage: String?
+    var cascadeDeleteContext: CascadeDeleteContext?
 
-    private var connectedProfile: ConnectionProfile?
-    private var connectedPassword: String?
-    private var connectedSSHPassword: String?
-    private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private var connectedProfile: ConnectionProfile?
+    @ObservationIgnored private var connectedPassword: String?
+    @ObservationIgnored private var connectedSSHPassword: String?
 
     enum MainTab: String, CaseIterable {
         case structure = "Structure"
@@ -59,7 +57,7 @@ final class AppViewModel: ObservableObject {
         self.tableVM = TableViewModel()
         self.queryVM = QueryViewModel()
 
-        // Child VMs are injected as separate @EnvironmentObject so views
+        // Child VMs are injected as separate @Environment values so views
         // observe only the VM they need, avoiding whole-tree re-renders.
     }
 

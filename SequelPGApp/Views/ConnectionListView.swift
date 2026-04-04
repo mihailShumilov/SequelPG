@@ -1,10 +1,11 @@
 import SwiftUI
 
 struct ConnectionListView: View {
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var connectionListVM: ConnectionListViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(ConnectionListViewModel.self) var connectionListVM
 
     var body: some View {
+        @Bindable var connectionListVM = connectionListVM
         VStack(spacing: 0) {
             HStack {
                 Text("Connections")
@@ -58,11 +59,13 @@ struct ConnectionListView: View {
         }
         .sheet(isPresented: $connectionListVM.showAddForm) {
             ConnectionFormView(mode: .add)
-                .environmentObject(appVM)
+                .environment(appVM)
+                .environment(connectionListVM)
         }
         .sheet(item: $connectionListVM.editingProfile) { profile in
             ConnectionFormView(mode: .edit(profile))
-                .environmentObject(appVM)
+                .environment(appVM)
+                .environment(connectionListVM)
         }
         .alert("Delete Connection?", isPresented: .init(
             get: { connectionListVM.deleteTarget != nil },

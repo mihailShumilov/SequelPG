@@ -7,8 +7,8 @@ struct ConnectionFormView: View {
     }
 
     let mode: Mode
-    @EnvironmentObject var appVM: AppViewModel
-    @EnvironmentObject var connectionListVM: ConnectionListViewModel
+    @Environment(AppViewModel.self) var appVM
+    @Environment(ConnectionListViewModel.self) var connectionListVM
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
