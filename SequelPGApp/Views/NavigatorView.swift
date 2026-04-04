@@ -52,12 +52,12 @@ struct NavigatorView: View {
                         Task { await appVM.loadTablesAndViews(forSchema: newValue) }
                     }
                 }
-                .onAppear {
+                .task {
                     // Only load if we have a schema but no tables yet —
                     // avoids double-loading when onChange also fires.
                     let schema = navigatorVM.selectedSchema
                     if !schema.isEmpty, navigatorVM.tables.isEmpty, navigatorVM.views.isEmpty {
-                        Task { await appVM.loadTablesAndViews(forSchema: schema) }
+                        await appVM.loadTablesAndViews(forSchema: schema)
                     }
                 }
             }

@@ -325,7 +325,7 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertNil(sut.selectedRowData)
     }
 
-    // MARK: - @Published property mutation
+    // MARK: - Observable property mutation
 
     func testPageSizeCanBeSetToAnyValue() {
         sut.pageSize = 200

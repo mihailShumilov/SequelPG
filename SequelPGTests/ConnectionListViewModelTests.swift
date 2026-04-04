@@ -510,7 +510,7 @@ final class ConnectionListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.statusColor(for: unknownId), .gray)
     }
 
-    // MARK: - @Published properties behavior
+    // MARK: - Observable properties behavior
 
     func testShowAddFormDefaultsToFalse() {
         XCTAssertFalse(sut.showAddForm)

@@ -55,9 +55,9 @@ struct ContentTabView: View {
             Divider()
             paginationBar
         }
-        .onAppear {
+        .task {
             if navigatorVM.selectedObject != nil, tableVM.contentResult == nil {
-                Task { await appVM.loadContentPage() }
+                await appVM.loadContentPage()
             }
         }
         .onChange(of: navigatorVM.selectedObject) { _, _ in
