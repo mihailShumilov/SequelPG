@@ -22,6 +22,7 @@ protocol PostgresClientProtocol: Sendable {
     func invalidateCache() async
     func listDatabases() async throws -> [String]
     func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
+    func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String
 }
 
 /// The sole component that communicates with PostgreSQL via PostgresNIO.
@@ -914,5 +915,141 @@ actor DatabaseClient: PostgresClientProtocol {
         }
 
         Log.db.info("Switched to database \(database, privacy: .public) on \(effectiveHost, privacy: .public):\(effectivePort)")
+    }
+
+    func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String {
+        guard let client else { throw AppError.notConnected }
+        let esc = schema.replacingOccurrences(of: "'", with: "''")
+        let escName = name.replacingOccurrences(of: "'", with: "''")
+
+        let sql: String
+        switch type {
+        case .function, .procedure, .aggregate, .triggerFunction:
+            // For functions, name may include args like "my_func(integer, text)"
+            // Extract just the name part for the OID lookup
+            let baseName = name.contains("(") ? String(name.prefix(upTo: name.firstIndex(of: "(")!)) : name
+            let escBase = baseName.replacingOccurrences(of: "'", with: "''")
+            sql = """
+                SELECT pg_get_functiondef(p.oid)
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND p.proname = '\(escBase)'
+                LIMIT 1
+                """
+        case .view:
+            sql = """
+                SELECT 'CREATE OR REPLACE VIEW ' || '\(esc)' || '.' || '\(escName)' || ' AS ' || chr(10) || pg_get_viewdef(c.oid, true)
+                FROM pg_class c
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND c.relname = '\(escName)' AND c.relkind = 'v'
+                """
+        case .materializedView:
+            sql = """
+                SELECT 'CREATE MATERIALIZED VIEW ' || '\(esc)' || '.' || '\(escName)' || ' AS ' || chr(10) || pg_get_viewdef(c.oid, true)
+                FROM pg_class c
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND c.relname = '\(escName)' AND c.relkind = 'm'
+                """
+        case .sequence:
+            sql = """
+                SELECT 'CREATE SEQUENCE ' || '\(esc)' || '.' || '\(escName)' || chr(10)
+                    || '  INCREMENT ' || increment_by || chr(10)
+                    || '  MINVALUE ' || min_value || chr(10)
+                    || '  MAXVALUE ' || max_value || chr(10)
+                    || '  START ' || start_value || chr(10)
+                    || '  CACHE ' || cache_size
+                    || CASE WHEN cycle THEN chr(10) || '  CYCLE' ELSE '' END || ';'
+                FROM pg_sequences
+                WHERE schemaname = '\(esc)' AND sequencename = '\(escName)'
+                """
+        case .type:
+            sql = """
+                SELECT CASE t.typtype
+                    WHEN 'e' THEN 'CREATE TYPE ' || '\(esc)' || '.' || '\(escName)' || ' AS ENUM (' || chr(10)
+                        || string_agg('  ' || quote_literal(e.enumlabel), ',' || chr(10) ORDER BY e.enumsortorder)
+                        || chr(10) || ');'
+                    WHEN 'c' THEN 'CREATE TYPE ' || '\(esc)' || '.' || '\(escName)' || ' AS (' || chr(10)
+                        || (SELECT string_agg('  ' || a.attname || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod), ',' || chr(10) ORDER BY a.attnum)
+                            FROM pg_attribute a WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped)
+                        || chr(10) || ');'
+                    WHEN 'd' THEN pg_catalog.format_type(t.oid, NULL)
+                    ELSE '-- Type definition not available'
+                END AS ddl
+                FROM pg_type t
+                JOIN pg_namespace n ON t.typnamespace = n.oid
+                LEFT JOIN pg_enum e ON t.typtype = 'e' AND e.enumtypid = t.oid
+                WHERE n.nspname = '\(esc)' AND t.typname = '\(escName)'
+                GROUP BY t.typtype, t.typrelid, t.oid
+                """
+        case .domain:
+            sql = """
+                SELECT 'CREATE DOMAIN ' || '\(esc)' || '.' || '\(escName)' || ' AS '
+                    || pg_catalog.format_type(t.typbasetype, t.typtypmod)
+                    || COALESCE(' DEFAULT ' || t.typdefault, '')
+                    || COALESCE(chr(10) || string_agg('  CONSTRAINT ' || con.conname || ' ' || pg_get_constraintdef(con.oid), chr(10)), '')
+                    || ';'
+                FROM pg_type t
+                JOIN pg_namespace n ON t.typnamespace = n.oid
+                LEFT JOIN pg_constraint con ON con.contypid = t.oid
+                WHERE n.nspname = '\(esc)' AND t.typname = '\(escName)'
+                GROUP BY t.typbasetype, t.typtypmod, t.typdefault
+                """
+        case .collation:
+            sql = """
+                SELECT 'CREATE COLLATION ' || '\(esc)' || '.' || '\(escName)' || ' ('
+                    || 'LOCALE = ' || quote_literal(COALESCE(c.collcollate, ''))
+                    || ');'
+                FROM pg_collation c
+                JOIN pg_namespace n ON c.collnamespace = n.oid
+                WHERE n.nspname = '\(esc)' AND c.collname = '\(escName)'
+                """
+        case .foreignTable:
+            sql = """
+                SELECT 'CREATE FOREIGN TABLE ' || '\(esc)' || '.' || '\(escName)' || ' (' || chr(10)
+                    || string_agg('  ' || a.attname || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod), ',' || chr(10) ORDER BY a.attnum)
+                    || chr(10) || ') SERVER ' || s.srvname || ';'
+                FROM pg_class c
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                JOIN pg_foreign_table ft ON ft.ftrelid = c.oid
+                JOIN pg_foreign_server s ON ft.ftserver = s.oid
+                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                WHERE n.nspname = '\(esc)' AND c.relname = '\(escName)'
+                GROUP BY s.srvname
+                """
+        case .ftsConfiguration:
+            sql = "SELECT '-- FTS Configuration: \(escName)' || chr(10) || '-- Use pg_ts_config_map for details'"
+        case .ftsDictionary:
+            sql = "SELECT '-- FTS Dictionary: \(escName)' || chr(10) || '-- Use pg_ts_dict for details'"
+        case .ftsParser:
+            sql = "SELECT '-- FTS Parser: \(escName)' || chr(10) || '-- Use pg_ts_parser for details'"
+        case .ftsTemplate:
+            sql = "SELECT '-- FTS Template: \(escName)' || chr(10) || '-- Use pg_ts_template for details'"
+        case .operator:
+            sql = """
+                SELECT '-- Operator: ' || o.oprname || chr(10)
+                    || '-- Left type: ' || COALESCE(lt.typname, 'NONE') || chr(10)
+                    || '-- Right type: ' || COALESCE(rt.typname, 'NONE') || chr(10)
+                    || '-- Result type: ' || res.typname || chr(10)
+                    || '-- Function: ' || p.proname
+                FROM pg_operator o
+                JOIN pg_namespace n ON o.oprnamespace = n.oid
+                LEFT JOIN pg_type lt ON o.oprleft = lt.oid
+                LEFT JOIN pg_type rt ON o.oprright = rt.oid
+                JOIN pg_type res ON o.oprresult = res.oid
+                JOIN pg_proc p ON o.oprcode = p.oid
+                WHERE n.nspname = '\(esc)' AND o.oprname = '\(escName)'
+                LIMIT 1
+                """
+        case .table:
+            sql = "SELECT '-- Use Structure tab for table details'"
+        }
+
+        let rows = try await client.query(PostgresQuery(unsafeSQL: sql))
+        for try await row in rows {
+            if let (ddl,) = try? row.decode(String.self) {
+                return ddl
+            }
+        }
+        return "-- Definition not available"
     }
 }

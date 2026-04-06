@@ -9,6 +9,17 @@ struct NavigatorView: View {
     @State private var showCreateTable = false
     @State private var createTableSchema = ""
 
+    @State private var showCreateView = false
+    @State private var showCreateFunction = false
+    @State private var showCreateSequence = false
+    @State private var showCreateType = false
+    @State private var showCreateDomain = false
+    @State private var showCreateMatView = false
+    @State private var showCreateGeneric: ObjectCategory?
+    @State private var dropTarget: DBObject?
+    @State private var showDropConfirmation = false
+    @State private var createSchema = ""
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -29,6 +40,51 @@ struct NavigatorView: View {
             CreateTableSheet(schema: createTableSchema) { name, columns in
                 Task { await appVM.createTable(schema: createTableSchema, name: name, columns: columns) }
             }
+        }
+        .sheet(isPresented: $showCreateView) {
+            CreateViewSheet(schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .sheet(isPresented: $showCreateMatView) {
+            CreateMaterializedViewSheet(schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .sheet(isPresented: $showCreateFunction) {
+            CreateFunctionSheet(schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .sheet(isPresented: $showCreateSequence) {
+            CreateSequenceSheet(schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .sheet(isPresented: $showCreateType) {
+            CreateTypeSheet(schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .sheet(isPresented: $showCreateDomain) {
+            CreateDomainSheet(schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .sheet(item: $showCreateGeneric) { category in
+            GenericCreateSheet(title: category.rawValue, schema: createSchema) { sql in
+                Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
+            }
+        }
+        .alert("Drop Object?", isPresented: $showDropConfirmation, presenting: dropTarget) { obj in
+            Button("Cancel", role: .cancel) { dropTarget = nil }
+            Button("Drop", role: .destructive) {
+                let target = obj
+                dropTarget = nil
+                Task { await appVM.dropObject(target) }
+            }
+        } message: { obj in
+            Text("\"\(obj.name)\" will be permanently dropped.")
         }
     }
 
@@ -151,6 +207,22 @@ struct NavigatorView: View {
                         createTableSchema = schema
                         showCreateTable = true
                     }
+                    Button("New View...") {
+                        createSchema = schema
+                        showCreateView = true
+                    }
+                    Button("New Function...") {
+                        createSchema = schema
+                        showCreateFunction = true
+                    }
+                    Button("New Sequence...") {
+                        createSchema = schema
+                        showCreateSequence = true
+                    }
+                    Button("New Type...") {
+                        createSchema = schema
+                        showCreateType = true
+                    }
                 }
         }
     }
@@ -179,13 +251,18 @@ struct NavigatorView: View {
             ForEach(objects) { obj in
                 Label(obj.name, systemImage: category.icon)
                     .tag(obj)
+                    .contextMenu {
+                        Button("Drop \(obj.name)...", role: .destructive) {
+                            dropTarget = obj
+                            showDropConfirmation = true
+                        }
+                    }
             }
-            if category == .tables {
+            if let action = createAction(for: category, schema: schema) {
                 Button {
-                    createTableSchema = schema
-                    showCreateTable = true
+                    action()
                 } label: {
-                    Label("New Table...", systemImage: "plus")
+                    Label("New \(createLabel(for: category))...", systemImage: "plus")
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -209,6 +286,67 @@ struct NavigatorView: View {
             get: { appVM.navigatorVM.isCategoryExpanded(db, schema, category) },
             set: { appVM.navigatorVM.setCategoryExpanded(db, schema, category, $0) }
         )
+    }
+
+    // MARK: - Create Action Helpers
+
+    private func createLabel(for category: ObjectCategory) -> String {
+        switch category {
+        case .tables: return "Table"
+        case .views: return "View"
+        case .materializedViews: return "Materialized View"
+        case .functions: return "Function"
+        case .sequences: return "Sequence"
+        case .types: return "Type"
+        case .domains: return "Domain"
+        default: return category.rawValue
+        }
+    }
+
+    private func createAction(for category: ObjectCategory, schema: String) -> (() -> Void)? {
+        switch category {
+        case .tables:
+            return {
+                createTableSchema = schema
+                showCreateTable = true
+            }
+        case .views:
+            return {
+                createSchema = schema
+                showCreateView = true
+            }
+        case .materializedViews:
+            return {
+                createSchema = schema
+                showCreateMatView = true
+            }
+        case .functions, .triggerFunctions:
+            return {
+                createSchema = schema
+                showCreateFunction = true
+            }
+        case .sequences:
+            return {
+                createSchema = schema
+                showCreateSequence = true
+            }
+        case .types:
+            return {
+                createSchema = schema
+                showCreateType = true
+            }
+        case .domains:
+            return {
+                createSchema = schema
+                showCreateDomain = true
+            }
+        case .collations, .ftsConfigurations, .ftsDictionaries, .ftsParsers, .ftsTemplates,
+             .foreignTables, .operators, .aggregates, .procedures:
+            return {
+                createSchema = schema
+                showCreateGeneric = category
+            }
+        }
     }
 
 }

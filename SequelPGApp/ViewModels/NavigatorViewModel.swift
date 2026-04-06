@@ -2,7 +2,8 @@ import Foundation
 
 /// Object category keys used for tree expansion and grouping.
 /// Order matches pgAdmin convention.
-enum ObjectCategory: String, CaseIterable {
+enum ObjectCategory: String, CaseIterable, Identifiable {
+    var id: String { rawValue }
     case aggregates = "Aggregates"
     case collations = "Collations"
     case domains = "Domains"

@@ -255,6 +255,7 @@ struct ResultsGridView: View {
     @State private var editingText: String = ""
     @State private var originalEditText: String = ""
     @State private var sortOrder: [ColumnSortComparator] = []
+    @State private var fieldEditorCell: (row: Int, col: Int)?
     private let columnMinWidth: CGFloat = 100
 
     init(
@@ -349,12 +350,29 @@ struct ResultsGridView: View {
         }
     }
 
+    /// Returns the FieldEditorKind for a column index, or .plain if no column info.
+    private func editorKind(for colIdx: Int, cell: CellValue) -> FieldEditorKind {
+        let colName = colIdx < result.columns.count ? result.columns[colIdx] : ""
+        guard let info = columns.first(where: { $0.name == colName }) else { return .plain }
+        let value = cell.isNull ? "" : cell.displayString
+        return FieldEditorKind(udtName: info.udtName, dataType: info.dataType, value: value)
+    }
+
+    /// Whether this column should use the rich popover editor instead of inline TextField.
+    private func needsRichEditor(kind: FieldEditorKind) -> Bool {
+        switch kind {
+        case .json, .array, .boolean, .longText: return true
+        case .plain: return false
+        }
+    }
+
     @ViewBuilder
     private func cellView(rowIdx: Int, colIdx: Int) -> some View {
         // Guard against stale row/column IDs that the Table may request
         // after the result changes (e.g., when switching tabs).
         if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count {
             let cell = result.rows[rowIdx][colIdx]
+            let kind = editorKind(for: colIdx, cell: cell)
             if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
                 TextField("NULL", text: $editingText)
                     .textFieldStyle(.plain)
@@ -372,28 +390,63 @@ struct ResultsGridView: View {
                         }
                     }
             } else {
-                Text(cell.displayString)
-                    .lineLimit(1)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(cell.isNull ? .secondary : .primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 1) {
-                        // Select this row and update the inspector
-                        if selectedRowIndex != rowIdx {
-                            selectedRowIndex = rowIdx
-                            onRowSelected?(rowIdx)
-                        }
-                        guard isEditable else { return }
-                        if editingCell != nil {
-                            commitEdit()
-                        }
+                HStack(spacing: 4) {
+                    CellTypeBadge(kind: kind)
+                    Text(cell.displayString)
+                        .lineLimit(1)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(cell.isNull ? .secondary : .primary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 1) {
+                    // Select this row and update the inspector
+                    if selectedRowIndex != rowIdx {
+                        selectedRowIndex = rowIdx
+                        onRowSelected?(rowIdx)
+                    }
+                    guard isEditable else { return }
+                    if editingCell != nil {
+                        commitEdit()
+                    }
+                    if needsRichEditor(kind: kind) {
+                        fieldEditorCell = (row: rowIdx, col: colIdx)
+                    } else {
                         startEditing(row: rowIdx, col: colIdx, cell: cell)
                     }
+                }
+                .popover(
+                    isPresented: Binding(
+                        get: { fieldEditorCell?.row == rowIdx && fieldEditorCell?.col == colIdx },
+                        set: { if !$0 { fieldEditorCell = nil } }
+                    ),
+                    arrowEdge: .bottom
+                ) {
+                    fieldEditorPopover(rowIdx: rowIdx, colIdx: colIdx, cell: cell)
+                }
             }
         } else {
             Text("")
         }
+    }
+
+    @ViewBuilder
+    private func fieldEditorPopover(rowIdx: Int, colIdx: Int, cell: CellValue) -> some View {
+        let colName = colIdx < result.columns.count ? result.columns[colIdx] : "Column"
+        let info = columns.first(where: { $0.name == colName })
+        FieldEditorView(
+            columnName: colName,
+            dataType: info?.dataType ?? "text",
+            isNullable: info?.isNullable ?? true,
+            initialValue: cell,
+            onSave: { newText in
+                fieldEditorCell = nil
+                onCellEdited?(rowIdx, colIdx, newText)
+            },
+            onCancel: {
+                fieldEditorCell = nil
+            }
+        )
     }
 
     private func startEditing(row: Int, col: Int, cell: CellValue) {

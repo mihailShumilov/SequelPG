@@ -36,6 +36,8 @@ struct MainAreaView: View {
                     StructureTabView()
                 case .content:
                     ContentTabView()
+                case .definition:
+                    ObjectDefinitionView()
                 case .query:
                     QueryTabView()
                 }
@@ -47,6 +49,8 @@ struct MainAreaView: View {
     private func isTabEnabled(_ tab: AppViewModel.MainTab) -> Bool {
         switch tab {
         case .structure, .content:
+            return navigatorVM.selectedObject != nil
+        case .definition:
             return navigatorVM.selectedObject != nil
         case .query:
             return appVM.isConnected

@@ -6,6 +6,7 @@ struct InspectorView: View {
     @State private var editingColumn: String?
     @State private var editingText: String = ""
     @State private var showDeleteConfirmation = false
+    @State private var fieldEditorColumn: String?
     @FocusState private var editFieldFocused: Bool
 
     var body: some View {
@@ -71,10 +72,24 @@ struct InspectorView: View {
                         ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
                             let column = item.column
                             let value = item.value
+                            let colInfo = tableVM.columns.first(where: { $0.name == column })
+                            let kind = inspectorEditorKind(colInfo: colInfo, value: value)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(column)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 4) {
+                                    Text(column)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if let dt = colInfo?.dataType {
+                                        Text(dt)
+                                            .font(.system(size: 9))
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(inspectorBadgeColor(kind).opacity(0.12))
+                                            .foregroundStyle(inspectorBadgeColor(kind))
+                                            .cornerRadius(3)
+                                    }
+                                    Spacer()
+                                }
 
                                 if editingColumn == column {
                                     TextField("", text: $editingText)
@@ -88,20 +103,45 @@ struct InspectorView: View {
                                             cancelInspectorEdit()
                                         }
                                 } else if appVM.isInspectorEditable {
-                                    Text(value.displayString)
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundStyle(value.isNull ? .secondary : .primary)
+                                    inspectorValueView(value: value, kind: kind)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .contentShape(Rectangle())
                                         .onTapGesture(count: 2) {
-                                            editingText = value.isNull ? "NULL" : value.displayString
-                                            editingColumn = column
-                                            editFieldFocused = true
+                                            if needsRichInspectorEditor(kind: kind) {
+                                                fieldEditorColumn = column
+                                            } else {
+                                                editingText = value.isNull ? "NULL" : value.displayString
+                                                editingColumn = column
+                                                editFieldFocused = true
+                                            }
+                                        }
+                                        .popover(
+                                            isPresented: Binding(
+                                                get: { fieldEditorColumn == column },
+                                                set: { if !$0 { fieldEditorColumn = nil } }
+                                            ),
+                                            arrowEdge: .leading
+                                        ) {
+                                            FieldEditorView(
+                                                columnName: column,
+                                                dataType: colInfo?.dataType ?? "text",
+                                                isNullable: colInfo?.isNullable ?? true,
+                                                initialValue: value,
+                                                onSave: { newText in
+                                                    fieldEditorColumn = nil
+                                                    Task {
+                                                        await appVM.updateInspectorCell(
+                                                            columnName: column, newText: newText
+                                                        )
+                                                    }
+                                                },
+                                                onCancel: {
+                                                    fieldEditorColumn = nil
+                                                }
+                                            )
                                         }
                                 } else {
-                                    Text(value.displayString)
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundStyle(value.isNull ? .secondary : .primary)
+                                    inspectorValueView(value: value, kind: kind)
                                         .textSelection(.enabled)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -146,5 +186,150 @@ struct InspectorView: View {
     private func cancelInspectorEdit() {
         editingColumn = nil
         editingText = ""
+    }
+
+    // MARK: - Rich Editor Helpers
+
+    private func inspectorEditorKind(colInfo: ColumnInfo?, value: CellValue) -> FieldEditorKind {
+        guard let info = colInfo else { return .plain }
+        let raw = value.isNull ? "" : value.displayString
+        return FieldEditorKind(udtName: info.udtName, dataType: info.dataType, value: raw)
+    }
+
+    private func needsRichInspectorEditor(kind: FieldEditorKind) -> Bool {
+        switch kind {
+        case .json, .array, .boolean, .longText: return true
+        case .plain: return false
+        }
+    }
+
+    private func inspectorBadgeColor(_ kind: FieldEditorKind) -> Color {
+        badgeInfo(for: kind).color
+    }
+
+    @ViewBuilder
+    private func inspectorValueView(value: CellValue, kind: FieldEditorKind) -> some View {
+        switch kind {
+        case .json:
+            jsonPreview(value: value)
+        case .array:
+            arrayPreview(value: value)
+        case .boolean:
+            boolPreview(value: value)
+        default:
+            Text(value.displayString)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(value.isNull ? .secondary : .primary)
+        }
+    }
+
+    @ViewBuilder
+    private func jsonPreview(value: CellValue) -> some View {
+        if value.isNull {
+            Text("NULL")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+        } else {
+            let raw = value.displayString
+            let preview = prettyJSONPreview(raw, maxLines: 4)
+            Text(preview)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.primary)
+                .lineLimit(4)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.purple.opacity(0.05))
+                .cornerRadius(4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Color.purple.opacity(0.15), lineWidth: 1)
+                )
+        }
+    }
+
+    @ViewBuilder
+    private func arrayPreview(value: CellValue) -> some View {
+        if value.isNull {
+            Text("NULL")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+        } else {
+            let items = parsePostgresArray(value.displayString)
+            if items.isEmpty {
+                Text("{}")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { idx, item in
+                        HStack(spacing: 4) {
+                            Text("\(idx)")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16, alignment: .trailing)
+                            if item.isNull {
+                                Text("NULL")
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.orange)
+                            } else {
+                                Text(item.value)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    if items.count > 5 {
+                        Text("... +\(items.count - 5) more")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Color.blue.opacity(0.15), lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func boolPreview(value: CellValue) -> some View {
+        if value.isNull {
+            Text("NULL")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+        } else {
+            let isTrue = value.displayString.lowercased() == "true"
+                || value.displayString == "t"
+                || value.displayString == "1"
+            HStack(spacing: 6) {
+                Image(systemName: isTrue ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(isTrue ? .green : .red)
+                Text(isTrue ? "true" : "false")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(isTrue ? .green : .red)
+            }
+        }
+    }
+
+    private func prettyJSONPreview(_ raw: String, maxLines: Int) -> String {
+        guard let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(
+                  withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]
+              ),
+              let str = String(data: pretty, encoding: .utf8)
+        else {
+            return raw
+        }
+        let lines = str.components(separatedBy: "\n")
+        if lines.count > maxLines {
+            return lines.prefix(maxLines).joined(separator: "\n") + "\n..."
+        }
+        return str
     }
 }

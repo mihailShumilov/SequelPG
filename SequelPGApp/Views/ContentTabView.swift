@@ -5,9 +5,17 @@ struct ContentTabView: View {
     @Environment(TableViewModel.self) var tableVM
     @Environment(NavigatorViewModel.self) var navigatorVM
 
+    @State private var showSQLPreview = false
+
     var body: some View {
         @Bindable var tableVM = tableVM
         VStack(spacing: 0) {
+            // Filter bar (toggle with Cmd+F)
+            if tableVM.showFilterBar {
+                filterBar
+                Divider()
+            }
+
             if tableVM.isLoadingContent {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -65,6 +73,11 @@ struct ContentTabView: View {
                 Task { await appVM.loadContentPage() }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleFilterBar)) { _ in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                tableVM.showFilterBar.toggle()
+            }
+        }
         .alert(
             "Delete Row?",
             isPresented: Binding<Bool>(
@@ -100,7 +113,109 @@ struct ContentTabView: View {
         } message: {
             Text(appVM.cascadeDeleteContext?.errorMessage ?? "This row is referenced by other tables. Delete all referencing rows too?")
         }
+        .popover(isPresented: $showSQLPreview) {
+            VStack(alignment: .leading) {
+                Text("Filter SQL")
+                    .font(.headline)
+                Text(appVM.previewFilterSQL())
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(.top, 4)
+            }
+            .padding()
+            .frame(minWidth: 300)
+        }
     }
+
+    // MARK: - Filter Bar
+
+    private var filterBar: some View {
+        @Bindable var tableVM = tableVM
+        return VStack(spacing: 6) {
+            ForEach($tableVM.filters) { $filter in
+                filterRow(filter: $filter)
+            }
+
+            HStack(spacing: 8) {
+                Button("Clear Filter") {
+                    appVM.clearContentFilters()
+                }
+                .disabled(tableVM.activeFilterSQL == nil && tableVM.filters.allSatisfy { $0.value.isEmpty && $0.op != .isNull && $0.op != .isNotNull })
+
+                Button("SQL Preview") {
+                    showSQLPreview.toggle()
+                }
+
+                Spacer()
+
+                if tableVM.activeFilterSQL != nil {
+                    Text("Filter active")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                Button("Apply Filter") {
+                    appVM.applyContentFilters()
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func filterRow(filter: Binding<ContentFilter>) -> some View {
+        HStack(spacing: 6) {
+            // Column picker
+            Picker("", selection: filter.column) {
+                Text("Any Column").tag("")
+                ForEach(tableVM.columns, id: \.name) { col in
+                    Text(col.name).tag(col.name)
+                }
+            }
+            .frame(width: 140)
+
+            // Operator picker
+            Picker("", selection: filter.op) {
+                ForEach(FilterOperator.allCases, id: \.self) { op in
+                    Text(op.rawValue).tag(op)
+                }
+            }
+            .frame(width: 130)
+
+            // Value field (hidden for is null / is not null)
+            if filter.wrappedValue.op.needsValue {
+                TextField("Value...", text: filter.value)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        appVM.applyContentFilters()
+                    }
+            }
+
+            // Add/remove buttons
+            Button {
+                tableVM.filters.append(ContentFilter())
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Add filter")
+
+            if tableVM.filters.count > 1 {
+                Button {
+                    tableVM.filters.removeAll { $0.id == filter.id }
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Remove filter")
+            }
+        }
+    }
+
+    // MARK: - Pagination Bar
 
     private var paginationBar: some View {
         @Bindable var tableVM = tableVM
@@ -141,6 +256,22 @@ struct ContentTabView: View {
                 }
                 .keyboardShortcut(.escape, modifiers: [])
             }
+
+            Divider()
+                .frame(height: 16)
+
+            // Filter toggle
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    tableVM.showFilterBar.toggle()
+                }
+            } label: {
+                Image(systemName: tableVM.activeFilterSQL != nil ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    .foregroundStyle(tableVM.activeFilterSQL != nil ? .orange : .primary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Toggle filter bar")
+            .help("Filter rows (Cmd+F)")
 
             Divider()
                 .frame(height: 16)

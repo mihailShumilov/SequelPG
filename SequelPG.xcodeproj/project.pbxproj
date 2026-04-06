@@ -56,6 +56,10 @@
 		AA1000000000000000002D /* SQLTextStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002D; };
 		AA1000000000000000002E /* SQLCompletionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002E; };
 		AA1000000000000000002F /* SQLEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000002F; };
+		AA10000000000000000033 /* ObjectDefinitionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000033; };
+		AA10000000000000000034 /* ObjectCreateSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000034; };
+		AA10000000000000000035 /* AppViewModel+ObjectCRUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000035; };
+		AA10000000000000000036 /* FieldEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000036; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -118,6 +122,10 @@
 		AB1000000000000000002D /* SQLTextStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLTextStorage.swift; sourceTree = "<group>"; };
 		AB1000000000000000002E /* SQLCompletionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionProvider.swift; sourceTree = "<group>"; };
 		AB1000000000000000002F /* SQLEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLEditorView.swift; sourceTree = "<group>"; };
+		AB10000000000000000033 /* ObjectDefinitionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectDefinitionView.swift; sourceTree = "<group>"; };
+		AB10000000000000000034 /* ObjectCreateSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectCreateSheets.swift; sourceTree = "<group>"; };
+		AB10000000000000000035 /* AppViewModel+ObjectCRUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+ObjectCRUD.swift"; sourceTree = "<group>"; };
+		AB10000000000000000036 /* FieldEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldEditorView.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -192,6 +200,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000000B /* AppViewModel.swift */,
+				AB10000000000000000035 /* AppViewModel+ObjectCRUD.swift */,
 				AB1000000000000000000C /* ConnectionListViewModel.swift */,
 				AB1000000000000000000D /* NavigatorViewModel.swift */,
 				AB1000000000000000000F /* QueryViewModel.swift */,
@@ -210,6 +219,9 @@
 				AB10000000000000000018 /* InspectorView.swift */,
 				AB10000000000000000019 /* MainAreaView.swift */,
 				AB10000000000000000014 /* NavigatorView.swift */,
+				AB10000000000000000034 /* ObjectCreateSheets.swift */,
+				AB10000000000000000033 /* ObjectDefinitionView.swift */,
+				AB10000000000000000036 /* FieldEditorView.swift */,
 				AB10000000000000000017 /* QueryTabView.swift */,
 				AB1000000000000000002F /* SQLEditorView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
@@ -403,6 +415,10 @@
 				AA1000000000000000002D /* SQLTextStorage.swift in Sources */,
 				AA1000000000000000002E /* SQLCompletionProvider.swift in Sources */,
 				AA1000000000000000002F /* SQLEditorView.swift in Sources */,
+			AA10000000000000000033 /* ObjectDefinitionView.swift in Sources */,
+				AA10000000000000000034 /* ObjectCreateSheets.swift in Sources */,
+				AA10000000000000000035 /* AppViewModel+ObjectCRUD.swift in Sources */,
+				AA10000000000000000036 /* FieldEditorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

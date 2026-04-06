@@ -22,10 +22,18 @@ struct SequelPGApp: App {
                 }
                 .keyboardShortcut("t", modifiers: .command)
             }
+
+            CommandGroup(replacing: .textEditing) {
+                Button("Find...") {
+                    NotificationCenter.default.post(name: .toggleFilterBar, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
         }
     }
 }
 
 extension Notification.Name {
     static let newTabRequested = Notification.Name("com.sequelpg.newTabRequested")
+    static let toggleFilterBar = Notification.Name("com.sequelpg.toggleFilterBar")
 }

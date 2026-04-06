@@ -38,6 +38,7 @@ struct CascadeDeleteContext {
     enum MainTab: String, CaseIterable {
         case structure = "Structure"
         case content = "Content"
+        case definition = "Definition"
         case query = "Query"
     }
 
@@ -170,9 +171,14 @@ struct CascadeDeleteContext {
         navigatorVM.selectedObject = object
         tableVM.clear()
 
-        // If no object-specific tab is active, switch to structure.
+        // If no object-specific tab is active, switch to an appropriate tab.
         if selectedTab == .query {
-            selectedTab = .structure
+            switch object.type {
+            case .table:
+                selectedTab = .structure
+            default:
+                selectedTab = .definition
+            }
         }
 
         do {
@@ -253,6 +259,9 @@ struct CascadeDeleteContext {
         let offset = tableVM.currentPage * tableVM.pageSize
 
         var sql = "SELECT * FROM \(schema).\(table)"
+        if let filterSQL = tableVM.activeFilterSQL {
+            sql += " WHERE \(filterSQL)"
+        }
         if let sortCol = tableVM.sortColumn {
             let dir = tableVM.sortAscending ? "ASC" : "DESC"
             sql += " ORDER BY \(quoteIdent(sortCol)) \(dir) NULLS LAST"
@@ -351,6 +360,99 @@ struct CascadeDeleteContext {
     }
 
     // MARK: - Column Sorting
+
+    // MARK: - Content Filters
+
+    func applyContentFilters() {
+        let validFilters = tableVM.filters.filter { f in
+            if f.op == .isNull || f.op == .isNotNull { return true }
+            return !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        guard !validFilters.isEmpty else {
+            clearContentFilters()
+            return
+        }
+
+        let conditions = validFilters.compactMap { f -> String? in
+            buildFilterCondition(f, columns: tableVM.columns)
+        }
+
+        guard !conditions.isEmpty else {
+            clearContentFilters()
+            return
+        }
+
+        tableVM.activeFilterSQL = conditions.joined(separator: " AND ")
+        tableVM.currentPage = 0
+        clearSelectedRow()
+        Task { await loadContentPage() }
+    }
+
+    func clearContentFilters() {
+        tableVM.activeFilterSQL = nil
+        tableVM.filters = [ContentFilter()]
+        tableVM.currentPage = 0
+        clearSelectedRow()
+        Task { await loadContentPage() }
+    }
+
+    func previewFilterSQL() -> String {
+        let validFilters = tableVM.filters.filter { f in
+            if f.op == .isNull || f.op == .isNotNull { return true }
+            return !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let conditions = validFilters.compactMap { f -> String? in
+            buildFilterCondition(f, columns: tableVM.columns)
+        }
+        guard !conditions.isEmpty else { return "-- no active filters" }
+        return "WHERE " + conditions.joined(separator: "\n  AND ")
+    }
+
+    private func buildFilterCondition(_ filter: ContentFilter, columns: [ColumnInfo]) -> String? {
+        let val = filter.value.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Column expression: specific column or CAST to text for "any column"
+        if filter.column.isEmpty {
+            // "Any Column" — search across all text-castable columns
+            guard filter.op != .isNull, filter.op != .isNotNull else { return nil }
+            let colExprs = columns.map { quoteIdent($0.name) + "::text" }
+            guard !colExprs.isEmpty else { return nil }
+            let likeVal = val.replacingOccurrences(of: "'", with: "''")
+                .replacingOccurrences(of: "%", with: "\\%")
+                .replacingOccurrences(of: "_", with: "\\_")
+            switch filter.op {
+            case .contains:
+                let parts = colExprs.map { "\($0) ILIKE E'%\(likeVal)%'" }
+                return "(" + parts.joined(separator: " OR ") + ")"
+            case .equals:
+                let parts = colExprs.map { "\($0) = \(quoteLiteral(.text(val)))" }
+                return "(" + parts.joined(separator: " OR ") + ")"
+            default:
+                let parts = colExprs.map { "\($0) ILIKE E'%\(likeVal)%'" }
+                return "(" + parts.joined(separator: " OR ") + ")"
+            }
+        }
+
+        let col = quoteIdent(filter.column)
+        let escaped = val.replacingOccurrences(of: "'", with: "''")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+
+        switch filter.op {
+        case .contains: return "\(col)::text ILIKE E'%\(escaped)%'"
+        case .equals: return "\(col)::text = \(quoteLiteral(.text(val)))"
+        case .notEquals: return "\(col)::text != \(quoteLiteral(.text(val)))"
+        case .greaterThan: return "\(col)::text > \(quoteLiteral(.text(val)))"
+        case .lessThan: return "\(col)::text < \(quoteLiteral(.text(val)))"
+        case .greaterOrEqual: return "\(col)::text >= \(quoteLiteral(.text(val)))"
+        case .lessOrEqual: return "\(col)::text <= \(quoteLiteral(.text(val)))"
+        case .startsWith: return "\(col)::text ILIKE E'\(escaped)%'"
+        case .endsWith: return "\(col)::text ILIKE E'%\(escaped)'"
+        case .isNull: return "\(col) IS NULL"
+        case .isNotNull: return "\(col) IS NOT NULL"
+        }
+    }
 
     func toggleContentSort(column: String) {
         applySort(column: column, currentColumn: &tableVM.sortColumn, ascending: &tableVM.sortAscending)

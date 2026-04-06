@@ -186,6 +186,10 @@ actor MockDatabaseClient: PostgresClientProtocol {
         if shouldThrowOnSwitchDatabase { throw AppError.connectionFailed("mock switch error") }
         connected = true
     }
+
+    func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String {
+        return "-- mock DDL"
+    }
 }
 
 // MARK: - Tests
@@ -1200,7 +1204,7 @@ final class AppViewModelTests: AppViewModelTestCase {
     }
 
     func testMainTabAllCases() {
-        XCTAssertEqual(AppViewModel.MainTab.allCases.count, 3)
+        XCTAssertEqual(AppViewModel.MainTab.allCases.count, 4)
     }
 
     // MARK: - Integration-style scenarios
