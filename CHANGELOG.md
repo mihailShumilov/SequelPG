@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-04-06
+
+### Added
+- Object Definition tab: view DDL/source for views, functions, sequences, types, domains, materialized views, operators, and more.
+- Object CRUD: drop any database object (table, view, function, sequence, type, domain, collation, foreign table, FTS objects, operator, etc.) with confirmation dialog.
+- Create object sheets: create views, materialized views, functions, sequences, types, and domains from the navigator context menu.
+- Generic create sheet for remaining object categories with a raw SQL editor.
+- Content filter bar (`Cmd+F`): filter rows by column, operator (contains, equals, not equals, greater/less than, starts/ends with, is null/not null), and value. Supports multi-filter with AND logic and SQL preview popover.
+- Type-aware field editor: rich popover editor in the Inspector for JSON (pretty-printed), arrays (indexed list), booleans (toggle), and long text (multi-line). Falls back to inline editing for plain values.
+- Inspector type badges: each column value in the Inspector now shows a colored data-type badge (JSON, array, boolean, text).
+- Navigator context menus: right-click any object to drop it; right-click a schema to create new objects.
+- `getObjectDDL(schema:name:type:)` protocol method for retrieving object definitions from `pg_catalog`.
+
+### Changed
+- Non-table objects now default to the Definition tab instead of Structure when selected.
+- Content pagination bar includes a filter toggle button with active-filter indicator.
+- Inspector value rendering: JSON values show a pretty-printed preview (4-line max), arrays show indexed items (5-item max), booleans show checkmark/cross icons.
+
+## [0.1.8] - 2026-04-06
+
 ### Added
 - iTerm2-style tabs: Cmd+T opens a new tab within the same window, each with its own independent database connection.
 - Hierarchical tree navigator with DisclosureGroups: databases > schemas > object categories > objects.

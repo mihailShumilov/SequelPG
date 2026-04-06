@@ -52,7 +52,11 @@ Or use **Cmd+U** in Xcode.
 - [x] Execution time display
 - [x] Native Table grid with column sorting
 - [x] Right inspector panel (object name, row count, column count)
-- [x] Create database, schema, and table from navigator
+- [x] Create database, schema, table, view, function, sequence, type, and domain from navigator
+- [x] Drop any database object from navigator context menu
+- [x] Object Definition tab (DDL/source viewer for views, functions, sequences, types, etc.)
+- [x] Content filter bar (Cmd+F) with column/operator/value filtering and SQL preview
+- [x] Type-aware field editor (JSON, array, boolean, long text) in Inspector
 - [x] Connection status indicators
 - [x] Disconnect menu item (Cmd+Shift+W)
 
@@ -107,7 +111,7 @@ SwiftFormat is used for consistent formatting. See [CONTRIBUTING.md](CONTRIBUTIN
 - No CSV import/export.
 - No ER diagrams.
 - No user/role management.
-- No triggers/procedures UI.
+- No triggers/procedures editing UI (view-only via Definition tab).
 - No schema diff.
 - No multi-window support.
 - Stop button in query editor is disabled if driver-level cancellation is not supported.
