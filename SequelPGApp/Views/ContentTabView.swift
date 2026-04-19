@@ -23,7 +23,7 @@ struct ContentTabView: View {
                 ResultsGridView(
                     result: result,
                     columns: tableVM.columns,
-                    isEditable: tableVM.columns.contains { $0.isPrimaryKey },
+                    isEditable: tableVM.hasPrimaryKey,
                     onRowSelected: { rowIdx in
                         appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
                     },
@@ -74,9 +74,7 @@ struct ContentTabView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .toggleFilterBar)) { _ in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                tableVM.showFilterBar.toggle()
-            }
+            tableVM.showFilterBar.toggle()
         }
         .alert(
             "Delete Row?",
@@ -262,9 +260,7 @@ struct ContentTabView: View {
 
             // Filter toggle
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    tableVM.showFilterBar.toggle()
-                }
+                tableVM.showFilterBar.toggle()
             } label: {
                 Image(systemName: tableVM.activeFilterSQL != nil ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     .foregroundStyle(tableVM.activeFilterSQL != nil ? .orange : .primary)
@@ -301,8 +297,17 @@ struct ContentTabView: View {
             .accessibilityLabel("Previous page")
             .disabled(tableVM.currentPage <= 0 || tableVM.isInsertingRow)
 
-            Text("Page \(tableVM.currentPage + 1) of \(tableVM.totalPages)")
-                .monospacedDigit()
+            PageJumpField(
+                page: tableVM.currentPage + 1,
+                total: tableVM.totalPages,
+                onCommit: { newPage in
+                    let clamped = max(1, min(tableVM.totalPages, newPage))
+                    tableVM.currentPage = clamped - 1
+                    appVM.clearSelectedRow()
+                    Task { await appVM.loadContentPage() }
+                }
+            )
+            .disabled(tableVM.totalPages <= 1 || tableVM.isInsertingRow)
 
             Button {
                 tableVM.currentPage = min(tableVM.totalPages - 1, tableVM.currentPage + 1)
@@ -319,8 +324,49 @@ struct ContentTabView: View {
             Text("\u{2248} \(tableVM.approximateRowCount) rows")
                 .foregroundStyle(.secondary)
                 .font(.caption)
+                .accessibilityLabel("Approximately \(tableVM.approximateRowCount) rows")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+}
+
+/// Editable page number that commits on Enter or blur. The surrounding HStack
+/// previously showed a read-only "Page N of M" label, forcing users to click
+/// pagination arrows hundreds of times in large result sets.
+private struct PageJumpField: View {
+    let page: Int
+    let total: Int
+    let onCommit: (Int) -> Void
+
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField("", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.center)
+                .monospacedDigit()
+                .frame(width: 52)
+                .focused($focused)
+                .accessibilityLabel("Page number. Currently \(page) of \(total). Enter a number and press return to jump.")
+                .onChange(of: page, initial: true) { _, newValue in
+                    if !focused { text = String(newValue) }
+                }
+                .onChange(of: focused) { _, isFocused in
+                    if !isFocused { text = String(page) }
+                }
+                .onSubmit {
+                    if let n = Int(text.trimmingCharacters(in: .whitespaces)) {
+                        onCommit(n)
+                    } else {
+                        text = String(page)
+                    }
+                }
+            Text("of \(total)")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
     }
 }

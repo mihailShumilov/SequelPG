@@ -29,6 +29,13 @@ struct SequelPGApp: App {
                 }
                 .keyboardShortcut("f", modifiers: .command)
             }
+
+            CommandGroup(after: .toolbar) {
+                Button("Toggle Query History") {
+                    NotificationCenter.default.post(name: .toggleQueryHistory, object: nil)
+                }
+                .keyboardShortcut("y", modifiers: [.command, .shift])
+            }
         }
     }
 }
@@ -36,4 +43,5 @@ struct SequelPGApp: App {
 extension Notification.Name {
     static let newTabRequested = Notification.Name("com.sequelpg.newTabRequested")
     static let toggleFilterBar = Notification.Name("com.sequelpg.toggleFilterBar")
+    static let toggleQueryHistory = Notification.Name("com.sequelpg.toggleQueryHistory")
 }

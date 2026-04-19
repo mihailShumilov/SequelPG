@@ -1,0 +1,1 @@
+- [SequelPG Security Architecture](project_security_architecture.md) — credential flow, SQL construction patterns, confirmed injection vectors, SSH design

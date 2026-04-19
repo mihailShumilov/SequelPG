@@ -33,6 +33,9 @@ enum SSHAuthMethod: String, Codable, CaseIterable, Sendable {
 }
 
 /// A saved database connection profile. Password is stored separately in Keychain.
+///
+/// SSH fields use `@DecodableDefault` so older profiles (stored before SSH support
+/// was added) decode cleanly without a custom `init(from:)`.
 struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var name: String
@@ -42,13 +45,12 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
     var username: String
     var sslMode: SSLMode
 
-    // SSH tunnel settings
-    var useSSHTunnel: Bool
-    var sshHost: String
-    var sshPort: Int
-    var sshUser: String
-    var sshAuthMethod: SSHAuthMethod
-    var sshKeyPath: String
+    @DecodableDefault.False var useSSHTunnel: Bool
+    @DecodableDefault.EmptyString var sshHost: String
+    @DecodableDefault.SSHPort var sshPort: Int
+    @DecodableDefault.EmptyString var sshUser: String
+    @DecodableDefault.KeyFileAuth var sshAuthMethod: SSHAuthMethod
+    @DecodableDefault.EmptyString var sshKeyPath: String
 
     init(
         id: UUID = UUID(),
@@ -78,24 +80,6 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         self.sshUser = sshUser
         self.sshAuthMethod = sshAuthMethod
         self.sshKeyPath = sshKeyPath
-    }
-
-    /// Backward-compatible decoding: SSH fields default if absent.
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        host = try container.decode(String.self, forKey: .host)
-        port = try container.decode(Int.self, forKey: .port)
-        database = try container.decode(String.self, forKey: .database)
-        username = try container.decode(String.self, forKey: .username)
-        sslMode = try container.decode(SSLMode.self, forKey: .sslMode)
-        useSSHTunnel = try container.decodeIfPresent(Bool.self, forKey: .useSSHTunnel) ?? false
-        sshHost = try container.decodeIfPresent(String.self, forKey: .sshHost) ?? ""
-        sshPort = try container.decodeIfPresent(Int.self, forKey: .sshPort) ?? 22
-        sshUser = try container.decodeIfPresent(String.self, forKey: .sshUser) ?? ""
-        sshAuthMethod = try container.decodeIfPresent(SSHAuthMethod.self, forKey: .sshAuthMethod) ?? .keyFile
-        sshKeyPath = try container.decodeIfPresent(String.self, forKey: .sshKeyPath) ?? ""
     }
 
     /// Keychain key for storing the database password.
@@ -138,5 +122,60 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
             }
         }
         return errors
+    }
+}
+
+/// Property wrapper that supplies a default value when a Codable key is missing.
+/// Lets `ConnectionProfile` use synthesized `Codable` instead of a manual
+/// `init(from:)` while still accepting profiles saved before SSH fields existed.
+enum DecodableDefault {
+    protocol Source {
+        associatedtype Value: Codable & Sendable & Equatable
+        static var defaultValue: Value { get }
+    }
+
+    @propertyWrapper
+    struct Wrapper<S: DecodableDefault.Source>: Codable, Sendable, Equatable {
+        typealias Value = S.Value
+        var wrappedValue: Value
+
+        init(wrappedValue: Value = S.defaultValue) {
+            self.wrappedValue = wrappedValue
+        }
+
+        init(from decoder: Decoder) throws {
+            wrappedValue = try Value(from: decoder)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            try wrappedValue.encode(to: encoder)
+        }
+    }
+
+    typealias False = Wrapper<Sources.False>
+    typealias EmptyString = Wrapper<Sources.EmptyString>
+    typealias SSHPort = Wrapper<Sources.SSHPort>
+    typealias KeyFileAuth = Wrapper<Sources.KeyFileAuth>
+
+    enum Sources {
+        enum False: Source {
+            static let defaultValue = false
+        }
+        enum EmptyString: Source {
+            static let defaultValue = ""
+        }
+        enum SSHPort: Source {
+            static let defaultValue = 22
+        }
+        enum KeyFileAuth: Source {
+            static let defaultValue: SSHAuthMethod = .keyFile
+        }
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// Supplies the wrapper's default value when the key is absent from the payload.
+    func decode<S>(_ type: DecodableDefault.Wrapper<S>.Type, forKey key: Key) throws -> DecodableDefault.Wrapper<S> {
+        try decodeIfPresent(type, forKey: key) ?? .init()
     }
 }

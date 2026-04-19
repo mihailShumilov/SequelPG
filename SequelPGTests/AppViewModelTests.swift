@@ -190,6 +190,24 @@ actor MockDatabaseClient: PostgresClientProtocol {
     func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String {
         return "-- mock DDL"
     }
+
+    // MARK: - Per-table metadata (new in index/constraint/trigger support)
+
+    var stubbedIndexes: [IndexInfo] = []
+    var stubbedConstraints: [ConstraintInfo] = []
+    var stubbedTriggers: [TriggerInfo] = []
+    var stubbedPartitions: [DBObject] = []
+    var stubbedExtensions: [ExtensionInfo] = []
+    var stubbedAvailableExtensions: [ExtensionInfo] = []
+    var stubbedRoles: [RoleInfo] = []
+
+    func listIndexes(schema: String, table: String) async throws -> [IndexInfo] { stubbedIndexes }
+    func listConstraints(schema: String, table: String) async throws -> [ConstraintInfo] { stubbedConstraints }
+    func listTriggers(schema: String, table: String) async throws -> [TriggerInfo] { stubbedTriggers }
+    func listPartitions(schema: String, table: String) async throws -> [DBObject] { stubbedPartitions }
+    func listExtensions() async throws -> [ExtensionInfo] { stubbedExtensions }
+    func listAvailableExtensions() async throws -> [ExtensionInfo] { stubbedAvailableExtensions }
+    func listRoles() async throws -> [RoleInfo] { stubbedRoles }
 }
 
 // MARK: - Tests

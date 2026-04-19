@@ -65,15 +65,6 @@ struct QueryTabView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(queryVM.isExecuting || !appVM.isConnected)
 
-                Button(role: .destructive) {
-                    // Stop is disabled; client-side cancellation is not
-                    // reliably supported by the driver.
-                } label: {
-                    Label("Stop", systemImage: "stop.fill")
-                }
-                .disabled(true)
-                .help("Stop is not supported by the current driver configuration.")
-
                 Button {
                     queryVM.queryText = ""
                     queryVM.result = nil
@@ -257,6 +248,9 @@ struct ResultsGridView: View {
     @State private var sortOrder: [ColumnSortComparator] = []
     @State private var fieldEditorCell: (row: Int, col: Int)?
     private let columnMinWidth: CGFloat = 100
+    private let columnsByName: [String: ColumnInfo]
+    private let identifiedRows: [IdentifiedRow]
+    private let identifiedColumns: [IdentifiedColumn]
 
     init(
         result: QueryResult,
@@ -288,18 +282,9 @@ struct ResultsGridView: View {
         self.insertRowValues = insertRowValues
         self.onInsertCommit = onInsertCommit
         self.onInsertCancel = onInsertCancel
-    }
-
-    private var identifiedRows: [IdentifiedRow] {
-        result.rows.enumerated().map { idx, cells in
-            IdentifiedRow(id: idx, cells: cells)
-        }
-    }
-
-    private var identifiedColumns: [IdentifiedColumn] {
-        result.columns.enumerated().map { idx, name in
-            IdentifiedColumn(id: idx, name: name)
-        }
+        self.columnsByName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        self.identifiedRows = result.rows.enumerated().map { IdentifiedRow(id: $0.offset, cells: $0.element) }
+        self.identifiedColumns = result.columns.enumerated().map { IdentifiedColumn(id: $0.offset, name: $0.element) }
     }
 
     var body: some View {
@@ -353,7 +338,7 @@ struct ResultsGridView: View {
     /// Returns the FieldEditorKind for a column index, or .plain if no column info.
     private func editorKind(for colIdx: Int, cell: CellValue) -> FieldEditorKind {
         let colName = colIdx < result.columns.count ? result.columns[colIdx] : ""
-        guard let info = columns.first(where: { $0.name == colName }) else { return .plain }
+        guard let info = columnsByName[colName] else { return .plain }
         let value = cell.isNull ? "" : cell.displayString
         return FieldEditorKind(udtName: info.udtName, dataType: info.dataType, value: value)
     }
@@ -399,12 +384,7 @@ struct ResultsGridView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 1) {
-                    // Select this row and update the inspector
-                    if selectedRowIndex != rowIdx {
-                        selectedRowIndex = rowIdx
-                        onRowSelected?(rowIdx)
-                    }
+                .onTapGesture(count: 2) {
                     guard isEditable else { return }
                     if editingCell != nil {
                         commitEdit()
@@ -479,11 +459,10 @@ struct ResultsGridView: View {
 
     @ViewBuilder
     private func insertRowView(binding: Binding<[String: String]>) -> some View {
-        let colInfoByName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         HStack(spacing: 0) {
             ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
                 let colName = result.columns[colIdx]
-                let colInfo = colInfoByName[colName]
+                let colInfo = columnsByName[colName]
                 let placeholder = colInfo.map { info -> String in
                     var parts: [String] = [info.dataType]
                     if info.isNullable { parts.append("nullable") }

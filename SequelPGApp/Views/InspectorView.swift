@@ -9,6 +9,12 @@ struct InspectorView: View {
     @State private var fieldEditorColumn: String?
     @FocusState private var editFieldFocused: Bool
 
+    /// O(1) column metadata lookup — the previous `first(where:)` call inside
+    /// the per-row ForEach was O(columns × rows) on every render.
+    private var columnInfoByName: [String: ColumnInfo] {
+        Dictionary(uniqueKeysWithValues: tableVM.columns.map { ($0.name, $0) })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Inspector")
@@ -67,12 +73,13 @@ struct InspectorView: View {
                     .accessibilityLabel("Dismiss row detail")
                 }
 
+                let columnInfoIndex = columnInfoByName
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
                             let column = item.column
                             let value = item.value
-                            let colInfo = tableVM.columns.first(where: { $0.name == column })
+                            let colInfo = columnInfoIndex[column]
                             let kind = inspectorEditorKind(colInfo: colInfo, value: value)
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
@@ -204,7 +211,7 @@ struct InspectorView: View {
     }
 
     private func inspectorBadgeColor(_ kind: FieldEditorKind) -> Color {
-        badgeInfo(for: kind).color
+        kind.badgeColor
     }
 
     @ViewBuilder
@@ -225,13 +232,8 @@ struct InspectorView: View {
 
     @ViewBuilder
     private func jsonPreview(value: CellValue) -> some View {
-        if value.isNull {
-            Text("NULL")
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-        } else {
-            let raw = value.displayString
-            let preview = prettyJSONPreview(raw, maxLines: 4)
+        nullOr(value) {
+            let preview = prettyJSONPreview(value.displayString, maxLines: 4)
             Text(preview)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.primary)
@@ -249,11 +251,7 @@ struct InspectorView: View {
 
     @ViewBuilder
     private func arrayPreview(value: CellValue) -> some View {
-        if value.isNull {
-            Text("NULL")
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-        } else {
+        nullOr(value) {
             let items = parsePostgresArray(value.displayString)
             if items.isEmpty {
                 Text("{}")
@@ -298,11 +296,7 @@ struct InspectorView: View {
 
     @ViewBuilder
     private func boolPreview(value: CellValue) -> some View {
-        if value.isNull {
-            Text("NULL")
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-        } else {
+        nullOr(value) {
             let isTrue = value.displayString.lowercased() == "true"
                 || value.displayString == "t"
                 || value.displayString == "1"
@@ -316,20 +310,68 @@ struct InspectorView: View {
         }
     }
 
+    /// Renders the shared "NULL" placeholder for null cells, otherwise the caller's view.
+    @ViewBuilder
+    private func nullOr<Content: View>(_ value: CellValue, @ViewBuilder _ content: () -> Content) -> some View {
+        if value.isNull {
+            Text("NULL")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+        } else {
+            content()
+        }
+    }
+
     private func prettyJSONPreview(_ raw: String, maxLines: Int) -> String {
-        guard let data = raw.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data),
-              let pretty = try? JSONSerialization.data(
-                  withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]
-              ),
-              let str = String(data: pretty, encoding: .utf8)
-        else {
-            return raw
+        let key = JSONPreviewCache.Key(raw: raw, maxLines: maxLines)
+        if let cached = JSONPreviewCache.shared.get(key) {
+            return cached
         }
-        let lines = str.components(separatedBy: "\n")
-        if lines.count > maxLines {
-            return lines.prefix(maxLines).joined(separator: "\n") + "\n..."
+        let value: String
+        if let data = raw.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data),
+           let pretty = try? JSONSerialization.data(
+               withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]
+           ),
+           let str = String(data: pretty, encoding: .utf8)
+        {
+            let lines = str.components(separatedBy: "\n")
+            value = lines.count > maxLines
+                ? lines.prefix(maxLines).joined(separator: "\n") + "\n..."
+                : str
+        } else {
+            value = raw
         }
-        return str
+        JSONPreviewCache.shared.set(key, value: value)
+        return value
+    }
+}
+
+/// Pretty-printed JSON previews are expensive enough (parse + reserialize with
+/// sorted keys) that we memoize them by raw string + line limit. Bounded LRU
+/// keeps memory from growing unbounded during long sessions.
+@MainActor
+private final class JSONPreviewCache {
+    struct Key: Hashable {
+        let raw: String
+        let maxLines: Int
+    }
+
+    static let shared = JSONPreviewCache()
+    private var storage: [Key: String] = [:]
+    private var order: [Key] = []
+    private let capacity = 128
+
+    func get(_ key: Key) -> String? { storage[key] }
+
+    func set(_ key: Key, value: String) {
+        if storage[key] == nil {
+            order.append(key)
+            if order.count > capacity {
+                let evict = order.removeFirst()
+                storage.removeValue(forKey: evict)
+            }
+        }
+        storage[key] = value
     }
 }

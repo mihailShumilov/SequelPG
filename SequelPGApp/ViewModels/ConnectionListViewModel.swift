@@ -52,58 +52,16 @@ enum ConnectionStatus {
 
     func addProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.add(profile)
-        if let password, !password.isEmpty {
-            do {
-                try keychainService.save(password: password, forKey: profile.keychainKey)
-            } catch {
-                Log.app.error("Failed to save password to Keychain: \(error.localizedDescription)")
-            }
-            passwordCache[profile.keychainKey] = password
-        }
-        if let sshPassword, !sshPassword.isEmpty {
-            do {
-                try keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
-            } catch {
-                Log.app.error("Failed to save SSH password to Keychain: \(error.localizedDescription)")
-            }
-            passwordCache[profile.sshKeychainKey] = sshPassword
-        }
+        syncKeychain(key: profile.keychainKey, password: password, label: "password")
+        syncKeychain(key: profile.sshKeychainKey, password: sshPassword, label: "SSH password")
         reload()
         selectedProfileId = profile.id
     }
 
     func updateProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.update(profile)
-        if let password, !password.isEmpty {
-            do {
-                try keychainService.save(password: password, forKey: profile.keychainKey)
-            } catch {
-                Log.app.error("Failed to save password to Keychain: \(error.localizedDescription)")
-            }
-            passwordCache[profile.keychainKey] = password
-        } else if password?.isEmpty == true {
-            do {
-                try keychainService.delete(forKey: profile.keychainKey)
-            } catch {
-                Log.app.error("Failed to delete password from Keychain: \(error.localizedDescription)")
-            }
-            passwordCache.removeValue(forKey: profile.keychainKey)
-        }
-        if let sshPassword, !sshPassword.isEmpty {
-            do {
-                try keychainService.save(password: sshPassword, forKey: profile.sshKeychainKey)
-            } catch {
-                Log.app.error("Failed to save SSH password to Keychain: \(error.localizedDescription)")
-            }
-            passwordCache[profile.sshKeychainKey] = sshPassword
-        } else if sshPassword?.isEmpty == true {
-            do {
-                try keychainService.delete(forKey: profile.sshKeychainKey)
-            } catch {
-                Log.app.error("Failed to delete SSH password from Keychain: \(error.localizedDescription)")
-            }
-            passwordCache.removeValue(forKey: profile.sshKeychainKey)
-        }
+        syncKeychain(key: profile.keychainKey, password: password, label: "password")
+        syncKeychain(key: profile.sshKeychainKey, password: sshPassword, label: "SSH password")
         reload()
     }
 
@@ -112,20 +70,34 @@ enum ConnectionStatus {
             selectedProfileId = nil
         }
         store.delete(id: profile.id)
-        do {
-            try keychainService.delete(forKey: profile.keychainKey)
-        } catch {
-            Log.app.error("Failed to delete password from Keychain: \(error.localizedDescription)")
-        }
-        do {
-            try keychainService.delete(forKey: profile.sshKeychainKey)
-        } catch {
-            Log.app.error("Failed to delete SSH password from Keychain: \(error.localizedDescription)")
-        }
-        passwordCache.removeValue(forKey: profile.keychainKey)
-        passwordCache.removeValue(forKey: profile.sshKeychainKey)
+        // Pass empty string to force delete path regardless of prior state.
+        syncKeychain(key: profile.keychainKey, password: "", label: "password")
+        syncKeychain(key: profile.sshKeychainKey, password: "", label: "SSH password")
         connectionStatuses.removeValue(forKey: profile.id)
         reload()
+    }
+
+    /// Keeps Keychain and in-memory cache consistent with the user's intent:
+    /// * nil → leave alone (caller didn't touch the field)
+    /// * empty → delete the entry (caller cleared the field)
+    /// * non-empty → write through
+    private func syncKeychain(key: String, password: String?, label: String) {
+        guard let password else { return }
+        if password.isEmpty {
+            do {
+                try keychainService.delete(forKey: key)
+            } catch {
+                Log.app.error("Failed to delete \(label) from Keychain: \(error.localizedDescription)")
+            }
+            passwordCache.removeValue(forKey: key)
+        } else {
+            do {
+                try keychainService.save(password: password, forKey: key)
+            } catch {
+                Log.app.error("Failed to save \(label) to Keychain: \(error.localizedDescription)")
+            }
+            passwordCache[key] = password
+        }
     }
 
     func loadPasswordForProfile(_ profile: ConnectionProfile) -> String {

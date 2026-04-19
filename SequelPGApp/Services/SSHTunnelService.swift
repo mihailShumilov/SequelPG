@@ -18,6 +18,8 @@ actor SSHTunnelService {
     }
 
     /// Starts an SSH tunnel and returns the local port to connect through.
+    /// The port allocation is racy (bind + close + ssh bind is TOCTOU), so we
+    /// retry if SSH reports "Address already in use" on the forwarded port.
     func start(
         sshHost: String,
         sshPort: Int,
@@ -30,6 +32,36 @@ actor SSHTunnelService {
     ) async throws -> UInt16 {
         await stop()
 
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                return try await startOnce(
+                    sshHost: sshHost, sshPort: sshPort, sshUser: sshUser,
+                    sshAuthMethod: sshAuthMethod, sshKeyPath: sshKeyPath,
+                    sshPassword: sshPassword, remoteHost: remoteHost, remotePort: remotePort
+                )
+            } catch let AppError.sshTunnelFailed(detail) where detail.lowercased().contains("address already in use") {
+                lastError = AppError.sshTunnelFailed(detail)
+                Log.ssh.info("SSH tunnel port collision on attempt \(attempt), retrying with a new port")
+                await stop()
+                continue
+            } catch {
+                throw error
+            }
+        }
+        throw lastError ?? AppError.sshTunnelFailed("Unable to acquire a local port for SSH tunnel.")
+    }
+
+    private func startOnce(
+        sshHost: String,
+        sshPort: Int,
+        sshUser: String,
+        sshAuthMethod: SSHAuthMethod,
+        sshKeyPath: String,
+        sshPassword: String?,
+        remoteHost: String,
+        remotePort: Int
+    ) async throws -> UInt16 {
         let port = try Self.findAvailablePort()
         localPort = port
 
@@ -51,6 +83,14 @@ actor SSHTunnelService {
                 let expandedPath = NSString(string: sshKeyPath).expandingTildeInPath
                 guard FileManager.default.isReadableFile(atPath: expandedPath) else {
                     throw AppError.sshTunnelFailed("SSH key file not found or not readable: \(sshKeyPath)")
+                }
+                // Refuse symlinks — a symlink pointing at a sensitive file
+                // would be read by the ssh process and could leak it via
+                // verbose diagnostics; also a small sandbox-hardening step.
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: expandedPath),
+                   let fileType = attrs[.type] as? FileAttributeType,
+                   fileType == .typeSymbolicLink {
+                    throw AppError.sshTunnelFailed("SSH key path is a symlink; refusing for safety: \(sshKeyPath)")
                 }
                 args += ["-i", expandedPath]
             }

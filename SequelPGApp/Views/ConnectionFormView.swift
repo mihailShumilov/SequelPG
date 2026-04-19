@@ -1,5 +1,79 @@
 import SwiftUI
 
+/// Consolidates the 14 form fields shared by `ConnectionFormView` (modal add/edit)
+/// and `StartPageView` (inline editor) so the two views agree on how profiles are
+/// loaded, serialized back out, and defaulted.
+///
+/// Port values live as `String` because the UI exposes them through `TextField`;
+/// they're coerced to `Int` via `buildProfile(id:fallbackPort:)`.
+struct ConnectionFormModel {
+    var name: String = ""
+    var host: String = ""
+    var port: String = "5432"
+    var database: String = ""
+    var username: String = ""
+    var password: String = ""
+    var sslMode: SSLMode = .prefer
+
+    var useSSHTunnel: Bool = false
+    var sshHost: String = ""
+    var sshPort: String = "22"
+    var sshUser: String = ""
+    var sshAuthMethod: SSHAuthMethod = .keyFile
+    var sshKeyPath: String = ""
+    var sshPassword: String = ""
+
+    mutating func load(
+        from profile: ConnectionProfile,
+        password: String,
+        sshPassword: String
+    ) {
+        name = profile.name
+        host = profile.host
+        port = String(profile.port)
+        database = profile.database
+        username = profile.username
+        sslMode = profile.sslMode
+        self.password = password
+
+        useSSHTunnel = profile.useSSHTunnel
+        sshHost = profile.sshHost
+        sshPort = String(profile.sshPort)
+        sshUser = profile.sshUser
+        sshAuthMethod = profile.sshAuthMethod
+        sshKeyPath = profile.sshKeyPath
+        self.sshPassword = sshPassword
+    }
+
+    /// Builds a `ConnectionProfile` from the current field values.
+    /// - Parameters:
+    ///   - id: Profile ID to preserve; pass a new UUID for add flows.
+    ///   - fallbackPort: Value to use when `port` isn't a valid integer. Defaults
+    ///     to 5432 to match the PostgreSQL default.
+    func buildProfile(id: UUID, fallbackPort: Int = 5432) -> ConnectionProfile {
+        let portInt = Int(port) ?? fallbackPort
+        let sshPortInt = Int(sshPort) ?? 22
+        return ConnectionProfile(
+            id: id,
+            name: name.trimmingCharacters(in: .whitespaces),
+            host: host.trimmingCharacters(in: .whitespaces),
+            port: portInt,
+            database: database.trimmingCharacters(in: .whitespaces),
+            username: username.trimmingCharacters(in: .whitespaces),
+            sslMode: sslMode,
+            useSSHTunnel: useSSHTunnel,
+            sshHost: sshHost.trimmingCharacters(in: .whitespaces),
+            sshPort: sshPortInt,
+            sshUser: sshUser.trimmingCharacters(in: .whitespaces),
+            sshAuthMethod: sshAuthMethod,
+            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces)
+        )
+    }
+
+    /// `sshPassword` wrapped as optional, honoring the tunnel toggle.
+    var effectiveSSHPassword: String? { useSSHTunnel ? sshPassword : nil }
+}
+
 struct ConnectionFormView: View {
     enum Mode {
         case add
@@ -10,23 +84,8 @@ struct ConnectionFormView: View {
     @Environment(ConnectionListViewModel.self) var connectionListVM
     @Environment(\.dismiss) private var dismiss
 
-    @State private var name = ""
-    @State private var host = ""
-    @State private var port = "5432"
-    @State private var database = ""
-    @State private var username = ""
-    @State private var password = ""
-    @State private var sslMode: SSLMode = .prefer
+    @State private var form = ConnectionFormModel()
     @State private var validationErrors: [String] = []
-
-    // SSH tunnel fields
-    @State private var useSSHTunnel = false
-    @State private var sshHost = ""
-    @State private var sshPort = "22"
-    @State private var sshUser = ""
-    @State private var sshAuthMethod: SSHAuthMethod = .keyFile
-    @State private var sshKeyPath = ""
-    @State private var sshPassword = ""
 
     private var isEditing: Bool {
         if case .edit = mode { return true }
@@ -42,13 +101,13 @@ struct ConnectionFormView: View {
             ScrollView {
                 Form {
                     Section {
-                        TextField("Name:", text: $name)
-                        TextField("Host:", text: $host)
-                        TextField("Port:", text: $port)
-                        TextField("Database:", text: $database)
-                        TextField("Username:", text: $username)
-                        SecureField("Password:", text: $password)
-                        Picker("SSL Mode:", selection: $sslMode) {
+                        TextField("Name:", text: $form.name)
+                        TextField("Host:", text: $form.host)
+                        TextField("Port:", text: $form.port)
+                        TextField("Database:", text: $form.database)
+                        TextField("Username:", text: $form.username)
+                        SecureField("Password:", text: $form.password)
+                        Picker("SSL Mode:", selection: $form.sslMode) {
                             ForEach(SSLMode.allCases, id: \.self) { mode in
                                 Text(mode.displayName).tag(mode)
                             }
@@ -64,13 +123,13 @@ struct ConnectionFormView: View {
 
                     Section {
                         SSHTunnelFormSection(
-                            useSSHTunnel: $useSSHTunnel,
-                            sshHost: $sshHost,
-                            sshPort: $sshPort,
-                            sshUser: $sshUser,
-                            sshAuthMethod: $sshAuthMethod,
-                            sshKeyPath: $sshKeyPath,
-                            sshPassword: $sshPassword
+                            useSSHTunnel: $form.useSSHTunnel,
+                            sshHost: $form.sshHost,
+                            sshPort: $form.sshPort,
+                            sshUser: $form.sshUser,
+                            sshAuthMethod: $form.sshAuthMethod,
+                            sshKeyPath: $form.sshKeyPath,
+                            sshPassword: $form.sshPassword
                         )
                     } header: {
                         Text("SSH Tunnel")
@@ -102,48 +161,23 @@ struct ConnectionFormView: View {
             .padding()
         }
         .frame(width: 420)
-        .frame(minHeight: 380, idealHeight: useSSHTunnel ? 580 : 420)
+        .frame(minHeight: 380, idealHeight: form.useSSHTunnel ? 580 : 420)
         .onAppear(perform: loadExisting)
     }
 
     private func loadExisting() {
-        if case let .edit(profile) = mode {
-            name = profile.name
-            host = profile.host
-            port = String(profile.port)
-            database = profile.database
-            username = profile.username
-            sslMode = profile.sslMode
-            password = connectionListVM.loadPasswordForProfile(profile)
-
-            useSSHTunnel = profile.useSSHTunnel
-            sshHost = profile.sshHost
-            sshPort = String(profile.sshPort)
-            sshUser = profile.sshUser
-            sshAuthMethod = profile.sshAuthMethod
-            sshKeyPath = profile.sshKeyPath
-            sshPassword = connectionListVM.loadSSHPasswordForProfile(profile)
-        }
+        guard case let .edit(profile) = mode else { return }
+        form.load(
+            from: profile,
+            password: connectionListVM.loadPasswordForProfile(profile),
+            sshPassword: connectionListVM.loadSSHPasswordForProfile(profile)
+        )
     }
 
     private func save() {
-        let portInt = Int(port) ?? 0
-        let sshPortInt = Int(sshPort) ?? 22
-        let profile = ConnectionProfile(
-            id: existingId ?? UUID(),
-            name: name.trimmingCharacters(in: .whitespaces),
-            host: host.trimmingCharacters(in: .whitespaces),
-            port: portInt,
-            database: database.trimmingCharacters(in: .whitespaces),
-            username: username.trimmingCharacters(in: .whitespaces),
-            sslMode: sslMode,
-            useSSHTunnel: useSSHTunnel,
-            sshHost: sshHost.trimmingCharacters(in: .whitespaces),
-            sshPort: sshPortInt,
-            sshUser: sshUser.trimmingCharacters(in: .whitespaces),
-            sshAuthMethod: sshAuthMethod,
-            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces)
-        )
+        // Use 0 as a fallback for the port so an empty value still triggers the
+        // "Port must be between 1 and 65535" validation error.
+        let profile = form.buildProfile(id: existingId ?? UUID(), fallbackPort: 0)
 
         let errors = profile.validate()
         if !errors.isEmpty {
@@ -151,11 +185,10 @@ struct ConnectionFormView: View {
             return
         }
 
-        let sshPass: String? = useSSHTunnel ? sshPassword : nil
         if isEditing {
-            connectionListVM.updateProfile(profile, password: password, sshPassword: sshPass)
+            connectionListVM.updateProfile(profile, password: form.password, sshPassword: form.effectiveSSHPassword)
         } else {
-            connectionListVM.addProfile(profile, password: password, sshPassword: sshPass)
+            connectionListVM.addProfile(profile, password: form.password, sshPassword: form.effectiveSSHPassword)
         }
         dismiss()
     }

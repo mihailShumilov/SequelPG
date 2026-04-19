@@ -1,5 +1,11 @@
 import Foundation
 
+/// Complexity level for sidebar display.
+enum SidebarComplexity: String, CaseIterable {
+    case simple = "Simple"
+    case advanced = "Advanced"
+}
+
 /// Object category keys used for tree expansion and grouping.
 /// Order matches pgAdmin convention.
 enum ObjectCategory: String, CaseIterable, Identifiable {
@@ -44,6 +50,15 @@ enum ObjectCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether this category is shown in "Simple" complexity mode.
+    var isCoreCategory: Bool {
+        switch self {
+        case .tables, .views, .sequences, .types, .functions, .materializedViews:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 /// Holds all cached objects for a single schema.
@@ -66,26 +81,31 @@ struct SchemaObjects: Sendable {
     var types: [DBObject] = []
     var views: [DBObject] = []
 
+    /// KeyPath map keeps the 17-case switch in `objects(for:)` compact and
+    /// makes adding new categories a one-liner (table entry + new stored var).
+    private static let keyPaths: [ObjectCategory: KeyPath<SchemaObjects, [DBObject]>] = [
+        .aggregates: \.aggregates,
+        .collations: \.collations,
+        .domains: \.domains,
+        .ftsConfigurations: \.ftsConfigurations,
+        .ftsDictionaries: \.ftsDictionaries,
+        .ftsParsers: \.ftsParsers,
+        .ftsTemplates: \.ftsTemplates,
+        .foreignTables: \.foreignTables,
+        .functions: \.functions,
+        .materializedViews: \.materializedViews,
+        .operators: \.operators,
+        .procedures: \.procedures,
+        .sequences: \.sequences,
+        .tables: \.tables,
+        .triggerFunctions: \.triggerFunctions,
+        .types: \.types,
+        .views: \.views,
+    ]
+
     func objects(for category: ObjectCategory) -> [DBObject] {
-        switch category {
-        case .aggregates: return aggregates
-        case .collations: return collations
-        case .domains: return domains
-        case .ftsConfigurations: return ftsConfigurations
-        case .ftsDictionaries: return ftsDictionaries
-        case .ftsParsers: return ftsParsers
-        case .ftsTemplates: return ftsTemplates
-        case .foreignTables: return foreignTables
-        case .functions: return functions
-        case .materializedViews: return materializedViews
-        case .operators: return operators
-        case .procedures: return procedures
-        case .sequences: return sequences
-        case .tables: return tables
-        case .triggerFunctions: return triggerFunctions
-        case .types: return types
-        case .views: return views
-        }
+        guard let kp = Self.keyPaths[category] else { return [] }
+        return self[keyPath: kp]
     }
 }
 
@@ -99,6 +119,19 @@ struct SchemaObjects: Sendable {
 
     /// Server major version (e.g. 14, 15, 16). Determines which categories are shown.
     var serverVersion: Int = 0
+
+    /// Sidebar complexity level — controls which categories are visible.
+    var complexity: SidebarComplexity = .simple
+
+    /// Core categories shown at top level in simple mode.
+    var coreCategories: [ObjectCategory] {
+        availableCategories.filter(\.isCoreCategory)
+    }
+
+    /// Advanced categories shown in a collapsed "More" group or in advanced mode.
+    var advancedCategories: [ObjectCategory] {
+        availableCategories.filter { !$0.isCoreCategory }
+    }
 
     /// Categories available for the current PG version.
     var availableCategories: [ObjectCategory] {
@@ -134,9 +167,13 @@ struct SchemaObjects: Sendable {
 
     // MARK: - Key Helpers
 
-    func schemaKey(_ db: String, _ schema: String) -> String { "\(db)\0\(schema)" }
+    /// NUL byte is valid in Swift strings but can't appear in a real database
+    /// identifier, so we use it as a separator to build composite keys safely.
+    static let keySeparator: Character = "\0"
+
+    func schemaKey(_ db: String, _ schema: String) -> String { "\(db)\(Self.keySeparator)\(schema)" }
     func categoryKey(_ db: String, _ schema: String, _ category: ObjectCategory) -> String {
-        "\(db)\0\(schema)\0\(category.rawValue)"
+        "\(db)\(Self.keySeparator)\(schema)\(Self.keySeparator)\(category.rawValue)"
     }
 
     // MARK: - Data Access
@@ -234,7 +271,7 @@ struct SchemaObjects: Sendable {
     /// Clears data for a specific database.
     func clearDatabase(_ db: String) {
         schemasPerDatabase.removeValue(forKey: db)
-        let prefix = "\(db)\0"
+        let prefix = "\(db)\(Self.keySeparator)"
         objectsPerKey = objectsPerKey.filter { !$0.key.hasPrefix(prefix) }
         _allLoadedTablesCache = nil
         loadedKeys = loadedKeys.filter { !$0.hasPrefix(prefix) }

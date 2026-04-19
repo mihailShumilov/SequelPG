@@ -62,27 +62,34 @@ struct TabRootView: View {
             if tab.appVM.isConnected {
                 Circle()
                     .fill(.green)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 7, height: 7)
             }
             Text(tab.appVM.connectedProfileName ?? "New Connection")
                 .lineLimit(1)
-                .font(.caption)
+                .font(.subheadline)
 
             if tabs.count > 1 {
                 Button {
                     closeTab(tab.id)
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close tab")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+        .overlay(alignment: .bottom) {
+            if isSelected {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(height: 2)
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             selectedTabId = tab.id
@@ -97,21 +104,32 @@ struct TabRootView: View {
             } else {
                 StartPageView()
                     .environment(tab.appVM)
+                    .alert("Connection Error", isPresented: .init(
+                        get: { tab.appVM.errorMessage != nil },
+                        set: { if !$0 { tab.appVM.errorMessage = nil } }
+                    )) {
+                        Button("OK") { tab.appVM.errorMessage = nil }
+                    } message: {
+                        Text(tab.appVM.errorMessage ?? "")
+                    }
             }
         }
         .environment(tab.appVM)
         .environment(tab.appVM.navigatorVM)
         .environment(tab.appVM.tableVM)
         .environment(tab.appVM.queryVM)
+        .environment(tab.appVM.queryHistoryVM)
         .environment(connectionListVM)
     }
 
     private func connectedView(_ tab: TabItem) -> some View {
-        HStack(spacing: 0) {
+        @Bindable var appVM = tab.appVM
+        return HStack(spacing: 0) {
             NavigatorView()
-                .frame(minWidth: 200, idealWidth: 250, maxWidth: 350)
+                .frame(width: appVM.sidebarWidth)
+                .clipped()
 
-            Divider()
+            SidebarResizeHandle(width: $appVM.sidebarWidth)
 
             MainAreaView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -123,17 +141,43 @@ struct TabRootView: View {
                     .frame(minWidth: 180, idealWidth: 220, maxWidth: 300)
             }
         }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+            guard !SidebarWidthStore.hasSavedWidth else { return }
+            let defaultWidth = max(200, min(width / 3, 500))
+            appVM.sidebarWidth = defaultWidth
+            SidebarWidthStore.save(defaultWidth)
+        }
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                Menu {
+                    Button("Extensions…") { appVM.showExtensionsSheet = true }
+                    Button("Roles & Privileges…") { appVM.showRolesSheet = true }
+                    Button("Function Library…") { appVM.showFunctionLibrary = true }
+                } label: {
+                    Image(systemName: "server.rack")
+                }
+                .help("Database tools")
+            }
+            ToolbarItem(placement: .automatic) {
                 Button {
-                    withAnimation {
-                        tab.appVM.showInspector.toggle()
-                    }
+                    tab.appVM.showInspector.toggle()
                 } label: {
                     Image(systemName: "sidebar.right")
                 }
                 .help("Toggle Inspector")
             }
+        }
+        .sheet(isPresented: $appVM.showExtensionsSheet) {
+            ExtensionsSheet()
+                .environment(tab.appVM)
+        }
+        .sheet(isPresented: $appVM.showRolesSheet) {
+            RolesSheet()
+                .environment(tab.appVM)
+        }
+        .sheet(isPresented: $appVM.showFunctionLibrary) {
+            FunctionLibrarySheet()
+                .environment(tab.appVM.queryVM)
         }
         .alert("Error", isPresented: .init(
             get: { tab.appVM.errorMessage != nil },
@@ -160,5 +204,64 @@ struct TabRootView: View {
         if selectedTabId == id {
             selectedTabId = tabs.first?.id
         }
+    }
+}
+
+// MARK: - Sidebar Resize Handle
+
+struct SidebarResizeHandle: View {
+    @Binding var width: CGFloat
+    @State private var isDragging = false
+    @State private var dragStartWidth: CGFloat = 0
+
+    var body: some View {
+        // Invisible drag target overlaid on a standard divider
+        Divider()
+            .overlay {
+                Color.clear
+                    .frame(width: 12)
+                    .contentShape(Rectangle())
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.resizeLeftRight.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { value in
+                                if !isDragging {
+                                    isDragging = true
+                                    dragStartWidth = width
+                                }
+                                let newWidth = dragStartWidth + value.translation.width
+                                width = min(max(newWidth, 160), 500)
+                            }
+                            .onEnded { _ in
+                                isDragging = false
+                                SidebarWidthStore.save(width)
+                            }
+                    )
+            }
+    }
+}
+
+// MARK: - Sidebar Width Persistence
+
+enum SidebarWidthStore {
+    private static let key = "com.sequelpg.sidebarWidth"
+
+    static var hasSavedWidth: Bool {
+        UserDefaults.standard.object(forKey: key) != nil
+    }
+
+    static func load() -> CGFloat {
+        let value = UserDefaults.standard.double(forKey: key)
+        return value > 0 ? value : 250
+    }
+
+    static func save(_ width: CGFloat) {
+        UserDefaults.standard.set(Double(width), forKey: key)
     }
 }

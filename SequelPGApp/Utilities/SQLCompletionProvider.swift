@@ -41,6 +41,13 @@ enum SQLCompletionProvider {
             .sorted()
         results.append(contentsOf: matchingColumns)
 
+        // Built-in function names (from the curated function library).
+        // These suggest without parens so the user can tab to fill args.
+        let matchingFunctions = SQLFunctionLibrary.names
+            .filter { $0.hasPrefix(lowered) }
+            .sorted()
+        results.append(contentsOf: matchingFunctions)
+
         // Deduplicate while preserving order
         var seen = Set<String>()
         return results.filter { seen.insert($0).inserted }

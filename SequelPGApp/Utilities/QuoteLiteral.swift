@@ -31,8 +31,55 @@ func quoteLiteralTyped(_ value: CellValue, dataType: String) -> String {
     if textLikeTypes.contains(normalizedType) {
         return literal
     }
+    // Validate type name to prevent injection via hostile column metadata
+    guard isValidTypeName(dataType) else { return literal }
     // Append explicit cast so PostgreSQL doesn't rely on implicit coercion
     return "\(literal)::\(dataType)"
+}
+
+// MARK: - SQL Expression Validation
+
+/// True when `haystack` contains any of `keywords` as a whole word.
+/// Case-insensitive. Used to detect injection attempts that try to piggyback
+/// DDL onto a DEFAULT/CHECK/function-params fragment.
+private func containsDangerousKeyword(_ haystack: String, keywords: Set<String>) -> Bool {
+    let lower = haystack.lowercased()
+    for keyword in keywords {
+        if lower.range(of: "\\b\(keyword)\\b", options: .regularExpression) != nil {
+            return true
+        }
+    }
+    return false
+}
+
+/// Validates a SQL expression field (DEFAULT value, CHECK constraint) to prevent
+/// multi-statement injection. Rejects semicolons and dangerous keywords outside
+/// of string context. Returns true if the expression appears safe.
+func isValidSQLExpression(_ expr: String) -> Bool {
+    let trimmed = expr.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return true }
+    if trimmed.contains(";") { return false }
+    let dangerousKeywords: Set<String> = [
+        "drop", "alter", "create", "grant", "revoke", "truncate",
+        "insert", "update", "delete", "exec", "execute", "copy",
+    ]
+    return !containsDangerousKeyword(trimmed, keywords: dangerousKeywords)
+}
+
+/// Validates a function parameters string (e.g. "p1 integer, p2 text").
+/// Rejects semicolons and dangerous keywords that could inject clauses
+/// like SECURITY DEFINER.
+func isValidFunctionParams(_ params: String) -> Bool {
+    let trimmed = params.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return true }
+    if trimmed.contains(";") { return false }
+    // Reject closing paren — prevents escaping the parameter list
+    if trimmed.contains(")") { return false }
+    let dangerousKeywords: Set<String> = [
+        "security", "definer", "invoker", "drop", "alter", "create",
+        "grant", "revoke", "truncate", "exec", "execute",
+    ]
+    return !containsDangerousKeyword(trimmed, keywords: dangerousKeywords)
 }
 
 // MARK: - Type Name Validation

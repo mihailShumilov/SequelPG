@@ -11,6 +11,124 @@ struct CascadeDeleteContext {
     let source: AppViewModel.MainTab
 }
 
+/// Constructs the SQL needed to delete a parent row and its direct children
+/// via a writable CTE. Extracted from `executeCascadeDelete` so the SQL-building
+/// logic can be unit-tested and reasoned about independently of DB execution,
+/// error handling, and UI refresh.
+///
+/// **Limitation:** Only handles direct (one-level) foreign key dependencies.
+/// Grandchildren must be handled via `ON DELETE CASCADE` on the database.
+struct CascadeDeleteBuilder {
+    let schema: String
+    let table: String
+    let pkValues: [(column: String, value: CellValue)]
+
+    var hasPrimaryKeyValues: Bool { !pkValues.isEmpty }
+
+    /// Fetches every (child_schema, child_table, child_column, parent_column)
+    /// tuple for FKs whose referenced table is this parent. Used to enumerate
+    /// children that must be purged before the parent delete can succeed.
+    var foreignKeyMetadataSQL: String {
+        """
+        SELECT child_ns.nspname AS child_schema,
+               child_rel.relname AS child_table,
+               child_att.attname AS child_column,
+               parent_att.attname AS parent_column
+        FROM pg_constraint con
+        JOIN pg_class child_rel ON con.conrelid = child_rel.oid
+        JOIN pg_namespace child_ns ON child_rel.relnamespace = child_ns.oid
+        JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS ck(num, ord) ON true
+        JOIN pg_attribute child_att ON child_att.attrelid = con.conrelid AND child_att.attnum = ck.num
+        JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS cfk(num, ord) ON cfk.ord = ck.ord
+        JOIN pg_attribute parent_att ON parent_att.attrelid = con.confrelid AND parent_att.attnum = cfk.num
+        WHERE con.contype = 'f'
+          AND con.confrelid = (
+              SELECT c.oid FROM pg_class c
+              JOIN pg_namespace n ON c.relnamespace = n.oid
+              WHERE c.relname = \(quoteLiteral(.text(table))) AND n.nspname = \(quoteLiteral(.text(schema)))
+          )
+        """
+    }
+
+    /// Builds the DELETE (or WITH … DELETE) SQL from the FK metadata rows
+    /// returned by `foreignKeyMetadataSQL`. Falls back to a plain parent DELETE
+    /// when no children are found or none of them can be matched against the
+    /// parent PK values.
+    func makeDeleteSQL(from fkRows: [[CellValue]]) -> String {
+        let parentWhere = parentWhereClause
+        let cteParts = buildChildDeleteCTEs(fkRows: fkRows)
+        let parentDelete = "DELETE FROM \(quoteIdent(schema)).\(quoteIdent(table)) WHERE \(parentWhere)"
+        if cteParts.isEmpty {
+            return parentDelete
+        }
+        return "WITH \(cteParts.joined(separator: ", ")) \(parentDelete)"
+    }
+
+    // MARK: - Private
+
+    /// Joined WHERE fragment matching the parent row. Empty-guard is handled
+    /// by the caller via `hasPrimaryKeyValues`.
+    private var parentWhereClause: String {
+        pkValues.map(Self.columnPredicate).joined(separator: " AND ")
+    }
+
+    /// One child DELETE per distinct (schema, table) group, wrapped in a CTE
+    /// body. Children whose composite FK can't be fully matched against the
+    /// parent PK values are skipped so we never emit an incomplete WHERE that
+    /// could target unrelated rows.
+    private func buildChildDeleteCTEs(fkRows: [[CellValue]]) -> [String] {
+        let childMap = groupForeignKeyRows(fkRows)
+        var parts: [String] = []
+        for (idx, entry) in childMap.enumerated() {
+            guard let whereClause = childWhereClause(for: entry.value) else { continue }
+            let child = entry.key
+            parts.append(
+                "del_child\(idx) AS (DELETE FROM \(quoteIdent(child.schema)).\(quoteIdent(child.table)) WHERE \(whereClause))"
+            )
+        }
+        return parts
+    }
+
+    /// Collapses FK metadata rows into [(child_schema, child_table): [(childCol, parentCol)]].
+    private func groupForeignKeyRows(_ rows: [[CellValue]]) -> [ChildFK: [(childCol: String, parentCol: String)]] {
+        var map: [ChildFK: [(childCol: String, parentCol: String)]] = [:]
+        for row in rows {
+            guard row.count >= 4,
+                  case let .text(childSchema) = row[0],
+                  case let .text(childTable) = row[1],
+                  case let .text(childCol) = row[2],
+                  case let .text(parentCol) = row[3]
+            else { continue }
+            let key = ChildFK(schema: childSchema, table: childTable)
+            map[key, default: []].append((childCol: childCol, parentCol: parentCol))
+        }
+        return map
+    }
+
+    /// Returns the composite WHERE clause for a single child, or nil when any
+    /// mapping can't be resolved against the parent PK values.
+    private func childWhereClause(for mappings: [(childCol: String, parentCol: String)]) -> String? {
+        var parts: [String] = []
+        for mapping in mappings {
+            guard let pk = pkValues.first(where: { $0.column == mapping.parentCol }) else { return nil }
+            parts.append(Self.columnPredicate((column: mapping.childCol, value: pk.value)))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " AND ")
+    }
+
+    private static func columnPredicate(_ pair: (column: String, value: CellValue)) -> String {
+        if pair.value.isNull {
+            return "\(quoteIdent(pair.column)) IS NULL"
+        }
+        return "\(quoteIdent(pair.column)) = \(quoteLiteral(pair.value))"
+    }
+
+    private struct ChildFK: Hashable {
+        let schema: String
+        let table: String
+    }
+}
+
 /// Per-session application state coordinating a single database connection.
 /// Each connection tab/window gets its own AppViewModel instance.
 @MainActor
@@ -23,17 +141,31 @@ struct CascadeDeleteContext {
     let navigatorVM: NavigatorViewModel
     let tableVM: TableViewModel
     let queryVM: QueryViewModel
+    let queryHistoryVM: QueryHistoryViewModel
 
     var selectedTab: MainTab = .query
     var showInspector = true
+    var showQueryHistory = false
+    var sidebarWidth: CGFloat = SidebarWidthStore.load()
     var isConnected = false
     var connectedProfileName: String?
     var errorMessage: String?
     var cascadeDeleteContext: CascadeDeleteContext?
 
+    // Database-tools sheets (Extensions / Roles / Function Library)
+    var showExtensionsSheet = false
+    var showRolesSheet = false
+    var showFunctionLibrary = false
+
     @ObservationIgnored private var connectedProfile: ConnectionProfile?
     @ObservationIgnored private var connectedPassword: String?
     @ObservationIgnored private var connectedSSHPassword: String?
+
+    // While a database switch is in flight the connection pool is torn down
+    // and rebuilt; concurrent callers that try to reuse `dbClient` during that
+    // window will either hit `notConnected` or land on the wrong database.
+    // This flag lets callers detect the state and defer their work.
+    @ObservationIgnored private var isSwitchingDatabase = false
 
     enum MainTab: String, CaseIterable {
         case structure = "Structure"
@@ -50,6 +182,7 @@ struct CascadeDeleteContext {
         self.navigatorVM = NavigatorViewModel()
         self.tableVM = TableViewModel()
         self.queryVM = QueryViewModel()
+        self.queryHistoryVM = QueryHistoryViewModel()
     }
 
     /// Connects to a database using the given profile and credentials.
@@ -104,6 +237,12 @@ struct CascadeDeleteContext {
 
     func switchDatabase(_ name: String) async {
         guard let profile = connectedProfile, name != profile.database else { return }
+        guard !isSwitchingDatabase else {
+            Log.ui.info("UI: switchDatabase ignored — another switch in progress")
+            return
+        }
+        isSwitchingDatabase = true
+        defer { isSwitchingDatabase = false }
         do {
             try await dbClient.switchDatabase(to: name, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
 
@@ -146,6 +285,13 @@ struct CascadeDeleteContext {
             return
         }
 
+        guard !isSwitchingDatabase else {
+            Log.ui.info("UI: loadDatabaseSchemas ignored — switch in progress")
+            return
+        }
+        isSwitchingDatabase = true
+        defer { isSwitchingDatabase = false }
+
         // Switch to the target database, fetch schemas, then always switch back
         do {
             try await dbClient.switchDatabase(to: dbName, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
@@ -155,12 +301,14 @@ struct CascadeDeleteContext {
         } catch {
             errorMessage = error.localizedDescription
         }
-        // Always switch back to the original database
+        // Always switch back to the original database — keep profile, navigator,
+        // and table state consistent with the actual connection.
         do {
             try await dbClient.switchDatabase(to: currentDb, profile: profile, password: connectedPassword, sshPassword: connectedSSHPassword)
             var restoredProfile = profile
             restoredProfile.database = currentDb
             connectedProfile = restoredProfile
+            navigatorVM.connectedDatabase = currentDb
         } catch {
             errorMessage = "Failed to restore connection to \(currentDb): \(error.localizedDescription)"
         }
@@ -196,6 +344,25 @@ struct CascadeDeleteContext {
             tableVM.selectedObjectName = object.name
             tableVM.selectedObjectColumnCount = columns.count
 
+            // Fetch per-table extras only for tables / partitioned tables; views
+            // and other object types don't have these in a meaningful way.
+            if object.type == .table {
+                async let idx = dbClient.listIndexes(schema: object.schema, table: object.name)
+                async let cons = dbClient.listConstraints(schema: object.schema, table: object.name)
+                async let trg = dbClient.listTriggers(schema: object.schema, table: object.name)
+                async let parts = dbClient.listPartitions(schema: object.schema, table: object.name)
+                do {
+                    tableVM.indexes = try await idx
+                    tableVM.constraints = try await cons
+                    tableVM.triggers = try await trg
+                    tableVM.partitions = try await parts
+                } catch {
+                    // Don't fail object selection on a missing catalog query —
+                    // just leave those sections empty and note it in the error bar.
+                    errorMessage = error.localizedDescription
+                }
+            }
+
             // If content tab is active, load content for the new object.
             if selectedTab == .content {
                 await loadContentPage()
@@ -210,8 +377,7 @@ struct CascadeDeleteContext {
         guard !navigatorVM.isSchemaLoaded(db: db, schema: schema) else { return }
         do {
             let objects = try await dbClient.listAllSchemaObjects(schema: schema)
-            navigatorVM.objectsPerKey[navigatorVM.schemaKey(db, schema)] = objects
-            navigatorVM.loadedKeys.insert(navigatorVM.schemaKey(db, schema))
+            navigatorVM.setSchemaObjects(db: db, schema: schema, objects: objects)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -239,7 +405,7 @@ struct CascadeDeleteContext {
             navigatorVM.setSchemas(schemas, forDatabase: db)
             // Reload objects for previously expanded schemas
             for key in previouslyExpanded {
-                let parts = key.split(separator: "\0", maxSplits: 1)
+                let parts = key.split(separator: NavigatorViewModel.keySeparator, maxSplits: 1)
                 guard parts.count == 2, String(parts[0]) == db else { continue }
                 let schema = String(parts[1])
                 guard schemas.contains(schema) else { continue }
@@ -287,9 +453,24 @@ struct CascadeDeleteContext {
 
             tableVM.setContentResult(result)
             tableVM.isLoadingContent = false
+
+            queryHistoryVM.logQuery(
+                sql: sql,
+                source: .system,
+                duration: result.executionTime,
+                success: true,
+                rowCount: result.rowCount
+            )
         } catch {
             tableVM.isLoadingContent = false
             errorMessage = error.localizedDescription
+
+            queryHistoryVM.logQuery(
+                sql: sql,
+                source: .system,
+                success: false,
+                errorMessage: error.localizedDescription
+            )
         }
     }
 
@@ -353,31 +534,42 @@ struct CascadeDeleteContext {
             queryVM.result = result
             queryVM.invalidateSortCache()
             queryVM.isExecuting = false
+
+            queryHistoryVM.logQuery(
+                sql: sql,
+                source: .manual,
+                duration: result.executionTime,
+                success: true,
+                rowCount: result.rowCount
+            )
         } catch {
             queryVM.errorMessage = error.localizedDescription
             queryVM.isExecuting = false
+
+            queryHistoryVM.logQuery(
+                sql: sql,
+                source: .manual,
+                success: false,
+                errorMessage: error.localizedDescription
+            )
         }
     }
 
-    // MARK: - Column Sorting
-
     // MARK: - Content Filters
 
-    func applyContentFilters() {
+    /// Keeps only filters that contribute to the WHERE clause, then builds each
+    /// into a SQL fragment. Shared by `applyContentFilters` and `previewFilterSQL`
+    /// so both see the exact same validation rules.
+    private func validFilterConditions() -> [String] {
         let validFilters = tableVM.filters.filter { f in
             if f.op == .isNull || f.op == .isNotNull { return true }
             return !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+        return validFilters.compactMap { buildFilterCondition($0, columns: tableVM.columns) }
+    }
 
-        guard !validFilters.isEmpty else {
-            clearContentFilters()
-            return
-        }
-
-        let conditions = validFilters.compactMap { f -> String? in
-            buildFilterCondition(f, columns: tableVM.columns)
-        }
-
+    func applyContentFilters() {
+        let conditions = validFilterConditions()
         guard !conditions.isEmpty else {
             clearContentFilters()
             return
@@ -398,46 +590,30 @@ struct CascadeDeleteContext {
     }
 
     func previewFilterSQL() -> String {
-        let validFilters = tableVM.filters.filter { f in
-            if f.op == .isNull || f.op == .isNotNull { return true }
-            return !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        let conditions = validFilters.compactMap { f -> String? in
-            buildFilterCondition(f, columns: tableVM.columns)
-        }
+        let conditions = validFilterConditions()
         guard !conditions.isEmpty else { return "-- no active filters" }
         return "WHERE " + conditions.joined(separator: "\n  AND ")
+    }
+
+    /// Escapes a value for use inside a LIKE/ILIKE pattern. Backslash and
+    /// single-quote get doubled for the E'…' string literal; `%` and `_` are
+    /// escaped so they aren't interpreted as wildcards.
+    private static func escapeLikePattern(_ val: String) -> String {
+        val.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "''")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
     }
 
     private func buildFilterCondition(_ filter: ContentFilter, columns: [ColumnInfo]) -> String? {
         let val = filter.value.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Column expression: specific column or CAST to text for "any column"
-        if filter.column.isEmpty {
-            // "Any Column" — search across all text-castable columns
-            guard filter.op != .isNull, filter.op != .isNotNull else { return nil }
-            let colExprs = columns.map { quoteIdent($0.name) + "::text" }
-            guard !colExprs.isEmpty else { return nil }
-            let likeVal = val.replacingOccurrences(of: "'", with: "''")
-                .replacingOccurrences(of: "%", with: "\\%")
-                .replacingOccurrences(of: "_", with: "\\_")
-            switch filter.op {
-            case .contains:
-                let parts = colExprs.map { "\($0) ILIKE E'%\(likeVal)%'" }
-                return "(" + parts.joined(separator: " OR ") + ")"
-            case .equals:
-                let parts = colExprs.map { "\($0) = \(quoteLiteral(.text(val)))" }
-                return "(" + parts.joined(separator: " OR ") + ")"
-            default:
-                let parts = colExprs.map { "\($0) ILIKE E'%\(likeVal)%'" }
-                return "(" + parts.joined(separator: " OR ") + ")"
-            }
+        guard !filter.column.isEmpty else {
+            return buildAnyColumnCondition(op: filter.op, value: val, columns: columns)
         }
 
         let col = quoteIdent(filter.column)
-        let escaped = val.replacingOccurrences(of: "'", with: "''")
-            .replacingOccurrences(of: "%", with: "\\%")
-            .replacingOccurrences(of: "_", with: "\\_")
+        let escaped = Self.escapeLikePattern(val)
 
         switch filter.op {
         case .contains: return "\(col)::text ILIKE E'%\(escaped)%'"
@@ -452,6 +628,27 @@ struct CascadeDeleteContext {
         case .isNull: return "\(col) IS NULL"
         case .isNotNull: return "\(col) IS NOT NULL"
         }
+    }
+
+    /// "Any Column" — search across all text-castable columns.
+    /// Note: casting every column to ::text forces a sequential scan on
+    /// the server; this is intentional for quick ad-hoc filtering but
+    /// won't use indexes.
+    private func buildAnyColumnCondition(op: FilterOperator, value: String, columns: [ColumnInfo]) -> String? {
+        guard op != .isNull, op != .isNotNull else { return nil }
+        let colExprs = columns.map { quoteIdent($0.name) + "::text" }
+        guard !colExprs.isEmpty else { return nil }
+
+        let parts: [String]
+        switch op {
+        case .equals:
+            parts = colExprs.map { "\($0) = \(quoteLiteral(.text(value)))" }
+        default:
+            // Every non-equals op for "Any Column" falls back to ILIKE %val%.
+            let likeVal = Self.escapeLikePattern(value)
+            parts = colExprs.map { "\($0) ILIKE E'%\(likeVal)%'" }
+        }
+        return "(" + parts.joined(separator: " OR ") + ")"
     }
 
     func toggleContentSort(column: String) {
@@ -478,6 +675,35 @@ struct CascadeDeleteContext {
 
     // MARK: - Inline Cell Editing
 
+    /// Outcome of a single-row mutation. Lets callers decide whether to refresh
+    /// page data, raise cascade-delete UI, or surface an inline error without
+    /// duplicating the run/log/catch boilerplate.
+    enum RowMutationOutcome {
+        case success
+        case foreignKeyViolation(String)
+        case error(String)
+    }
+
+    /// Runs a row-mutation SQL statement, logs to history, and classifies the
+    /// outcome so callers can branch on FK-violation vs generic failure.
+    /// Internal so `AppViewModel+ObjectCRUD.swift` can reuse it for DDL ops.
+    func performRowMutation(sql: String) async -> RowMutationOutcome {
+        do {
+            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            queryHistoryVM.logQuery(sql: sql, source: .system, success: true)
+            return .success
+        } catch let error as AppError {
+            queryHistoryVM.logQuery(sql: sql, source: .system, success: false, errorMessage: error.localizedDescription)
+            if case let .foreignKeyViolation(msg) = error {
+                return .foreignKeyViolation(msg)
+            }
+            return .error(error.localizedDescription)
+        } catch {
+            queryHistoryVM.logQuery(sql: sql, source: .system, success: false, errorMessage: error.localizedDescription)
+            return .error(error.localizedDescription)
+        }
+    }
+
     func updateContentCell(rowIndex: Int, columnIndex: Int, newText: String) async {
         guard let object = navigatorVM.selectedObject,
               let result = tableVM.contentResult
@@ -498,12 +724,11 @@ struct CascadeDeleteContext {
             return
         }
 
-        do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
-            // Update in-place to preserve row order
+        switch await performRowMutation(sql: sql) {
+        case .success:
             tableVM.contentResult = result.replacingCell(row: rowIndex, column: columnIndex, with: newValue)
-        } catch {
-            errorMessage = error.localizedDescription
+        case .foreignKeyViolation(let msg), .error(let msg):
+            errorMessage = msg
         }
     }
 
@@ -517,7 +742,6 @@ struct CascadeDeleteContext {
 
         // rowIndex comes from the sorted display; map it back to the original position.
         let actualRowIndex = queryVM.originalRowIndex(rowIndex)
-
         let newValue = Self.cellValueFromText(newText)
 
         guard let sql = buildUpdateSQL(
@@ -530,13 +754,12 @@ struct CascadeDeleteContext {
             return
         }
 
-        do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
-            // Update in-place to preserve row order
+        switch await performRowMutation(sql: sql) {
+        case .success:
             queryVM.result = result.replacingCell(row: actualRowIndex, column: columnIndex, with: newValue)
             queryVM.invalidateSortCache()
-        } catch {
-            errorMessage = error.localizedDescription
+        case .foreignKeyViolation(let msg), .error(let msg):
+            errorMessage = msg
         }
     }
 
@@ -596,6 +819,19 @@ struct CascadeDeleteContext {
         navigatorVM.selectedObject?.type == .table
     }
 
+    /// Collects PK column name → original row value pairs. `nil` if any PK is
+    /// missing from the result columns (composite-PK safety guard).
+    private static func collectPKValues(
+        pkColumns: [ColumnInfo],
+        resultColumns: [String],
+        originalRow: [CellValue]
+    ) -> [(column: String, value: CellValue)] {
+        pkColumns.compactMap { pk in
+            guard let idx = resultColumns.firstIndex(of: pk.name) else { return nil }
+            return (column: pk.name, value: originalRow[idx])
+        }
+    }
+
     func deleteContentRow(rowIndex: Int) async {
         guard let object = navigatorVM.selectedObject,
               let result = tableVM.contentResult
@@ -616,34 +852,28 @@ struct CascadeDeleteContext {
             return
         }
 
-        do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+        switch await performRowMutation(sql: sql) {
+        case .success:
             clearSelectedRow()
-            // Refresh row count and reload current page
-            let approxRows = try await dbClient.getApproximateRowCount(
-                schema: object.schema,
-                table: object.name
-            )
-            tableVM.approximateRowCount = approxRows
-            await loadContentPage()
-        } catch let error as AppError {
-            if case let .foreignKeyViolation(msg) = error {
-                let pkValues = pkColumns.compactMap { pk -> (column: String, value: CellValue)? in
-                    guard let idx = result.columns.firstIndex(of: pk.name) else { return nil }
-                    return (column: pk.name, value: originalRow[idx])
-                }
-                cascadeDeleteContext = CascadeDeleteContext(
-                    schema: object.schema,
-                    table: object.name,
-                    pkValues: pkValues,
-                    errorMessage: msg,
-                    source: .content
+            do {
+                let approxRows = try await dbClient.getApproximateRowCount(
+                    schema: object.schema, table: object.name
                 )
-            } else {
+                tableVM.approximateRowCount = approxRows
+            } catch {
                 errorMessage = error.localizedDescription
             }
-        } catch {
-            errorMessage = error.localizedDescription
+            await loadContentPage()
+        case .foreignKeyViolation(let msg):
+            cascadeDeleteContext = CascadeDeleteContext(
+                schema: object.schema,
+                table: object.name,
+                pkValues: Self.collectPKValues(pkColumns: pkColumns, resultColumns: result.columns, originalRow: originalRow),
+                errorMessage: msg,
+                source: .content
+            )
+        case .error(let msg):
+            errorMessage = msg
         }
     }
 
@@ -653,8 +883,6 @@ struct CascadeDeleteContext {
         else { return }
 
         let pkColumns = queryVM.editableColumns.filter { $0.isPrimaryKey }
-        // rowIndex comes from the sorted display; map it back to the
-        // original position in queryVM.result.
         let actualRowIndex = queryVM.originalRowIndex(rowIndex)
         guard !pkColumns.isEmpty, actualRowIndex < result.rows.count else { return }
 
@@ -670,29 +898,20 @@ struct CascadeDeleteContext {
             return
         }
 
-        do {
-            _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+        switch await performRowMutation(sql: sql) {
+        case .success:
             clearSelectedRow()
-            // Re-execute the user's query to refresh results
             await executeQuery(queryVM.queryText)
-        } catch let error as AppError {
-            if case let .foreignKeyViolation(msg) = error {
-                let pkValues = pkColumns.compactMap { pk -> (column: String, value: CellValue)? in
-                    guard let idx = result.columns.firstIndex(of: pk.name) else { return nil }
-                    return (column: pk.name, value: originalRow[idx])
-                }
-                cascadeDeleteContext = CascadeDeleteContext(
-                    schema: tableRef.schema,
-                    table: tableRef.table,
-                    pkValues: pkValues,
-                    errorMessage: msg,
-                    source: .query
-                )
-            } else {
-                errorMessage = error.localizedDescription
-            }
-        } catch {
-            errorMessage = error.localizedDescription
+        case .foreignKeyViolation(let msg):
+            cascadeDeleteContext = CascadeDeleteContext(
+                schema: tableRef.schema,
+                table: tableRef.table,
+                pkValues: Self.collectPKValues(pkColumns: pkColumns, resultColumns: result.columns, originalRow: originalRow),
+                errorMessage: msg,
+                source: .query
+            )
+        case .error(let msg):
+            errorMessage = msg
         }
     }
 
@@ -771,6 +990,7 @@ struct CascadeDeleteContext {
 
         do {
             _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            queryHistoryVM.logQuery(sql: sql, source: .system, success: true)
             // Refresh row count
             let approxRows = try await dbClient.getApproximateRowCount(
                 schema: object.schema,
@@ -784,6 +1004,7 @@ struct CascadeDeleteContext {
             tableVM.newRowValues = [:]
             await loadContentPage()
         } catch {
+            queryHistoryVM.logQuery(sql: sql, source: .system, success: false, errorMessage: error.localizedDescription)
             // Keep insert row visible so user can fix values
             errorMessage = error.localizedDescription
         }
@@ -794,59 +1015,68 @@ struct CascadeDeleteContext {
         tableVM.newRowValues = [:]
     }
 
-    // MARK: - Date Formatters (static, allocated once)
-
-    private static let timestampFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return f
-    }()
-
-    private static let timestampTZFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd HH:mm:ssXXXXX"
-        return f
-    }()
-
-    private static let insertDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "HH:mm:ss"
-        return f
-    }()
-
-    private static let timeTZFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "HH:mm:ssXXXXX"
-        return f
-    }()
-
     /// Returns a pre-filled default value for date/time/timestamp columns,
-    /// or an empty string for all other types.
+    /// or an empty string for all other types. Uses ISO8601 style with a
+    /// space date/time separator — the format PostgreSQL accepts natively.
+    /// Time zone is intentionally the user's local TZ so the pre-filled value
+    /// matches what they see on-screen.
+    ///
+    /// `dataType` is expected to be an `information_schema.columns.data_type`
+    /// value (e.g. "timestamp with time zone"), so we match on the exact
+    /// canonical names rather than substring heuristics.
     private func defaultInsertValue(for dataType: String, now: Date) -> String {
-        let type = dataType.lowercased()
-        let hasTimeZone = type.contains("with time zone") || type.contains("tz")
+        guard let kind = TemporalColumnKind(informationSchemaDataType: dataType) else { return "" }
+        let tz = TimeZone.current
 
-        if type.contains("timestamp") {
-            return (hasTimeZone ? Self.timestampTZFormatter : Self.timestampFormatter).string(from: now)
+        switch kind {
+        case .timestamp, .timestampTZ:
+            let dateStyle = Date.ISO8601FormatStyle(timeZone: tz)
+                .year().month().day()
+                .dateSeparator(.dash)
+                .dateTimeSeparator(.space)
+                .time(includingFractionalSeconds: false)
+            return kind == .timestampTZ
+                ? now.formatted(dateStyle.timeZone(separator: .colon))
+                : now.formatted(dateStyle)
+        case .date:
+            return now.formatted(
+                Date.ISO8601FormatStyle(timeZone: tz)
+                    .year().month().day()
+                    .dateSeparator(.dash)
+            )
+        case .time, .timeTZ:
+            // PG time has no date component. Derive HH:mm:ss from the ISO string
+            // — simpler than importing Formatter for the clock portion alone.
+            let full = now.formatted(
+                Date.ISO8601FormatStyle(timeZone: tz)
+                    .year().month().day()
+                    .dateSeparator(.dash)
+                    .dateTimeSeparator(.space)
+                    .time(includingFractionalSeconds: false)
+            )
+            let timePart = full.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+            guard kind == .timeTZ else { return timePart }
+            let hours = tz.secondsFromGMT() / 3600
+            let minutes = abs(tz.secondsFromGMT() / 60) % 60
+            let sign = hours >= 0 ? "+" : "-"
+            return String(format: "\(timePart)\(sign)%02d:%02d", abs(hours), minutes)
         }
-        if type == "date" {
-            return Self.insertDateFormatter.string(from: now)
+    }
+
+    /// Canonical information_schema.columns.data_type values for temporal types.
+    private enum TemporalColumnKind {
+        case timestamp, timestampTZ, date, time, timeTZ
+
+        init?(informationSchemaDataType: String) {
+            switch informationSchemaDataType.lowercased() {
+            case "timestamp without time zone": self = .timestamp
+            case "timestamp with time zone": self = .timestampTZ
+            case "date": self = .date
+            case "time without time zone": self = .time
+            case "time with time zone": self = .timeTZ
+            default: return nil
+            }
         }
-        if type.hasPrefix("time") {
-            return (hasTimeZone ? Self.timeTZFormatter : Self.timeFormatter).string(from: now)
-        }
-        return ""
     }
 
     func deleteInspectorRow() async {
@@ -870,104 +1100,38 @@ struct CascadeDeleteContext {
         let source = ctx.source
         cascadeDeleteContext = nil
 
-        // Build WHERE clause for the parent row from PK values
-        let parentWhereParts = ctx.pkValues.map { pk -> String in
-            if pk.value.isNull {
-                return "\(quoteIdent(pk.column)) IS NULL"
-            } else {
-                return "\(quoteIdent(pk.column)) = \(quoteLiteral(pk.value))"
-            }
-        }
-        guard !parentWhereParts.isEmpty else {
+        let builder = CascadeDeleteBuilder(schema: ctx.schema, table: ctx.table, pkValues: ctx.pkValues)
+        guard builder.hasPrimaryKeyValues else {
             errorMessage = "Cannot cascade delete: no primary key values"
             return
         }
-        let parentWhere = parentWhereParts.joined(separator: " AND ")
-
-        // Query FK metadata to find all child tables referencing this parent
-        let fkSQL = """
-            SELECT child_ns.nspname AS child_schema,
-                   child_rel.relname AS child_table,
-                   child_att.attname AS child_column,
-                   parent_att.attname AS parent_column
-            FROM pg_constraint con
-            JOIN pg_class child_rel ON con.conrelid = child_rel.oid
-            JOIN pg_namespace child_ns ON child_rel.relnamespace = child_ns.oid
-            JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS ck(num, ord) ON true
-            JOIN pg_attribute child_att ON child_att.attrelid = con.conrelid AND child_att.attnum = ck.num
-            JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS cfk(num, ord) ON cfk.ord = ck.ord
-            JOIN pg_attribute parent_att ON parent_att.attrelid = con.confrelid AND parent_att.attnum = cfk.num
-            WHERE con.contype = 'f'
-              AND con.confrelid = (
-                  SELECT c.oid FROM pg_class c
-                  JOIN pg_namespace n ON c.relnamespace = n.oid
-                  WHERE c.relname = \(quoteLiteral(.text(ctx.table))) AND n.nspname = \(quoteLiteral(.text(ctx.schema)))
-              )
-            """
 
         do {
-            let fkResult = try await dbClient.runQuery(fkSQL, maxRows: 5000, timeout: Self.defaultQueryTimeout)
+            let fkResult = try await dbClient.runQuery(
+                builder.foreignKeyMetadataSQL,
+                maxRows: 5000,
+                timeout: Self.defaultQueryTimeout
+            )
             if fkResult.isTruncated {
                 errorMessage = "Too many foreign key relationships to cascade delete safely."
                 return
             }
 
-            // Group by (child_schema, child_table) to handle composite FKs
-            struct ChildFK: Hashable {
-                let schema: String
-                let table: String
+            let deleteSQL = builder.makeDeleteSQL(from: fkResult.rows)
+
+            // PostgresNIO's extended query protocol cannot execute multiple
+            // statements in one call — sending "BEGIN; DELETE …; COMMIT;" as a
+            // single string silently fails. Issue each statement separately
+            // and roll back if the DELETE fails.
+            _ = try await dbClient.runQuery("BEGIN", maxRows: 0, timeout: Self.defaultQueryTimeout)
+            do {
+                _ = try await dbClient.runQuery(deleteSQL, maxRows: 0, timeout: Self.defaultQueryTimeout)
+                _ = try await dbClient.runQuery("COMMIT", maxRows: 0, timeout: Self.defaultQueryTimeout)
+            } catch {
+                _ = try? await dbClient.runQuery("ROLLBACK", maxRows: 0, timeout: Self.defaultQueryTimeout)
+                throw error
             }
-            var childMap: [ChildFK: [(childCol: String, parentCol: String)]] = [:]
-
-            for row in fkResult.rows {
-                guard row.count >= 4,
-                      case let .text(childSchema) = row[0],
-                      case let .text(childTable) = row[1],
-                      case let .text(childCol) = row[2],
-                      case let .text(parentCol) = row[3]
-                else { continue }
-
-                let key = ChildFK(schema: childSchema, table: childTable)
-                childMap[key, default: []].append((childCol: childCol, parentCol: parentCol))
-            }
-
-            // Build a writable CTE that deletes children then parent
-            var cteParts: [String] = []
-            for (idx, entry) in childMap.enumerated() {
-                let child = entry.key
-                let mappings = entry.value
-                var childWhereParts: [String] = []
-                var allMappingsResolved = true
-                for mapping in mappings {
-                    // Find the parent PK value for this mapping
-                    guard let pkVal = ctx.pkValues.first(where: { $0.column == mapping.parentCol }) else {
-                        // Missing PK value for a composite FK column — skip this
-                        // child entirely to avoid an incomplete WHERE clause that
-                        // could delete unrelated rows.
-                        allMappingsResolved = false
-                        break
-                    }
-                    if pkVal.value.isNull {
-                        childWhereParts.append("\(quoteIdent(mapping.childCol)) IS NULL")
-                    } else {
-                        childWhereParts.append("\(quoteIdent(mapping.childCol)) = \(quoteLiteral(pkVal.value))")
-                    }
-                }
-                guard allMappingsResolved, !childWhereParts.isEmpty else { continue }
-                let childWhere = childWhereParts.joined(separator: " AND ")
-                cteParts.append("del_child\(idx) AS (DELETE FROM \(quoteIdent(child.schema)).\(quoteIdent(child.table)) WHERE \(childWhere))")
-            }
-
-            let deleteSQL: String
-            if cteParts.isEmpty {
-                // No children found, just retry the plain delete
-                deleteSQL = "DELETE FROM \(quoteIdent(ctx.schema)).\(quoteIdent(ctx.table)) WHERE \(parentWhere)"
-            } else {
-                deleteSQL = "WITH \(cteParts.joined(separator: ", ")) DELETE FROM \(quoteIdent(ctx.schema)).\(quoteIdent(ctx.table)) WHERE \(parentWhere)"
-            }
-            let cascadeSQL = "BEGIN; \(deleteSQL); COMMIT;"
-
-            _ = try await dbClient.runQuery(cascadeSQL, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            queryHistoryVM.logQuery(sql: deleteSQL, source: .system, success: true)
             clearSelectedRow()
 
             // Refresh data based on source tab
@@ -1004,7 +1168,13 @@ struct CascadeDeleteContext {
         }
         var sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ADD COLUMN \(quoteIdent(name)) \(dataType)"
         if !nullable { sql += " NOT NULL" }
-        if !defaultValue.isEmpty { sql += " DEFAULT \(defaultValue)" }
+        if !defaultValue.isEmpty {
+            guard isValidSQLExpression(defaultValue) else {
+                errorMessage = "Invalid default value expression"
+                return
+            }
+            sql += " DEFAULT \(defaultValue)"
+        }
         await executeSchemaChange(sql, schema: object.schema, table: object.name)
     }
 
@@ -1039,6 +1209,12 @@ struct CascadeDeleteContext {
 
     func changeColumnDefault(columnName: String, newDefault: String) async {
         guard let object = navigatorVM.selectedObject else { return }
+        if !newDefault.isEmpty {
+            guard isValidSQLExpression(newDefault) else {
+                errorMessage = "Invalid default value expression"
+                return
+            }
+        }
         let action = newDefault.isEmpty ? "DROP DEFAULT" : "SET DEFAULT \(newDefault)"
         let sql = "ALTER TABLE \(quoteIdent(object.schema)).\(quoteIdent(object.name)) ALTER COLUMN \(quoteIdent(columnName)) \(action)"
         await executeSchemaChange(sql, schema: object.schema, table: object.name)
@@ -1089,6 +1265,12 @@ struct CascadeDeleteContext {
         for col in columns {
             guard isValidTypeName(col.dataType) else {
                 errorMessage = "Invalid data type '\(col.dataType)' for column '\(col.name)'"
+                return
+            }
+        }
+        for col in columns where !col.defaultValue.isEmpty {
+            guard isValidSQLExpression(col.defaultValue) else {
+                errorMessage = "Invalid default value for column '\(col.name)'"
                 return
             }
         }

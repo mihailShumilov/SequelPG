@@ -11,6 +11,9 @@ enum FieldEditorKind {
     case longText
     case plain
 
+    /// Character count threshold above which plain text opens a popover editor.
+    static let longTextThreshold = 50
+
     init(dataType: String, value: String) {
         let normalized = dataType.lowercased().trimmingCharacters(in: .whitespaces)
         if normalized == "json" || normalized == "jsonb" {
@@ -21,7 +24,7 @@ enum FieldEditorKind {
             || normalized.hasPrefix("_")
         {
             self = .array
-        } else if value.count > 80 || value.contains("\n") {
+        } else if value.count > Self.longTextThreshold || value.contains("\n") {
             self = .longText
         } else {
             self = .plain
@@ -304,9 +307,7 @@ struct FieldEditorView: View {
 
     private func boolOption(label: String, value: Bool, color: Color) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                boolValue = value
-            }
+            boolValue = value
         } label: {
             Text(label)
                 .font(.system(.body, design: .monospaced, weight: boolValue == value ? .bold : .regular))
@@ -404,10 +405,9 @@ struct FieldEditorView: View {
     // MARK: - Type Badge
 
     private func typeBadge(_ type: String) -> some View {
-        let (icon, color) = badgeInfo(for: editorKind)
-        return Image(systemName: icon)
+        return Image(systemName: editorKind.badgeIcon)
             .font(.title3)
-            .foregroundStyle(color)
+            .foregroundStyle(editorKind.badgeColor)
             .frame(width: 28, height: 28)
     }
 
@@ -443,10 +443,6 @@ struct FieldEditorView: View {
             arrayItems = parsePostgresArray(rawValue)
         default:
             break
-        }
-
-        if initialValue.isNull {
-            isNull = true
         }
 
         textEditorFocused = true
@@ -575,14 +571,19 @@ func serializePostgresArray(_ items: [ArrayItem]) -> String {
     let elements = items.map { item -> String in
         if item.isNull { return "NULL" }
         let val = item.value
-        // Quote if contains special characters
+        // Quote if contains special characters — include control characters
+        // so newlines / tabs inside an element can't ambiguate the array text.
         let needsQuoting = val.isEmpty || val.contains(",") || val.contains("\"")
             || val.contains("\\") || val.contains("{") || val.contains("}")
-            || val.contains(" ") || val.uppercased() == "NULL"
+            || val.contains(" ") || val.contains("\n") || val.contains("\r")
+            || val.contains("\t") || val.uppercased() == "NULL"
         if needsQuoting {
             let escaped = val
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+                .replacingOccurrences(of: "\t", with: "\\t")
             return "\"\(escaped)\""
         }
         return val
@@ -590,15 +591,27 @@ func serializePostgresArray(_ items: [ArrayItem]) -> String {
     return "{\(elements.joined(separator: ","))}"
 }
 
-// MARK: - Badge Info Helper
+// MARK: - Badge Info on FieldEditorKind
 
-func badgeInfo(for kind: FieldEditorKind) -> (icon: String, color: Color) {
-    switch kind {
-    case .json: return ("curlybraces", .purple)
-    case .array: return ("list.bullet.rectangle", .blue)
-    case .boolean: return ("switch.2", .green)
-    case .longText: return ("text.alignleft", .orange)
-    case .plain: return ("character.cursor.ibeam", .secondary)
+extension FieldEditorKind {
+    var badgeIcon: String {
+        switch self {
+        case .json: return "curlybraces"
+        case .array: return "list.bullet.rectangle"
+        case .boolean: return "switch.2"
+        case .longText: return "text.alignleft"
+        case .plain: return "character.cursor.ibeam"
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .json: return .purple
+        case .array: return .blue
+        case .boolean: return .green
+        case .longText: return .orange
+        case .plain: return .secondary
+        }
     }
 }
 
@@ -610,10 +623,9 @@ struct CellTypeBadge: View {
 
     var body: some View {
         if kind != .plain {
-            let (icon, color) = badgeInfo(for: kind)
-            Image(systemName: icon)
+            Image(systemName: kind.badgeIcon)
                 .font(.system(size: 9))
-                .foregroundStyle(color.opacity(0.7))
+                .foregroundStyle(kind.badgeColor.opacity(0.7))
         }
     }
 }

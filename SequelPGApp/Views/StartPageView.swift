@@ -6,27 +6,12 @@ struct StartPageView: View {
 
     // MARK: - Form State
 
-    @State private var formName = ""
-    @State private var formHost = ""
-    @State private var formPort = "5432"
-    @State private var formDatabase = ""
-    @State private var formUsername = ""
-    @State private var formPassword = ""
-    @State private var formSSLMode: SSLMode = .prefer
+    @State private var form = ConnectionFormModel()
     @State private var showPassword = false
+    @State private var showSSHPassword = false
     @State private var validationErrors: [String] = []
     @State private var deleteTarget: ConnectionProfile?
     @State private var previousSelectedId: UUID?
-
-    // SSH tunnel form state
-    @State private var formUseSSHTunnel = false
-    @State private var formSSHHost = ""
-    @State private var formSSHPort = "22"
-    @State private var formSSHUser = ""
-    @State private var formSSHAuthMethod: SSHAuthMethod = .keyFile
-    @State private var formSSHKeyPath = ""
-    @State private var formSSHPassword = ""
-    @State private var showSSHPassword = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -94,14 +79,17 @@ struct StartPageView: View {
             }
             .tag(profile.id)
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
-                connectionListVM.selectedProfileId = profile.id
-                loadFormFromProfile(profile)
-                connectSelected()
-            }
-            .onTapGesture(count: 1) {
-                connectionListVM.selectedProfileId = profile.id
-            }
+            // Two separate tap gestures race each other and cause selection
+            // flicker before the double-tap resolves. Use a `simultaneousGesture`
+            // so the selection-on-single-tap behavior is a side effect of the
+            // List's native selection while double-tap triggers connect.
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded {
+                    connectionListVM.selectedProfileId = profile.id
+                    loadFormFromProfile(profile)
+                    connectSelected()
+                }
+            )
             .contextMenu {
                 Button("Connect") {
                     connectionListVM.selectedProfileId = profile.id
@@ -157,19 +145,19 @@ struct StartPageView: View {
                 VStack(spacing: 0) {
                     Form {
                         Section {
-                            TextField("Name:", text: $formName)
+                            TextField("Name:", text: $form.name)
                             HStack {
-                                TextField("Host:", text: $formHost)
-                                TextField("Port:", text: $formPort)
+                                TextField("Host:", text: $form.host)
+                                TextField("Port:", text: $form.port)
                                     .frame(width: 70)
                             }
-                            TextField("Database:", text: $formDatabase)
-                            TextField("Username:", text: $formUsername)
+                            TextField("Database:", text: $form.database)
+                            TextField("Username:", text: $form.username)
                             HStack {
                                 if showPassword {
-                                    TextField("Password:", text: $formPassword)
+                                    TextField("Password:", text: $form.password)
                                 } else {
-                                    SecureField("Password:", text: $formPassword)
+                                    SecureField("Password:", text: $form.password)
                                 }
                                 Button {
                                     showPassword.toggle()
@@ -178,7 +166,7 @@ struct StartPageView: View {
                                 }
                                 .buttonStyle(.borderless)
                             }
-                            Picker("SSL Mode:", selection: $formSSLMode) {
+                            Picker("SSL Mode:", selection: $form.sslMode) {
                                 ForEach(SSLMode.allCases, id: \.self) { mode in
                                     Text(mode.displayName).tag(mode)
                                 }
@@ -187,13 +175,13 @@ struct StartPageView: View {
 
                         Section {
                             SSHTunnelFormSection(
-                                useSSHTunnel: $formUseSSHTunnel,
-                                sshHost: $formSSHHost,
-                                sshPort: $formSSHPort,
-                                sshUser: $formSSHUser,
-                                sshAuthMethod: $formSSHAuthMethod,
-                                sshKeyPath: $formSSHKeyPath,
-                                sshPassword: $formSSHPassword,
+                                useSSHTunnel: $form.useSSHTunnel,
+                                sshHost: $form.sshHost,
+                                sshPort: $form.sshPort,
+                                sshUser: $form.sshUser,
+                                sshAuthMethod: $form.sshAuthMethod,
+                                sshKeyPath: $form.sshKeyPath,
+                                sshPassword: $form.sshPassword,
                                 showSSHPassword: $showSSHPassword
                             )
                         } header: {
@@ -271,68 +259,25 @@ struct StartPageView: View {
     }
 
     private func loadFormFromProfile(_ profile: ConnectionProfile) {
-        formName = profile.name
-        formHost = profile.host
-        formPort = String(profile.port)
-        formDatabase = profile.database
-        formUsername = profile.username
-        formSSLMode = profile.sslMode
-        formPassword = connectionListVM.loadPasswordForProfile(profile)
+        form.load(
+            from: profile,
+            password: connectionListVM.loadPasswordForProfile(profile),
+            sshPassword: connectionListVM.loadSSHPasswordForProfile(profile)
+        )
         showPassword = false
-
-        formUseSSHTunnel = profile.useSSHTunnel
-        formSSHHost = profile.sshHost
-        formSSHPort = String(profile.sshPort)
-        formSSHUser = profile.sshUser
-        formSSHAuthMethod = profile.sshAuthMethod
-        formSSHKeyPath = profile.sshKeyPath
-        formSSHPassword = connectionListVM.loadSSHPasswordForProfile(profile)
         showSSHPassword = false
     }
 
     private func saveFormToProfile(id: UUID) {
         guard let existing = connectionListVM.profiles.first(where: { $0.id == id }) else { return }
-        let portInt = Int(formPort) ?? existing.port
-        let sshPortInt = Int(formSSHPort) ?? 22
-        let updated = ConnectionProfile(
-            id: id,
-            name: formName.trimmingCharacters(in: .whitespaces),
-            host: formHost.trimmingCharacters(in: .whitespaces),
-            port: portInt,
-            database: formDatabase.trimmingCharacters(in: .whitespaces),
-            username: formUsername.trimmingCharacters(in: .whitespaces),
-            sslMode: formSSLMode,
-            useSSHTunnel: formUseSSHTunnel,
-            sshHost: formSSHHost.trimmingCharacters(in: .whitespaces),
-            sshPort: sshPortInt,
-            sshUser: formSSHUser.trimmingCharacters(in: .whitespaces),
-            sshAuthMethod: formSSHAuthMethod,
-            sshKeyPath: formSSHKeyPath.trimmingCharacters(in: .whitespaces)
-        )
-        let sshPass: String? = formUseSSHTunnel ? formSSHPassword : nil
-        connectionListVM.updateProfile(updated, password: formPassword, sshPassword: sshPass)
+        let updated = form.buildProfile(id: id, fallbackPort: existing.port)
+        connectionListVM.updateProfile(updated, password: form.password, sshPassword: form.effectiveSSHPassword)
     }
 
     private func connectSelected() {
         guard let id = connectionListVM.selectedProfileId else { return }
 
-        let portInt = Int(formPort) ?? 5432
-        let sshPortInt = Int(formSSHPort) ?? 22
-        let profile = ConnectionProfile(
-            id: id,
-            name: formName.trimmingCharacters(in: .whitespaces),
-            host: formHost.trimmingCharacters(in: .whitespaces),
-            port: portInt,
-            database: formDatabase.trimmingCharacters(in: .whitespaces),
-            username: formUsername.trimmingCharacters(in: .whitespaces),
-            sslMode: formSSLMode,
-            useSSHTunnel: formUseSSHTunnel,
-            sshHost: formSSHHost.trimmingCharacters(in: .whitespaces),
-            sshPort: sshPortInt,
-            sshUser: formSSHUser.trimmingCharacters(in: .whitespaces),
-            sshAuthMethod: formSSHAuthMethod,
-            sshKeyPath: formSSHKeyPath.trimmingCharacters(in: .whitespaces)
-        )
+        let profile = form.buildProfile(id: id)
 
         let errors = profile.validate()
         if !errors.isEmpty {
@@ -341,14 +286,13 @@ struct StartPageView: View {
         }
 
         // Save before connecting
-        let sshPass: String? = formUseSSHTunnel ? formSSHPassword : nil
-        connectionListVM.updateProfile(profile, password: formPassword, sshPassword: sshPass)
+        connectionListVM.updateProfile(profile, password: form.password, sshPassword: form.effectiveSSHPassword)
         validationErrors = []
 
         // Connect in the current tab
-        let password: String? = formPassword.isEmpty ? nil : formPassword
+        let password: String? = form.password.isEmpty ? nil : form.password
         Task {
-            await appVM.connect(profile: profile, password: password, sshPassword: sshPass)
+            await appVM.connect(profile: profile, password: password, sshPassword: form.effectiveSSHPassword)
         }
     }
 }

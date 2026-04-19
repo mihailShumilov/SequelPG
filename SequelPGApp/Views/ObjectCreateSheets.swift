@@ -103,10 +103,19 @@ struct CreateFunctionSheet: View {
     @State private var language = "plpgsql"
     @State private var functionBody = "BEGIN\n  \nEND;"
     @State private var volatility = "VOLATILE"
+    @State private var showUntrustedWarning = false
+    @State private var pendingUntrustedCreate: (() -> Void)?
 
     private let returnTypes = ["void", "text", "integer", "boolean", "trigger", "record", "setof record", "table"]
     private let languages = ["sql", "plpgsql", "plpython3u"]
     private let volatilities = ["VOLATILE", "STABLE", "IMMUTABLE"]
+
+    private var languageIsUntrusted: Bool {
+        // Untrusted PLs (suffix "u") run as the DB superuser with full OS
+        // access. We surface an explicit warning so users don't enable one
+        // accidentally via the Picker.
+        language.hasSuffix("u")
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,6 +131,12 @@ struct CreateFunctionSheet: View {
                 }
                 Picker("Language:", selection: $language) {
                     ForEach(languages, id: \.self) { Text($0).tag($0) }
+                }
+                if languageIsUntrusted {
+                    Label("\(language) is an untrusted language — functions run with superuser OS-level access. Only use for trusted code.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
                 Picker("Volatility:", selection: $volatility) {
                     ForEach(volatilities, id: \.self) { Text($0).tag($0) }
@@ -143,9 +158,18 @@ struct CreateFunctionSheet: View {
                     let trimmedName = name.trimmingCharacters(in: .whitespaces)
                     guard !trimmedName.isEmpty, !schema.isEmpty else { return }
                     let params = parameters.trimmingCharacters(in: .whitespaces)
+                    guard isValidFunctionParams(params) else { return }
                     let sql = "CREATE OR REPLACE FUNCTION \(quoteIdent(schema)).\(quoteIdent(trimmedName))(\(params)) RETURNS \(returnType) LANGUAGE \(language) \(volatility) AS $$\n\(functionBody)\n$$"
-                    onCreate(sql)
-                    dismiss()
+                    let commit = {
+                        onCreate(sql)
+                        dismiss()
+                    }
+                    if languageIsUntrusted {
+                        pendingUntrustedCreate = commit
+                        showUntrustedWarning = true
+                    } else {
+                        commit()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || schema.isEmpty)
@@ -154,6 +178,15 @@ struct CreateFunctionSheet: View {
         }
         .frame(width: 520)
         .frame(minHeight: 500)
+        .alert("Create untrusted function?", isPresented: $showUntrustedWarning, presenting: pendingUntrustedCreate) { confirm in
+            Button("Cancel", role: .cancel) { pendingUntrustedCreate = nil }
+            Button("Create", role: .destructive) {
+                confirm()
+                pendingUntrustedCreate = nil
+            }
+        } message: { _ in
+            Text("\(language) functions execute with full operating-system access as the PostgreSQL superuser. Only proceed if you trust the code and authored it yourself.")
+        }
     }
 }
 
@@ -267,8 +300,12 @@ struct CreateTypeSheet: View {
                             .joined(separator: ", ")
                         sql = "CREATE TYPE \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS ENUM (\(labels))"
                     } else {
-                        let fields = compositeFields
+                        let validFields = compositeFields
                             .filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+                        for field in validFields {
+                            guard isValidTypeName(field.type.trimmingCharacters(in: .whitespaces)) else { return }
+                        }
+                        let fields = validFields
                             .map { "\(quoteIdent($0.name.trimmingCharacters(in: .whitespaces))) \($0.type.trimmingCharacters(in: .whitespaces))" }
                             .joined(separator: ", ")
                         sql = "CREATE TYPE \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS (\(fields))"
@@ -416,10 +453,16 @@ struct CreateDomainSheet: View {
                     guard !trimmedName.isEmpty, !schema.isEmpty else { return }
                     var sql = "CREATE DOMAIN \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(baseType)"
                     let trimmedDefault = defaultValue.trimmingCharacters(in: .whitespaces)
-                    if !trimmedDefault.isEmpty { sql += " DEFAULT \(trimmedDefault)" }
+                    if !trimmedDefault.isEmpty {
+                        guard isValidSQLExpression(trimmedDefault) else { return }
+                        sql += " DEFAULT \(trimmedDefault)"
+                    }
                     if !nullable { sql += " NOT NULL" }
                     let trimmedCheck = checkExpression.trimmingCharacters(in: .whitespaces)
-                    if !trimmedCheck.isEmpty { sql += " CHECK (\(trimmedCheck))" }
+                    if !trimmedCheck.isEmpty {
+                        guard isValidSQLExpression(trimmedCheck) else { return }
+                        sql += " CHECK (\(trimmedCheck))"
+                    }
                     onCreate(sql)
                     dismiss()
                 }

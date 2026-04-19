@@ -60,6 +60,18 @@
 		AA10000000000000000034 /* ObjectCreateSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000034; };
 		AA10000000000000000035 /* AppViewModel+ObjectCRUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000035; };
 		AA10000000000000000036 /* FieldEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000036; };
+		AA10000000000000000037 /* QueryHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000037; };
+		AA10000000000000000038 /* QueryHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000038; };
+		AA10000000000000000050 /* IndexInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000050; };
+		AA10000000000000000051 /* ConstraintInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000051; };
+		AA10000000000000000052 /* TriggerInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000052; };
+		AA10000000000000000053 /* ExtensionInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000053; };
+		AA10000000000000000054 /* RoleInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000054; };
+		AA10000000000000000055 /* IndexCreateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000055; };
+		AA10000000000000000056 /* SQLFunctionLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000056; };
+		AA10000000000000000057 /* ExtensionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000057; };
+		AA10000000000000000058 /* RolesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000058; };
+		AA10000000000000000059 /* FunctionLibrarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000059; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +138,18 @@
 		AB10000000000000000034 /* ObjectCreateSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectCreateSheets.swift; sourceTree = "<group>"; };
 		AB10000000000000000035 /* AppViewModel+ObjectCRUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+ObjectCRUD.swift"; sourceTree = "<group>"; };
 		AB10000000000000000036 /* FieldEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldEditorView.swift; sourceTree = "<group>"; };
+		AB10000000000000000037 /* QueryHistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryHistoryViewModel.swift; sourceTree = "<group>"; };
+		AB10000000000000000038 /* QueryHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryHistoryView.swift; sourceTree = "<group>"; };
+		AB10000000000000000050 /* IndexInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexInfo.swift; sourceTree = "<group>"; };
+		AB10000000000000000051 /* ConstraintInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConstraintInfo.swift; sourceTree = "<group>"; };
+		AB10000000000000000052 /* TriggerInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerInfo.swift; sourceTree = "<group>"; };
+		AB10000000000000000053 /* ExtensionInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionInfo.swift; sourceTree = "<group>"; };
+		AB10000000000000000054 /* RoleInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleInfo.swift; sourceTree = "<group>"; };
+		AB10000000000000000055 /* IndexCreateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexCreateSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000056 /* SQLFunctionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLFunctionLibrary.swift; sourceTree = "<group>"; };
+		AB10000000000000000057 /* ExtensionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000058 /* RolesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RolesSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000059 /* FunctionLibrarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionLibrarySheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -179,8 +203,13 @@
 				AB10000000000000000006 /* CellValue.swift */,
 				AB10000000000000000004 /* ColumnInfo.swift */,
 				AB10000000000000000002 /* ConnectionProfile.swift */,
+				AB10000000000000000051 /* ConstraintInfo.swift */,
 				AB10000000000000000003 /* DBObject.swift */,
+				AB10000000000000000053 /* ExtensionInfo.swift */,
+				AB10000000000000000050 /* IndexInfo.swift */,
 				AB10000000000000000005 /* QueryResult.swift */,
+				AB10000000000000000054 /* RoleInfo.swift */,
+				AB10000000000000000052 /* TriggerInfo.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -204,6 +233,7 @@
 				AB1000000000000000000C /* ConnectionListViewModel.swift */,
 				AB1000000000000000000D /* NavigatorViewModel.swift */,
 				AB1000000000000000000F /* QueryViewModel.swift */,
+				AB10000000000000000037 /* QueryHistoryViewModel.swift */,
 				AB1000000000000000000E /* TableViewModel.swift */,
 			);
 			path = ViewModels;
@@ -216,12 +246,17 @@
 				AB10000000000000000012 /* ConnectionListView.swift */,
 				AB10000000000000000016 /* ContentTabView.swift */,
 				AB10000000000000000010 /* ContentView.swift */,
+				AB10000000000000000057 /* ExtensionsSheet.swift */,
+				AB10000000000000000059 /* FunctionLibrarySheet.swift */,
+				AB10000000000000000055 /* IndexCreateSheet.swift */,
 				AB10000000000000000018 /* InspectorView.swift */,
+				AB10000000000000000058 /* RolesSheet.swift */,
 				AB10000000000000000019 /* MainAreaView.swift */,
 				AB10000000000000000014 /* NavigatorView.swift */,
 				AB10000000000000000034 /* ObjectCreateSheets.swift */,
 				AB10000000000000000033 /* ObjectDefinitionView.swift */,
 				AB10000000000000000036 /* FieldEditorView.swift */,
+				AB10000000000000000038 /* QueryHistoryView.swift */,
 				AB10000000000000000017 /* QueryTabView.swift */,
 				AB1000000000000000002F /* SQLEditorView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
@@ -238,6 +273,7 @@
 				AB1000000000000000001B /* Logger.swift */,
 				AB1000000000000000001A /* QuoteIdent.swift */,
 				AB10000000000000000028 /* QuoteLiteral.swift */,
+				AB10000000000000000056 /* SQLFunctionLibrary.swift */,
 				AB1000000000000000002B /* SQLFormatter.swift */,
 				AB1000000000000000002C /* SQLSyntaxColors.swift */,
 				AB1000000000000000002D /* SQLTextStorage.swift */,
@@ -419,6 +455,18 @@
 				AA10000000000000000034 /* ObjectCreateSheets.swift in Sources */,
 				AA10000000000000000035 /* AppViewModel+ObjectCRUD.swift in Sources */,
 				AA10000000000000000036 /* FieldEditorView.swift in Sources */,
+				AA10000000000000000050 /* IndexInfo.swift in Sources */,
+				AA10000000000000000051 /* ConstraintInfo.swift in Sources */,
+				AA10000000000000000052 /* TriggerInfo.swift in Sources */,
+				AA10000000000000000053 /* ExtensionInfo.swift in Sources */,
+				AA10000000000000000054 /* RoleInfo.swift in Sources */,
+				AA10000000000000000055 /* IndexCreateSheet.swift in Sources */,
+				AA10000000000000000056 /* SQLFunctionLibrary.swift in Sources */,
+				AA10000000000000000057 /* ExtensionsSheet.swift in Sources */,
+				AA10000000000000000058 /* RolesSheet.swift in Sources */,
+				AA10000000000000000059 /* FunctionLibrarySheet.swift in Sources */,
+				AA10000000000000000037 /* QueryHistoryViewModel.swift in Sources */,
+				AA10000000000000000038 /* QueryHistoryView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

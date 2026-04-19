@@ -19,6 +19,8 @@ struct NavigatorView: View {
     @State private var dropTarget: DBObject?
     @State private var showDropConfirmation = false
     @State private var createSchema = ""
+    @State private var maintenanceTarget: (op: AppViewModel.MaintenanceOp, object: DBObject)?
+    @State private var showMaintenanceConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,13 +28,14 @@ struct NavigatorView: View {
             Divider()
             treeList
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showCreateDatabase) {
-            CreateDatabaseSheet { name in
+            NameInputSheet(title: "Create Database", fieldLabel: "Database name:") { name in
                 Task { await appVM.createDatabase(name: name) }
             }
         }
         .sheet(isPresented: $showCreateSchema) {
-            CreateSchemaSheet { name in
+            NameInputSheet(title: "Create Schema", fieldLabel: "Schema name:") { name in
                 Task { await appVM.createSchema(name: name) }
             }
         }
@@ -86,6 +89,39 @@ struct NavigatorView: View {
         } message: { obj in
             Text("\"\(obj.name)\" will be permanently dropped.")
         }
+        .alert("Run \(maintenanceTarget?.op.rawValue ?? "Operation")?",
+               isPresented: $showMaintenanceConfirmation,
+               presenting: maintenanceTarget) { target in
+            Button("Cancel", role: .cancel) { maintenanceTarget = nil }
+            Button(target.op.rawValue, role: .destructive) {
+                let captured = target
+                maintenanceTarget = nil
+                Task { await appVM.runMaintenance(captured.op, on: captured.object) }
+            }
+        } message: { target in
+            Text(target.op.confirmationMessage ?? "Continue?")
+        }
+    }
+
+    /// Whether this object type supports maintenance commands (VACUUM/ANALYZE/TRUNCATE/REFRESH).
+    private func maintenanceOps(for object: DBObject) -> [AppViewModel.MaintenanceOp] {
+        switch object.type {
+        case .table:
+            return [.truncate, .vacuum, .vacuumFull, .analyze]
+        case .materializedView:
+            return [.refreshMatView, .refreshMatViewConcurrently, .vacuum, .analyze]
+        default:
+            return []
+        }
+    }
+
+    private func triggerMaintenance(_ op: AppViewModel.MaintenanceOp, on object: DBObject) {
+        if op.confirmationMessage != nil {
+            maintenanceTarget = (op, object)
+            showMaintenanceConfirmation = true
+        } else {
+            Task { await appVM.runMaintenance(op, on: object) }
+        }
     }
 
     // MARK: - Header
@@ -96,6 +132,19 @@ struct NavigatorView: View {
                 .font(.headline)
             Spacer()
 
+            Picker("", selection: Binding(
+                get: { navigatorVM.complexity },
+                set: { navigatorVM.complexity = $0 }
+            )) {
+                ForEach(SidebarComplexity.allCases, id: \.self) { level in
+                    Text(level.rawValue).tag(level)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 90)
+            .controlSize(.small)
+            .help("Toggle sidebar complexity")
+
             Menu {
                 Button("New Database...") { showCreateDatabase = true }
                 Button("New Schema...") { showCreateSchema = true }
@@ -104,6 +153,7 @@ struct NavigatorView: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 20)
+            .accessibilityLabel("Create database or schema")
             .help("Create database or schema")
 
             Button {
@@ -134,6 +184,7 @@ struct NavigatorView: View {
             }
         }
         .listStyle(.sidebar)
+        .transaction { $0.animation = nil }
     }
 
     // MARK: - Database Node
@@ -145,7 +196,15 @@ struct NavigatorView: View {
         DisclosureGroup(
             isExpanded: dbExpansionBinding(db)
         ) {
-            if schemas.isEmpty, navigatorVM.hasSchemasLoaded(for: db) {
+            if schemas.isEmpty, !navigatorVM.hasSchemasLoaded(for: db) {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading...")
+                        .foregroundStyle(.tertiary)
+                        .font(.caption)
+                }
+            } else if schemas.isEmpty {
                 Text("No schemas")
                     .foregroundStyle(.tertiary)
                     .font(.caption)
@@ -161,12 +220,6 @@ struct NavigatorView: View {
             } icon: {
                 Image(systemName: "cylinder.split.1x2")
                     .foregroundStyle(isConnected ? .green : .secondary)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if !isConnected {
-                    Task { await appVM.switchDatabase(db) }
-                }
             }
             .contextMenu {
                 if !isConnected {
@@ -197,8 +250,22 @@ struct NavigatorView: View {
         DisclosureGroup(
             isExpanded: schemaExpansionBinding(db, schema)
         ) {
-            ForEach(navigatorVM.availableCategories, id: \.self) { category in
+            // Core categories always visible
+            ForEach(navigatorVM.coreCategories, id: \.self) { category in
                 categoryNode(db: db, schema: schema, category: category)
+            }
+
+            // Advanced categories: shown inline in advanced mode, grouped in simple mode
+            if navigatorVM.complexity == .advanced {
+                ForEach(navigatorVM.advancedCategories, id: \.self) { category in
+                    categoryNode(db: db, schema: schema, category: category)
+                }
+            } else if !navigatorVM.advancedCategories.isEmpty {
+                DisclosureGroup("More") {
+                    ForEach(navigatorVM.advancedCategories, id: \.self) { category in
+                        categoryNode(db: db, schema: schema, category: category)
+                    }
+                }
             }
         } label: {
             Label(schema, systemImage: "folder")
@@ -252,6 +319,15 @@ struct NavigatorView: View {
                 Label(obj.name, systemImage: category.icon)
                     .tag(obj)
                     .contextMenu {
+                        let ops = maintenanceOps(for: obj)
+                        if !ops.isEmpty {
+                            ForEach(ops) { op in
+                                Button(op.rawValue) {
+                                    triggerMaintenance(op, on: obj)
+                                }
+                            }
+                            Divider()
+                        }
                         Button("Drop \(obj.name)...", role: .destructive) {
                             dropTarget = obj
                             showDropConfirmation = true
@@ -275,6 +351,8 @@ struct NavigatorView: View {
                         .foregroundStyle(.secondary)
                         .font(.caption)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(category.rawValue), \(objects.count) \(objects.count == 1 ? "object" : "objects")")
             } icon: {
                 Image(systemName: category.icon)
             }
@@ -362,20 +440,22 @@ struct NewColumnDef: Identifiable {
     var defaultValue: String
 }
 
-// MARK: - Create Database Sheet
+// MARK: - Reusable Name Input Sheet (used for Create Database / Create Schema)
 
-struct CreateDatabaseSheet: View {
+struct NameInputSheet: View {
+    let title: String
+    let fieldLabel: String
     let onCreate: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Create Database")
+            Text(title)
                 .font(.headline)
                 .padding()
             Form {
-                TextField("Database name:", text: $name)
+                TextField(fieldLabel, text: $name)
             }
             .padding()
             HStack {
@@ -395,38 +475,6 @@ struct CreateDatabaseSheet: View {
     }
 }
 
-// MARK: - Create Schema Sheet
-
-struct CreateSchemaSheet: View {
-    let onCreate: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text("Create Schema")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Schema name:", text: $name)
-            }
-            .padding()
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    onCreate(name.trimmingCharacters(in: .whitespaces))
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding()
-        }
-        .frame(width: 340)
-    }
-}
 
 // MARK: - Create Table Sheet
 

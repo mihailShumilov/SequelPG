@@ -1,5 +1,13 @@
 import Foundation
 
+/// Adopted by every view model that surfaces a per-row delete confirmation prompt.
+/// The shared property keeps both content-tab and query-tab views using the same
+/// binding shape: setting an `Int?` opens the confirmation alert; nil dismisses it.
+@MainActor
+protocol RowDeleteConfirming: AnyObject {
+    var deleteConfirmationRowIndex: Int? { get set }
+}
+
 /// A single filter condition for the content tab.
 struct ContentFilter: Identifiable {
     let id = UUID()
@@ -33,7 +41,7 @@ enum FilterOperator: String, CaseIterable {
 
 /// Manages structure and content tab state for a selected table/view.
 @MainActor
-@Observable final class TableViewModel {
+@Observable final class TableViewModel: RowDeleteConfirming {
     var columns: [ColumnInfo] = []
     var contentResult: QueryResult?
     var isLoadingContent = false
@@ -49,6 +57,12 @@ enum FilterOperator: String, CaseIterable {
     var deleteConfirmationRowIndex: Int?
     var isInsertingRow = false
     var newRowValues: [String: String] = [:]
+
+    // Per-table metadata populated alongside columns on object selection.
+    var indexes: [IndexInfo] = []
+    var constraints: [ConstraintInfo] = []
+    var triggers: [TriggerInfo] = []
+    var partitions: [DBObject] = []
 
     // Filter state
     var showFilterBar = false
@@ -74,23 +88,55 @@ enum FilterOperator: String, CaseIterable {
         contentResult = result
     }
 
+    /// Resets every field back to its default. Written as a transactional
+    /// reset so observers (SwiftUI views) redraw at most once per call even
+    /// though @Observable coalesces most mutations on the same run loop.
     func clear() {
-        columns = []
-        contentResult = nil
-        isLoadingContent = false
-        currentPage = 0
-        approximateRowCount = 0
-        selectedObjectName = nil
-        selectedObjectColumnCount = 0
-        selectedRowIndex = nil
-        selectedRowData = nil
-        sortColumn = nil
-        sortAscending = true
-        deleteConfirmationRowIndex = nil
-        isInsertingRow = false
-        newRowValues = [:]
-        showFilterBar = false
+        let defaults = TableViewModel.defaults
+        columns = defaults.columns
+        contentResult = defaults.contentResult
+        isLoadingContent = defaults.isLoadingContent
+        currentPage = defaults.currentPage
+        approximateRowCount = defaults.approximateRowCount
+        selectedObjectName = defaults.selectedObjectName
+        selectedObjectColumnCount = defaults.selectedObjectColumnCount
+        selectedRowIndex = defaults.selectedRowIndex
+        selectedRowData = defaults.selectedRowData
+        sortColumn = defaults.sortColumn
+        sortAscending = defaults.sortAscending
+        deleteConfirmationRowIndex = defaults.deleteConfirmationRowIndex
+        isInsertingRow = defaults.isInsertingRow
+        newRowValues = defaults.newRowValues
+        showFilterBar = defaults.showFilterBar
         filters = [ContentFilter()]
-        activeFilterSQL = nil
+        activeFilterSQL = defaults.activeFilterSQL
+        indexes = []
+        constraints = []
+        triggers = []
+        partitions = []
+        hasPrimaryKey = false
     }
+
+    /// Canonical "empty" defaults. Centralizing them keeps `clear()` and the
+    /// stored-property defaults from drifting apart.
+    private struct Defaults {
+        let columns: [ColumnInfo] = []
+        let contentResult: QueryResult? = nil
+        let isLoadingContent = false
+        let currentPage = 0
+        let approximateRowCount: Int64 = 0
+        let selectedObjectName: String? = nil
+        let selectedObjectColumnCount = 0
+        let selectedRowIndex: Int? = nil
+        let selectedRowData: [(column: String, value: CellValue)]? = nil
+        let sortColumn: String? = nil
+        let sortAscending = true
+        let deleteConfirmationRowIndex: Int? = nil
+        let isInsertingRow = false
+        let newRowValues: [String: String] = [:]
+        let showFilterBar = false
+        let activeFilterSQL: String? = nil
+    }
+
+    private static let defaults = Defaults()
 }

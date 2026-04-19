@@ -1,0 +1,2 @@
+- [Codebase conventions](project_codebase_conventions.md) — Where introspection queries live, how to add new categories, caching patterns, known ColumnInfo gaps
+- [Introspection audit gaps](audit_introspection_gaps.md) — Full April 2026 audit: what is implemented, defects, and P0-P3 missing capabilities

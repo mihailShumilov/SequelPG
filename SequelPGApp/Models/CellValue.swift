@@ -15,7 +15,9 @@ enum CellValue: Sendable, Equatable {
     }
 
     var isNull: Bool {
-        if case .null = self { return true }
-        return false
+        switch self {
+        case .null: return true
+        case .text: return false
+        }
     }
 }

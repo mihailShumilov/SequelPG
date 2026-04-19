@@ -2,7 +2,7 @@ import Foundation
 
 /// Manages the query editor state and results.
 @MainActor
-@Observable final class QueryViewModel {
+@Observable final class QueryViewModel: RowDeleteConfirming {
     var queryText = ""
     var isExecuting = false
     var errorMessage: String?
@@ -121,26 +121,20 @@ import Foundation
             return nil
         }
 
-        // Table name: group 3 (quoted) or group 4 (unquoted)
-        let table: String
-        if let r = Range(match.range(at: 3), in: trimmed) {
-            table = String(trimmed[r])
-        } else if let r = Range(match.range(at: 4), in: trimmed) {
-            table = String(trimmed[r])
-        } else {
-            return nil
-        }
-
-        // Schema name: group 1 (quoted) or group 2 (unquoted), default "public"
-        let schema: String
-        if let r = Range(match.range(at: 1), in: trimmed) {
-            schema = String(trimmed[r])
-        } else if let r = Range(match.range(at: 2), in: trimmed) {
-            schema = String(trimmed[r])
-        } else {
-            schema = "public"
-        }
-
+        guard let table = firstCaptureGroup(in: trimmed, match: match, groups: [3, 4]) else { return nil }
+        let schema = firstCaptureGroup(in: trimmed, match: match, groups: [1, 2]) ?? "public"
         return (schema: schema, table: table)
+    }
+
+    /// Returns the first non-empty captured substring from the given group indices,
+    /// or nil if none matched. Used by `parseTableFromQuery` to pick between the
+    /// quoted (group N) / unquoted (group N+1) identifier alternatives.
+    private func firstCaptureGroup(in source: String, match: NSTextCheckingResult, groups: [Int]) -> String? {
+        for group in groups {
+            if let range = Range(match.range(at: group), in: source) {
+                return String(source[range])
+            }
+        }
+        return nil
     }
 }
