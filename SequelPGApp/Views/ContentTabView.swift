@@ -16,48 +16,54 @@ struct ContentTabView: View {
                 Divider()
             }
 
-            if tableVM.isLoadingContent {
-                ProgressView("Loading...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let result = tableVM.contentResult {
-                ResultsGridView(
-                    result: result,
-                    columns: tableVM.columns,
-                    isEditable: tableVM.hasPrimaryKey,
-                    onRowSelected: { rowIdx in
-                        appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
-                    },
-                    onCellEdited: { row, col, text in
-                        Task { await appVM.updateContentCell(rowIndex: row, columnIndex: col, newText: text) }
-                    },
-                    sortColumn: tableVM.sortColumn,
-                    sortAscending: tableVM.sortAscending,
-                    onColumnHeaderTapped: { column in
-                        appVM.toggleContentSort(column: column)
-                    },
-                    onDeleteRow: appVM.canDeleteContentRow ? { rowIdx in
-                        tableVM.deleteConfirmationRowIndex = rowIdx
-                    } : nil,
-                    selectedRowIndex: $tableVM.selectedRowIndex,
-                    isInsertingRow: tableVM.isInsertingRow,
-                    insertRowValues: Binding(
-                        get: { tableVM.newRowValues },
-                        set: { tableVM.newRowValues = $0 }
-                    ),
-                    onInsertCommit: {
-                        Task { await appVM.commitInsertRow() }
-                    },
-                    onInsertCancel: {
-                        appVM.cancelInsertRow()
-                    }
-                )
-            } else if navigatorVM.selectedObject != nil {
-                ProgressView("Loading...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Text("Select a table and switch to Content to browse rows.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                if let result = tableVM.contentResult {
+                    ResultsGridView(
+                        result: result,
+                        columns: tableVM.columns,
+                        isEditable: tableVM.hasPrimaryKey,
+                        onRowSelected: { rowIdx in
+                            appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
+                        },
+                        onCellEdited: { row, col, text in
+                            Task { await appVM.updateContentCell(rowIndex: row, columnIndex: col, newText: text) }
+                        },
+                        sortColumn: tableVM.sortColumn,
+                        sortAscending: tableVM.sortAscending,
+                        onColumnHeaderTapped: { column in
+                            appVM.toggleContentSort(column: column)
+                        },
+                        onDeleteRow: appVM.canDeleteContentRow ? { rowIdx in
+                            tableVM.deleteConfirmationRowIndex = rowIdx
+                        } : nil,
+                        selectedRowIndex: $tableVM.selectedRowIndex,
+                        isInsertingRow: tableVM.isInsertingRow,
+                        insertRowValues: Binding(
+                            get: { tableVM.newRowValues },
+                            set: { tableVM.newRowValues = $0 }
+                        ),
+                        onInsertCommit: {
+                            Task { await appVM.commitInsertRow() }
+                        },
+                        onInsertCancel: {
+                            appVM.cancelInsertRow()
+                        }
+                    )
+                } else if navigatorVM.selectedObject == nil {
+                    Text("Select a table and switch to Content to browse rows.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                // Full-screen spinner only appears on the initial load. Once a
+                // result has been rendered, subsequent reloads keep the grid
+                // mounted so it doesn't blink in/out — feedback comes from the
+                // small inline spinner in the pagination bar instead.
+                if tableVM.isLoadingContent, tableVM.contentResult == nil {
+                    ProgressView("Loading...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                }
             }
 
             Divider()
@@ -320,6 +326,16 @@ struct ContentTabView: View {
             .disabled(tableVM.currentPage >= tableVM.totalPages - 1 || tableVM.isInsertingRow)
 
             Spacer()
+
+            // Inline reload indicator — shown when a reload is in flight while
+            // an existing result is still on screen. Replaces the old behavior
+            // of swapping the entire grid for a centered spinner.
+            if tableVM.isLoadingContent, tableVM.contentResult != nil {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.trailing, 4)
+                    .accessibilityLabel("Reloading rows")
+            }
 
             Text("\u{2248} \(tableVM.approximateRowCount) rows")
                 .foregroundStyle(.secondary)
