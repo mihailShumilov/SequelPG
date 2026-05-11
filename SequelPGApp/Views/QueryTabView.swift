@@ -384,6 +384,14 @@ struct ResultsGridView: View {
                 }
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity)
+                // Thin trailing divider on every cell — visually separates
+                // adjacent columns. SwiftUI Table's bordered style only draws
+                // dividers in the header row, so we paint them per-cell.
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(width: 0.5)
+                }
                 .contentShape(Rectangle())
                 .help(cell.isNull ? "NULL" : cell.displayString)
                 .onTapGesture(count: 2) {
