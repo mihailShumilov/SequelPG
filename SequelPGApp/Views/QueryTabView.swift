@@ -335,18 +335,29 @@ struct ResultsGridView: View {
                 insertRowView(binding: binding)
             }
         }
+        // Single sheet hosting the rich field editor. Lifted out of the cell
+        // view so we don't pay the per-cell popover allocation that froze
+        // SwiftUI when there were dozens of columns visible.
+        .sheet(isPresented: Binding(
+            get: { fieldEditorCell != nil },
+            set: { if !$0 { fieldEditorCell = nil } }
+        )) {
+            if let editing = fieldEditorCell,
+               editing.row < result.rows.count,
+               editing.col < result.rows[editing.row].count
+            {
+                fieldEditorPopover(rowIdx: editing.row, colIdx: editing.col, cell: result.rows[editing.row][editing.col])
+            }
+        }
     }
 
     private func handleCellDoubleClick(row: Int, col: Int) {
         guard isEditable, row < result.rows.count, col < result.rows[row].count else { return }
-        let cell = result.rows[row][col]
-        let kind = editorKind(for: col, cell: cell)
         if editingCell != nil { commitEdit() }
-        if needsRichEditor(kind: kind) {
-            fieldEditorCell = (row: row, col: col)
-        } else {
-            startEditing(row: row, col: col, cell: cell)
-        }
+        // All edits route through the field-editor sheet now that cells don't
+        // capture mouse input (so they couldn't host an inline TextField that
+        // takes focus on click anyway).
+        fieldEditorCell = (row: row, col: col)
     }
 
     /// Returns the FieldEditorKind for a column index, or .plain if no column info.
@@ -399,15 +410,11 @@ struct ResultsGridView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: renderKind.alignment == .trailing ? .trailing : .leading)
-                .popover(
-                    isPresented: Binding(
-                        get: { fieldEditorCell?.row == rowIdx && fieldEditorCell?.col == colIdx },
-                        set: { if !$0 { fieldEditorCell = nil } }
-                    ),
-                    arrowEdge: .bottom
-                ) {
-                    fieldEditorPopover(rowIdx: rowIdx, colIdx: colIdx, cell: cell)
-                }
+                // Field editor presentation lives on the parent body (sheet),
+                // not per cell. Putting a .popover on every cell — each living
+                // inside its own NSHostingView under our AppKit table — caused
+                // SwiftUI to create a fresh NSPopover per cell on every reload,
+                // overflowing NSWindow's live-window count and freezing the UI.
             }
         } else {
             Text("")
@@ -698,7 +705,9 @@ struct DataGridView: NSViewRepresentable {
         tableView.gridColor = NSColor.separatorColor
         tableView.style = .inset
         tableView.allowsEmptySelection = true
-        tableView.allowsMultipleSelection = false
+        // Multi-selection enabled — Shift-click extends to a contiguous range,
+        // Cmd-click toggles individual rows in/out of the selection.
+        tableView.allowsMultipleSelection = true
         tableView.allowsColumnSelection = false
         tableView.allowsColumnReordering = false
         tableView.allowsColumnResizing = true
@@ -745,10 +754,15 @@ struct DataGridView: NSViewRepresentable {
         // to redraw to pick up edits/inserts/sort changes.
         tableView.reloadData()
 
-        // Sync selection from the binding into the table.
+        // Sync selection from the binding into the table. The flag suppresses
+        // the resulting tableViewSelectionDidChange callback so we don't write
+        // back into the SwiftUI binding during a view update (which is what
+        // produced the "Modifying state during view update" warnings).
         let desiredSelection = selectedRowIndex.flatMap { ($0 >= 0 && $0 < rowCount) ? IndexSet(integer: $0) : nil } ?? IndexSet()
         if tableView.selectedRowIndexes != desiredSelection {
+            coordinator.isSyncingFromSwiftUI = true
             tableView.selectRowIndexes(desiredSelection, byExtendingSelection: false)
+            coordinator.isSyncingFromSwiftUI = false
         }
 
         // Sort indicator on the header.
@@ -782,6 +796,10 @@ struct DataGridView: NSViewRepresentable {
         var parent: DataGridView
         weak var tableView: NSTableView?
         private let cellIdentifier = NSUserInterfaceItemIdentifier(rawValue: "DataGridCell")
+        // Set true while updateNSView is syncing SwiftUI → NSTableView so the
+        // resulting tableViewSelectionDidChange notification doesn't bounce
+        // back through the binding mid-view-update.
+        var isSyncingFromSwiftUI = false
 
         init(_ parent: DataGridView) {
             self.parent = parent
@@ -825,10 +843,14 @@ struct DataGridView: NSViewRepresentable {
         }
 
         func tableViewSelectionDidChange(_ notification: Notification) {
+            // Skip the bounce when the change came from updateNSView pushing
+            // the SwiftUI binding into the table.
+            if isSyncingFromSwiftUI { return }
             guard let tv = notification.object as? NSTableView else { return }
+            // For multi-selection, expose the most recently clicked row to
+            // the single-Int? binding. Multi-row context-menu / delete picks
+            // up the full set via NSTableView.selectedRowIndexes directly.
             let newIdx: Int? = tv.selectedRow >= 0 ? tv.selectedRow : nil
-            // Avoid the reentrant binding write/update loop: only push if the
-            // value actually changed.
             if parent.selectedRowIndex != newIdx {
                 parent.selectedRowIndex = newIdx
                 parent.onSelectionChanged(newIdx)
@@ -872,6 +894,12 @@ struct DataGridView: NSViewRepresentable {
 
     /// NSTableCellView that hosts a SwiftUI view edge-to-edge. Reused across
     /// scrolling via NSTableView's normal recycling.
+    ///
+    /// Hit-testing returns nil so mouse events bypass the SwiftUI subtree and
+    /// reach the underlying NSTableView — that's what makes single-click row
+    /// selection work on the *first* click. SwiftUI cells are display-only;
+    /// in-place editing happens via the field-editor sheet, not by interacting
+    /// with widgets inside the cell.
     private final class HostingCellView: NSTableCellView {
         private var hosting: NSHostingView<AnyView>
 
@@ -892,6 +920,14 @@ struct DataGridView: NSViewRepresentable {
 
         func update(rootView: AnyView) {
             hosting.rootView = rootView
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            // Pass mouse events through to the NSTableView so click → select
+            // works on the first click. The cell's SwiftUI content stays
+            // visible and reactive to data updates; it just doesn't capture
+            // mouse input.
+            return nil
         }
     }
 
