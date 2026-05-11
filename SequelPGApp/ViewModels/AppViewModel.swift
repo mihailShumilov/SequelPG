@@ -329,6 +329,13 @@ struct CascadeDeleteBuilder {
             }
         }
 
+        // The Content tab only works for relations. Selecting a type, function,
+        // or other non-relation while Content is active would otherwise issue
+        // SELECT * FROM <type> and fail with "cannot open relation".
+        if selectedTab == .content, !object.type.hasQueryableContent {
+            selectedTab = .definition
+        }
+
         do {
             let columns = try await dbClient.getColumns(
                 schema: object.schema,
@@ -419,6 +426,11 @@ struct CascadeDeleteBuilder {
 
     func loadContentPage() async {
         guard let object = navigatorVM.selectedObject else { return }
+        // Defensive: callers (ContentTabView .task / .onChange, pagination,
+        // post-edit refresh) should already gate on this, but a stray call
+        // for a type / function / sequence would surface a confusing
+        // "cannot open relation" from PG.
+        guard object.type.hasQueryableContent else { return }
         let schema = quoteIdent(object.schema)
         let table = quoteIdent(object.name)
         let limit = tableVM.pageSize

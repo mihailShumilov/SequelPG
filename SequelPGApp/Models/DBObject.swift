@@ -19,6 +19,17 @@ enum DBObjectType: String, Sendable {
     case `operator`
     case procedure
     case triggerFunction
+
+    /// Whether `SELECT * FROM <object>` is well-defined. Tables, views,
+    /// materialized views, and foreign tables back relations; everything else
+    /// (types, functions, sequences, …) fails with "cannot open relation"
+    /// when the Content tab tries to query it.
+    var hasQueryableContent: Bool {
+        switch self {
+        case .table, .view, .materializedView, .foreignTable: return true
+        default: return false
+        }
+    }
 }
 
 /// A database object in the navigator tree.

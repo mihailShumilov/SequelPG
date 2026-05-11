@@ -49,6 +49,14 @@ struct ContentTabView: View {
                             appVM.cancelInsertRow()
                         }
                     )
+                } else if let obj = navigatorVM.selectedObject, !obj.type.hasQueryableContent {
+                    VStack(spacing: 4) {
+                        Text("\(obj.name) has no content")
+                            .font(.headline)
+                        Text("Switch to the Definition tab to view this \(obj.type.rawValue).")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if navigatorVM.selectedObject == nil {
                     Text("Select a table and switch to Content to browse rows.")
                         .foregroundStyle(.secondary)
@@ -70,12 +78,18 @@ struct ContentTabView: View {
             paginationBar
         }
         .task {
-            if navigatorVM.selectedObject != nil, tableVM.contentResult == nil {
+            if let obj = navigatorVM.selectedObject,
+               obj.type.hasQueryableContent,
+               tableVM.contentResult == nil
+            {
                 await appVM.loadContentPage()
             }
         }
         .onChange(of: navigatorVM.selectedObject) { _, _ in
-            if navigatorVM.selectedObject != nil, appVM.selectedTab == .content {
+            if let obj = navigatorVM.selectedObject,
+               obj.type.hasQueryableContent,
+               appVM.selectedTab == .content
+            {
                 Task { await appVM.loadContentPage() }
             }
         }
