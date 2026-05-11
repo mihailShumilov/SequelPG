@@ -291,7 +291,7 @@ struct ResultsGridView: View {
         VStack(spacing: 0) {
             Table(identifiedRows, selection: $selectedRowIndex, sortOrder: $sortOrder) {
                 TableColumnForEach(identifiedColumns) { column in
-                    TableColumn(column.name, sortUsing: ColumnSortComparator(
+                    TableColumn(headerTitle(for: column.name), sortUsing: ColumnSortComparator(
                         columnIndex: column.id,
                         columnName: column.name,
                         order: .forward
@@ -358,6 +358,7 @@ struct ResultsGridView: View {
         if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count {
             let cell = result.rows[rowIdx][colIdx]
             let kind = editorKind(for: colIdx, cell: cell)
+            let renderKind = CellRenderKind.from(column: columnInfo(for: colIdx), cell: cell)
             if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
                 TextField("NULL", text: $editingText)
                     .textFieldStyle(.plain)
@@ -376,14 +377,15 @@ struct ResultsGridView: View {
                     }
             } else {
                 HStack(spacing: 4) {
+                    if renderKind.alignment == .trailing { Spacer(minLength: 0) }
                     CellTypeBadge(kind: kind)
-                    Text(cell.displayString)
-                        .lineLimit(1)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(cell.isNull ? .secondary : .primary)
+                    cellContentView(cell: cell, renderKind: renderKind)
+                    if renderKind.alignment == .leading { Spacer(minLength: 0) }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
+                .help(cell.isNull ? "NULL" : cell.displayString)
                 .onTapGesture(count: 2) {
                     guard isEditable else { return }
                     if editingCell != nil {
@@ -408,6 +410,77 @@ struct ResultsGridView: View {
         } else {
             Text("")
         }
+    }
+
+    /// Returns the ColumnInfo for a column index by name, if available.
+    private func columnInfo(for colIdx: Int) -> ColumnInfo? {
+        guard colIdx < result.columns.count else { return nil }
+        return columnsByName[result.columns[colIdx]]
+    }
+
+    /// Renders the cell's text using a typography appropriate to its category:
+    /// muted italic for NULL, monospaced for IDs / numbers / dates / network /
+    /// JSON, sans-serif for plain text, and a small dot indicator for booleans.
+    @ViewBuilder
+    private func cellContentView(cell: CellValue, renderKind: CellRenderKind) -> some View {
+        switch renderKind {
+        case .null:
+            Text("NULL")
+                .font(.system(.body, design: .monospaced))
+                .italic()
+                .foregroundStyle(.tertiary)
+        case .boolean:
+            let isTrue = cell.displayString == "true"
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(isTrue ? Color.green : Color.gray.opacity(0.45))
+                    .frame(width: 7, height: 7)
+                Text(isTrue ? "true" : "false")
+                    .font(.system(.body))
+            }
+        case .number:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1)
+        case .uuid:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        case .network:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1)
+        case .date, .timestamp:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1)
+        case .json:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        case .binary:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .italic()
+                .foregroundStyle(.tertiary)
+        case .text:
+            Text(cell.displayString)
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1)
+        }
+    }
+
+    /// Builds the column header label, appending a short type tag after the
+    /// column name (e.g. "user_id · text", "amount · int4"). When the column's
+    /// type isn't known (free-form queries with no editable table context),
+    /// falls back to just the column name.
+    private func headerTitle(for columnName: String) -> String {
+        guard let info = columnsByName[columnName] else { return columnName }
+        let short = ColumnInfo.shortTypeName(dataType: info.dataType, udtName: info.udtName)
+        if short.isEmpty { return columnName }
+        return "\(columnName)  ·  \(short)"
     }
 
     @ViewBuilder
@@ -490,5 +563,82 @@ struct ResultsGridView: View {
         .onExitCommand {
             onInsertCancel?()
         }
+    }
+}
+
+// MARK: - Cell Render Classification
+
+/// Classifies a cell for *display* (alignment, typography, color), as opposed
+/// to `FieldEditorKind`, which classifies it for choosing an *editor* widget.
+/// Display kinds carry more granularity (numbers, dates, UUIDs, etc.) because
+/// they each warrant distinct visual treatment even though they all share the
+/// same plain inline editor.
+enum CellRenderKind {
+    case null, boolean, number, uuid, date, timestamp, json, binary, network, text
+
+    /// Numeric values right-align so digit columns line up by magnitude. All
+    /// other categories left-align for natural reading order.
+    var alignment: HorizontalAlignment {
+        self == .number ? .trailing : .leading
+    }
+
+    static func from(column: ColumnInfo?, cell: CellValue) -> CellRenderKind {
+        if cell.isNull { return .null }
+        guard let info = column else { return .text }
+        let dt = info.dataType.lowercased().trimmingCharacters(in: .whitespaces)
+        let udt = info.udtName?.lowercased() ?? ""
+        switch dt {
+        case "boolean", "bool": return .boolean
+        case "uuid": return .uuid
+        case "date": return .date
+        case "json", "jsonb": return .json
+        case "bytea": return .binary
+        case "inet", "cidr", "macaddr", "macaddr8": return .network
+        default: break
+        }
+        if dt.contains("timestamp") || dt.hasPrefix("time ") || dt == "time" { return .timestamp }
+        let numerics: Set<String> = [
+            "smallint", "integer", "bigint", "decimal", "numeric",
+            "real", "double precision", "smallserial", "serial", "bigserial", "money",
+        ]
+        let udtNumerics: Set<String> = ["int2", "int4", "int8", "float4", "float8", "numeric"]
+        if numerics.contains(dt) || udtNumerics.contains(udt) { return .number }
+        return .text
+    }
+}
+
+extension ColumnInfo {
+    /// Returns the compact form of a PostgreSQL type name used in column
+    /// headers (e.g. "integer" → "int4", "character varying" → "varchar",
+    /// "timestamp without time zone" → "timestamp"). Prefers the catalog-level
+    /// `udtName` when it's already short, otherwise falls back to a curated
+    /// map of long names; returns the original on no match.
+    static func shortTypeName(dataType: String, udtName: String?) -> String {
+        let dt = dataType.lowercased().trimmingCharacters(in: .whitespaces)
+        let udt = udtName?.lowercased() ?? ""
+        if !udt.isEmpty, udt != dt {
+            let aliases: [String: String] = [
+                "int2": "int2", "int4": "int4", "int8": "int8",
+                "float4": "float4", "float8": "float8",
+                "bpchar": "char", "varchar": "varchar",
+                "timestamptz": "timestamptz", "timetz": "timetz",
+            ]
+            if let mapped = aliases[udt] { return mapped }
+        }
+        let longMap: [String: String] = [
+            "smallint": "int2",
+            "integer": "int4",
+            "bigint": "int8",
+            "real": "float4",
+            "double precision": "float8",
+            "character varying": "varchar",
+            "character": "char",
+            "timestamp without time zone": "timestamp",
+            "timestamp with time zone": "timestamptz",
+            "time without time zone": "time",
+            "time with time zone": "timetz",
+            "boolean": "bool",
+        ]
+        return longMap[dt] ?? dt
     }
 }
