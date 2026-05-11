@@ -297,69 +297,396 @@ actor DatabaseClient: PostgresClientProtocol {
         return f
     }()
 
-    /// Lookup table for type-aware cell decoders. Each entry converts the wire
-    /// bytes to a `CellValue.text(...)`; returning nil means the decode failed
-    /// and the caller falls back to plain-String decoding.
+    /// Decode a PostgresCell to CellValue. Dispatches through `formatBinary`
+    /// for binary-format cells, falls back to PostgresNIO's String decoder for
+    /// text-format cells (and unknown binary types), and renders the wire bytes
+    /// as `<binary>` only when both paths give up.
     ///
-    /// Binary-encoded types (timestamps, numerics, etc.) need their native
-    /// decoder; a raw String fallback on binary data produces garbled text, so
-    /// all binary-encoded types must have an entry here.
-    private static let cellDecoders: [PostgresDataType: @Sendable (PostgresCell) -> CellValue?] = [
-        .bool: { cell in (try? cell.decode(Bool.self)).map { .text($0 ? "true" : "false") } },
-        .int2: { cell in (try? cell.decode(Int16.self)).map { .text(String($0)) } },
-        .int4: { cell in (try? cell.decode(Int32.self)).map { .text(String($0)) } },
-        .int8: { cell in (try? cell.decode(Int64.self)).map { .text(String($0)) } },
-        .float4: { cell in (try? cell.decode(Float.self)).map { .text(String(Double($0))) } },
-        .float8: { cell in (try? cell.decode(Double.self)).map { .text(String($0)) } },
-        // Foundation's `Decimal` decoder handles binary numeric correctly; the
-        // String decoder PostgresNIO ships falls into a bytes-as-UTF-8 default
-        // path for `numeric` and produces garbage like ")0" or "0&0".
-        .numeric: { cell in (try? cell.decode(Decimal.self)).map { .text($0.description) } },
-        .money: { cell in decodeMoney(cell).map { .text($0) } },
-        .uuid: { cell in (try? cell.decode(UUID.self)).map { .text($0.uuidString) } },
-        .timestamp: { cell in (try? cell.decode(Date.self)).map { .text(dateFormatter.string(from: $0)) } },
-        .timestamptz: { cell in (try? cell.decode(Date.self)).map { .text(dateFormatter.string(from: $0)) } },
-        .date: { cell in (try? cell.decode(Date.self)).map { .text(dateOnlyFormatter.string(from: $0)) } },
-        .inet: { cell in decodeInet(cell, alwaysShowMask: false).map { .text($0) } },
-        .cidr: { cell in decodeInet(cell, alwaysShowMask: true).map { .text($0) } },
-        .macaddr: { cell in decodeMacaddr(cell, byteCount: 6).map { .text($0) } },
-        .macaddr8: { cell in decodeMacaddr(cell, byteCount: 8).map { .text($0) } },
-        .bytea: { _ in .text("<binary>") },
-    ]
-
-    /// Decode a PostgresCell to CellValue using type-aware decoding.
-    /// When adding support for new PostgreSQL types, add an entry to
-    /// `cellDecoders` to prevent them from hitting the String fallback silently.
+    /// When adding support for a new PostgreSQL type: add a case to
+    /// `formatBinary(buffer:type:)` so the binary wire bytes get a proper
+    /// textual rendering instead of leaking through as garbled UTF-8.
     private static func decodeCellValue(_ cell: PostgresCell) -> CellValue {
-        guard cell.bytes != nil else { return .null }
+        guard let bytes = cell.bytes else { return .null }
 
-        if let decoded = cellDecoders[cell.dataType]?(cell) {
-            return decoded
+        if cell.format == .binary {
+            var buf = bytes
+            if let s = formatBinary(buffer: &buf, type: cell.dataType) {
+                return .text(truncate(s))
+            }
         }
 
-        // Fallback: try String decoding (works for text, varchar, json, jsonb, etc.)
-        // Unknown binary-encoded types that can't be decoded as String fall through
-        // to "<binary>".
         guard let v = try? cell.decode(String.self) else { return .text("<binary>") }
-        return .text(v.count > 10_000 ? String(v.prefix(10_000)) + "…" : v)
+        return .text(truncate(v))
     }
 
-    /// Decodes an `inet` or `cidr` value. PostgreSQL's binary wire format is a
-    /// 4-byte header (family, mask bits, is_cidr flag, address byte count) plus
-    /// the raw address bytes. PG uses its own family constants — 2 for IPv4,
-    /// 3 for IPv6 — independent of the system AF_INET/AF_INET6 values.
-    /// `alwaysShowMask` is true for `cidr` (always emit /bits) and false for
-    /// `inet` (omit /bits when it equals the address-family maximum).
-    static func decodeInet(_ cell: PostgresCell, alwaysShowMask: Bool) -> String? {
-        if cell.format == .text {
-            return try? cell.decode(String.self)
+    private static func truncate(_ s: String) -> String {
+        s.count > 10_000 ? String(s.prefix(10_000)) + "…" : s
+    }
+
+    /// Recursive binary decoder. Maps PG's wire format for one value of `type`
+    /// to a textual representation that mirrors PG's standard text output as
+    /// closely as possible. Recursive paths (range / multirange / array) call
+    /// back into this function for the element / subtype.
+    ///
+    /// Returns nil on:
+    /// - unknown OID (caller falls back to String decoding)
+    /// - short/malformed buffer (caller surfaces "<binary>")
+    private static func formatBinary(buffer: inout ByteBuffer, type: PostgresDataType) -> String? {
+        switch type {
+        // ── Scalars ────────────────────────────────────────────────────
+        case .bool:
+            return buffer.readInteger(as: UInt8.self).map { $0 == 0 ? "false" : "true" }
+        case .int2:
+            return buffer.readInteger(as: Int16.self).map(String.init)
+        case .int4:
+            return buffer.readInteger(as: Int32.self).map(String.init)
+        case .int8:
+            return buffer.readInteger(as: Int64.self).map(String.init)
+        case .float4:
+            return buffer.readInteger(as: UInt32.self).map { String(Double(Float(bitPattern: $0))) }
+        case .float8:
+            return buffer.readInteger(as: UInt64.self).map { String(Double(bitPattern: $0)) }
+        case .oid, .regclass, .regproc, .regtype, .regrole, .regnamespace,
+             .regprocedure, .regoper, .regoperator, .regconfig, .regdictionary,
+             .regcollation, .xid, .cid:
+            return buffer.readInteger(as: UInt32.self).map(String.init)
+        case .xid8:
+            return buffer.readInteger(as: UInt64.self).map(String.init)
+        case .pgLSN:
+            guard let v = buffer.readInteger(as: UInt64.self) else { return nil }
+            return String(format: "%X/%X", UInt32(v >> 32), UInt32(v & 0xFFFFFFFF))
+
+        case .numeric:
+            return (try? Decimal(from: &buffer, type: .numeric, format: .binary, context: .default))?.description
+        case .money:
+            guard let raw = buffer.readInteger(as: Int64.self) else { return nil }
+            let neg = raw < 0
+            let abs = raw == .min ? UInt64(Int64.max) + 1 : UInt64(Swift.abs(raw))
+            return String(format: "%@%llu.%02llu", neg ? "-" : "", abs / 100, abs % 100)
+        case .uuid:
+            return (try? UUID(from: &buffer, type: .uuid, format: .binary, context: .default))?.uuidString
+
+        // ── Strings (treat as bytes-of-UTF-8) ──────────────────────────
+        case .text, .varchar, .bpchar, .char, .name, .cstring, .json, .xml:
+            return buffer.readString(length: buffer.readableBytes)
+        case .jsonb:
+            // jsonb prefixes a 1-byte version (currently always 1).
+            guard let ver: UInt8 = buffer.readInteger(), ver == 1 else { return nil }
+            return buffer.readString(length: buffer.readableBytes)
+
+        // ── Date / time / interval ─────────────────────────────────────
+        case .date:
+            // 4-byte signed days from 2000-01-01 (PG epoch).
+            guard let days = buffer.readInteger(as: Int32.self) else { return nil }
+            if days == Int32.max { return "infinity" }
+            if days == Int32.min { return "-infinity" }
+            let sec = TimeInterval(days) * 86_400 - pgEpochOffsetFromAppleEpoch
+            return dateOnlyFormatter.string(from: Date(timeIntervalSinceReferenceDate: sec))
+        case .timestamp, .timestamptz:
+            guard let us = buffer.readInteger(as: Int64.self) else { return nil }
+            if us == Int64.max { return "infinity" }
+            if us == Int64.min { return "-infinity" }
+            let sec = TimeInterval(us) / 1_000_000 - pgEpochOffsetFromAppleEpoch
+            return dateFormatter.string(from: Date(timeIntervalSinceReferenceDate: sec))
+        case .time:
+            guard let us = buffer.readInteger(as: Int64.self) else { return nil }
+            return formatTimeOfDay(us: us)
+        case .timetz:
+            guard let us = buffer.readInteger(as: Int64.self),
+                  let zoneSec = buffer.readInteger(as: Int32.self) else { return nil }
+            // PG sends the offset as seconds *west* of UTC; "+05:00" is -18000.
+            return formatTimeOfDay(us: us) + formatTZOffset(secondsWestOfUTC: Int(zoneSec))
+        case .interval:
+            // Layout: 8-byte microseconds + 4-byte days + 4-byte months.
+            guard let us = buffer.readInteger(as: Int64.self),
+                  let days = buffer.readInteger(as: Int32.self),
+                  let months = buffer.readInteger(as: Int32.self) else { return nil }
+            return formatInterval(us: us, days: Int(days), months: Int(months))
+
+        // ── Bit string ─────────────────────────────────────────────────
+        case .bit, .varbit:
+            // 4-byte length (in bits) + ceil(bits/8) bytes, MSB first.
+            guard let bits = buffer.readInteger(as: Int32.self), bits >= 0 else { return nil }
+            let byteCount = (Int(bits) + 7) / 8
+            guard let bytes = buffer.readBytes(length: byteCount) else { return nil }
+            var s = ""
+            s.reserveCapacity(Int(bits))
+            for i in 0 ..< Int(bits) {
+                let bit = (bytes[i / 8] >> (7 - (i % 8))) & 1
+                s.append(bit == 1 ? "1" : "0")
+            }
+            return s
+
+        // ── Network ────────────────────────────────────────────────────
+        case .inet, .cidr:
+            return formatInet(buffer: &buffer, alwaysShowMask: type == .cidr)
+        case .macaddr:
+            return formatMacaddr(buffer: &buffer, byteCount: 6)
+        case .macaddr8:
+            return formatMacaddr(buffer: &buffer, byteCount: 8)
+
+        // ── Geometric ──────────────────────────────────────────────────
+        case .point:
+            guard let x = readDouble(&buffer), let y = readDouble(&buffer) else { return nil }
+            return "(\(x),\(y))"
+        case .line:
+            guard let a = readDouble(&buffer),
+                  let b = readDouble(&buffer),
+                  let c = readDouble(&buffer) else { return nil }
+            return "{\(a),\(b),\(c)}"
+        case .lseg:
+            guard let x1 = readDouble(&buffer), let y1 = readDouble(&buffer),
+                  let x2 = readDouble(&buffer), let y2 = readDouble(&buffer) else { return nil }
+            return "[(\(x1),\(y1)),(\(x2),\(y2))]"
+        case .box:
+            guard let x1 = readDouble(&buffer), let y1 = readDouble(&buffer),
+                  let x2 = readDouble(&buffer), let y2 = readDouble(&buffer) else { return nil }
+            return "(\(x1),\(y1)),(\(x2),\(y2))"
+        case .circle:
+            guard let x = readDouble(&buffer), let y = readDouble(&buffer),
+                  let r = readDouble(&buffer) else { return nil }
+            return "<(\(x),\(y)),\(r)>"
+        case .path:
+            guard let closed: UInt8 = buffer.readInteger(),
+                  let n = buffer.readInteger(as: Int32.self), n >= 0 else { return nil }
+            var pts: [String] = []
+            pts.reserveCapacity(Int(n))
+            for _ in 0 ..< Int(n) {
+                guard let x = readDouble(&buffer), let y = readDouble(&buffer) else { return nil }
+                pts.append("(\(x),\(y))")
+            }
+            let body = pts.joined(separator: ",")
+            // closed=1 → parenthesized, closed=0 → bracketed (open path).
+            return closed == 0 ? "[\(body)]" : "(\(body))"
+        case .polygon:
+            guard let n = buffer.readInteger(as: Int32.self), n >= 0 else { return nil }
+            var pts: [String] = []
+            pts.reserveCapacity(Int(n))
+            for _ in 0 ..< Int(n) {
+                guard let x = readDouble(&buffer), let y = readDouble(&buffer) else { return nil }
+                pts.append("(\(x),\(y))")
+            }
+            return "(\(pts.joined(separator: ",")))"
+
+        // ── Bytea — skip rendering raw bytes ───────────────────────────
+        case .bytea:
+            return "<binary>"
+
+        // ── Range types ────────────────────────────────────────────────
+        case .int4Range:    return formatRange(buffer: &buffer, subtype: .int4)
+        case .int8Range:    return formatRange(buffer: &buffer, subtype: .int8)
+        case .numrange:     return formatRange(buffer: &buffer, subtype: .numeric)
+        case .tsrange:      return formatRange(buffer: &buffer, subtype: .timestamp)
+        case .tstzrange:    return formatRange(buffer: &buffer, subtype: .timestamptz)
+        case .daterange:    return formatRange(buffer: &buffer, subtype: .date)
+
+        // ── Multirange types ───────────────────────────────────────────
+        case .int4multirange:   return formatMultirange(buffer: &buffer, subtype: .int4)
+        case .int8multirange:   return formatMultirange(buffer: &buffer, subtype: .int8)
+        case .nummultirange:    return formatMultirange(buffer: &buffer, subtype: .numeric)
+        case .tsmultirange:     return formatMultirange(buffer: &buffer, subtype: .timestamp)
+        case .tstzmultirange:   return formatMultirange(buffer: &buffer, subtype: .timestamptz)
+        case .datemultirange:   return formatMultirange(buffer: &buffer, subtype: .date)
+
+        // ── Arrays ─────────────────────────────────────────────────────
+        // Element type comes from the array binary header itself, so we don't
+        // need a per-array-OID switch — anything matching the array OID list
+        // (or, conservatively, anything whose binary header parses) is fed
+        // through `formatArray`.
+        default:
+            if isArrayOID(type) {
+                return formatArray(buffer: &buffer)
+            }
+            return nil
         }
-        guard var buf = cell.bytes,
-              let family: UInt8 = buf.readInteger(),
-              let bits: UInt8 = buf.readInteger(),
-              let _: UInt8 = buf.readInteger(),
-              let nb: UInt8 = buf.readInteger(),
-              let bytes = buf.readBytes(length: Int(nb))
+    }
+
+    /// Seconds between Foundation's reference date (2001-01-01 UTC) and PG's
+    /// epoch (2000-01-01 UTC). 366 days; 2000 was a leap year.
+    private static let pgEpochOffsetFromAppleEpoch: TimeInterval = 31_622_400
+
+    private static func readDouble(_ buf: inout ByteBuffer) -> Double? {
+        buf.readInteger(as: UInt64.self).map { Double(bitPattern: $0) }
+    }
+
+    /// Formats `us` (microseconds since midnight) as "HH:MM:SS" or
+    /// "HH:MM:SS.uuuuuu" when fractional seconds are present.
+    private static func formatTimeOfDay(us: Int64) -> String {
+        let totalSec = us / 1_000_000
+        let frac = us % 1_000_000
+        let hh = totalSec / 3600
+        let mm = (totalSec % 3600) / 60
+        let ss = totalSec % 60
+        if frac == 0 {
+            return String(format: "%02lld:%02lld:%02lld", hh, mm, ss)
+        }
+        // Trim trailing zeros from the fractional part (matches PG's display).
+        var fracStr = String(format: "%06lld", frac)
+        while fracStr.last == "0" { fracStr.removeLast() }
+        return String(format: "%02lld:%02lld:%02lld.%@", hh, mm, ss, fracStr)
+    }
+
+    /// Converts PG's "seconds west of UTC" timezone offset to a "+HH:MM" /
+    /// "-HH:MM" suffix.
+    private static func formatTZOffset(secondsWestOfUTC: Int) -> String {
+        // east of UTC = -secondsWest
+        let east = -secondsWestOfUTC
+        let sign = east >= 0 ? "+" : "-"
+        let abs = Swift.abs(east)
+        let hh = abs / 3600
+        let mm = (abs % 3600) / 60
+        return String(format: "%@%02d:%02d", sign, hh, mm)
+    }
+
+    /// Renders a PG interval (months / days / microseconds) in PG's standard
+    /// text form, e.g. "1 year 2 mons 3 days 04:05:06.789".
+    private static func formatInterval(us: Int64, days: Int, months: Int) -> String {
+        var parts: [String] = []
+        if months != 0 {
+            let years = months / 12
+            let mons = months % 12
+            if years != 0 { parts.append("\(years) year\(Swift.abs(years) == 1 ? "" : "s")") }
+            if mons != 0 { parts.append("\(mons) mon\(Swift.abs(mons) == 1 ? "" : "s")") }
+        }
+        if days != 0 { parts.append("\(days) day\(Swift.abs(days) == 1 ? "" : "s")") }
+        if us != 0 {
+            let neg = us < 0
+            let absUs = neg ? -us : us
+            let totalSec = absUs / 1_000_000
+            let frac = absUs % 1_000_000
+            let hh = totalSec / 3600
+            let mm = (totalSec % 3600) / 60
+            let ss = totalSec % 60
+            let signed = (neg ? "-" : "") + String(format: "%02lld:%02lld:%02lld", hh, mm, ss)
+            if frac == 0 {
+                parts.append(signed)
+            } else {
+                var fracStr = String(format: "%06lld", frac)
+                while fracStr.last == "0" { fracStr.removeLast() }
+                parts.append("\(signed).\(fracStr)")
+            }
+        }
+        return parts.isEmpty ? "00:00:00" : parts.joined(separator: " ")
+    }
+
+    /// Decodes a PG range value. Layout: 1-byte flags + (per non-infinite
+    /// bound) 4-byte length + subtype payload. Empty ranges short-circuit
+    /// before any bound bytes are read.
+    private static func formatRange(buffer: inout ByteBuffer, subtype: PostgresDataType) -> String? {
+        guard let flags: UInt8 = buffer.readInteger() else { return nil }
+        if flags & 0x01 != 0 { return "empty" } // RANGE_EMPTY
+
+        let lowerInc = flags & 0x02 != 0
+        let upperInc = flags & 0x04 != 0
+        let lowerInf = flags & 0x08 != 0
+        let upperInf = flags & 0x10 != 0
+
+        func readBound() -> String? {
+            guard let len = buffer.readInteger(as: Int32.self), len >= 0 else { return nil }
+            guard var sub = buffer.readSlice(length: Int(len)) else { return nil }
+            return formatBinary(buffer: &sub, type: subtype)
+        }
+
+        let lo = lowerInf ? "" : (readBound() ?? "?")
+        let hi = upperInf ? "" : (readBound() ?? "?")
+        return "\(lowerInc ? "[" : "(")\(lo),\(hi)\(upperInc ? "]" : ")")"
+    }
+
+    /// Decodes a PG multirange — count followed by length-prefixed range
+    /// payloads. Renders as "{[a,b),[c,d)}".
+    private static func formatMultirange(buffer: inout ByteBuffer, subtype: PostgresDataType) -> String? {
+        guard let count = buffer.readInteger(as: Int32.self), count >= 0 else { return nil }
+        var ranges: [String] = []
+        ranges.reserveCapacity(Int(count))
+        for _ in 0 ..< Int(count) {
+            guard let len = buffer.readInteger(as: Int32.self), len >= 0,
+                  var sub = buffer.readSlice(length: Int(len)),
+                  let r = formatRange(buffer: &sub, subtype: subtype)
+            else { return nil }
+            ranges.append(r)
+        }
+        return "{\(ranges.joined(separator: ","))}"
+    }
+
+    /// Decodes a PG array. Header: ndim, hasnull, element OID, then per-dim
+    /// (dim length, lower bound), then (length, payload) per element. NULL
+    /// elements are signalled by length = -1.
+    private static func formatArray(buffer: inout ByteBuffer) -> String? {
+        guard let ndim = buffer.readInteger(as: Int32.self),
+              let _ = buffer.readInteger(as: Int32.self), // hasnull flag — informational, we just check len == -1 per element
+              let elemOID = buffer.readInteger(as: UInt32.self),
+              ndim >= 0, ndim <= 6
+        else { return nil }
+
+        if ndim == 0 { return "{}" }
+
+        var dims: [Int] = []
+        dims.reserveCapacity(Int(ndim))
+        for _ in 0 ..< Int(ndim) {
+            guard let dimLen = buffer.readInteger(as: Int32.self),
+                  let _ = buffer.readInteger(as: Int32.self), // lower bound — discarded; PG default is 1
+                  dimLen >= 0
+            else { return nil }
+            dims.append(Int(dimLen))
+        }
+
+        let total = dims.reduce(1, *)
+        let elemType = PostgresDataType(elemOID)
+        var elements: [String] = []
+        elements.reserveCapacity(total)
+        for _ in 0 ..< total {
+            guard let len = buffer.readInteger(as: Int32.self) else { return nil }
+            if len < 0 {
+                elements.append("NULL")
+                continue
+            }
+            guard var sub = buffer.readSlice(length: Int(len)) else { return nil }
+            elements.append(formatBinary(buffer: &sub, type: elemType) ?? "?")
+        }
+
+        return formatNestedArray(elements: elements[...], dims: dims, depth: 0)
+    }
+
+    /// Recursively reshapes a flat list of formatted elements into PG's nested
+    /// `{{a,b},{c,d}}` array text form.
+    private static func formatNestedArray(elements: ArraySlice<String>, dims: [Int], depth: Int) -> String {
+        if depth == dims.count - 1 {
+            return "{" + elements.map(quoteArrayElement).joined(separator: ",") + "}"
+        }
+        let chunkSize = dims.dropFirst(depth + 1).reduce(1, *)
+        var pieces: [String] = []
+        pieces.reserveCapacity(dims[depth])
+        var idx = elements.startIndex
+        for _ in 0 ..< dims[depth] {
+            let next = elements.index(idx, offsetBy: chunkSize)
+            pieces.append(formatNestedArray(elements: elements[idx ..< next], dims: dims, depth: depth + 1))
+            idx = next
+        }
+        return "{" + pieces.joined(separator: ",") + "}"
+    }
+
+    /// Quotes an array element the way PG does: bare for plain content, double
+    /// quoted with backslash escapes for content containing punctuation.
+    private static func quoteArrayElement(_ s: String) -> String {
+        if s == "NULL" { return "NULL" }
+        let needsQuote = s.isEmpty || s.contains(where: { c in
+            c == "," || c == "{" || c == "}" || c == "\"" || c == "\\" || c.isWhitespace
+        })
+        if !needsQuote { return s }
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    /// Decodes an `inet`/`cidr` payload from the supplied buffer (shared with
+    /// the recursive range/array decoders).
+    private static func formatInet(buffer: inout ByteBuffer, alwaysShowMask: Bool) -> String? {
+        guard let family: UInt8 = buffer.readInteger(),
+              let bits: UInt8 = buffer.readInteger(),
+              let _: UInt8 = buffer.readInteger(),
+              let nb: UInt8 = buffer.readInteger(),
+              let bytes = buffer.readBytes(length: Int(nb))
         else { return nil }
 
         let address: String
@@ -376,7 +703,6 @@ actor DatabaseClient: PostgresClientProtocol {
         default:
             return nil
         }
-
         return (alwaysShowMask || bits != maxBits) ? "\(address)/\(bits)" : address
     }
 
@@ -410,35 +736,39 @@ actor DatabaseClient: PostgresClientProtocol {
         return "\(head)::\(tail)"
     }
 
-    /// Decodes a `money` cell. PG's binary money is an Int64 in 1/100 units of
-    /// the cluster's locale currency. We don't try to apply a locale-specific
-    /// currency symbol — the column header already says it's money — and
-    /// instead just emit the value with two fractional digits.
-    static func decodeMoney(_ cell: PostgresCell) -> String? {
-        if cell.format == .text {
-            return try? cell.decode(String.self)
-        }
-        guard var buf = cell.bytes,
-              let raw: Int64 = buf.readInteger()
-        else { return nil }
-        let negative = raw < 0
-        let units = abs(raw)
-        let major = units / 100
-        let minor = units % 100
-        return String(format: "%@%lld.%02lld", negative ? "-" : "", major, minor)
+    /// Formats a `macaddr`/`macaddr8` body (already past any preamble).
+    private static func formatMacaddr(buffer: inout ByteBuffer, byteCount: Int) -> String? {
+        guard let bytes = buffer.readBytes(length: byteCount), bytes.count == byteCount else { return nil }
+        return bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 
-    /// Decodes a `macaddr` (6 bytes) or `macaddr8` (8 bytes) cell to its
-    /// canonical colon-separated lowercase hex form (e.g. `08:00:2b:01:02:03`).
-    static func decodeMacaddr(_ cell: PostgresCell, byteCount: Int) -> String? {
-        if cell.format == .text {
-            return try? cell.decode(String.self)
+    /// Whether the given OID is a built-in array type. Composite/user-defined
+    /// arrays (e.g. _user_role for an enum array) carry dynamic OIDs; for
+    /// those we fall back to PostgresNIO's String decoder (PG happens to send
+    /// arrays as text-format-friendly bytes for many common cases) rather
+    /// than mis-parse a composite as an array.
+    private static func isArrayOID(_ type: PostgresDataType) -> Bool {
+        switch type {
+        case .boolArray, .byteaArray, .charArray, .nameArray, .int2Array, .int2vectorArray,
+             .int4Array, .regprocArray, .textArray, .tidArray, .xidArray, .cidArray,
+             .oidvectorArray, .bpcharArray, .varcharArray, .int8Array, .pointArray,
+             .lsegArray, .pathArray, .boxArray, .float4Array, .float8Array, .polygonArray,
+             .oidArray, .aclitemArray, .macaddrArray, .inetArray, .timestampArray,
+             .dateArray, .timeArray, .timestamptzArray, .intervalArray, .numericArray,
+             .cstringArray, .timetzArray, .bitArray, .varbitArray, .refcursorArray,
+             .regprocedureArray, .regoperArray, .regoperatorArray, .regclassArray,
+             .regtypeArray, .recordArray, .pgLSNArray, .tsvectorArray, .gtsvectorArray,
+             .tsqueryArray, .regconfigArray, .regdictionaryArray, .jsonbArray,
+             .numrangeArray, .tsrangeArray, .tstzrangeArray, .daterangeArray,
+             .jsonpathArray, .regnamespaceArray, .regroleArray, .regcollationArray,
+             .int4multirangeArray, .nummultirangeArray, .tsmultirangeArray,
+             .tstzmultirangeArray, .datemultirangeArray, .int8multirangeArray,
+             .xid8Array, .xmlArray, .jsonArray, .lineArray, .cidrArray, .circleArray,
+             .macaddr8Array, .moneyArray, .int4RangeArray, .int8RangeArray:
+            return true
+        default:
+            return false
         }
-        guard var buf = cell.bytes,
-              let bytes = buf.readBytes(length: byteCount),
-              bytes.count == byteCount
-        else { return nil }
-        return bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 
     // MARK: - Error Formatting
