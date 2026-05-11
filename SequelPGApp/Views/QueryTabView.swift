@@ -384,27 +384,34 @@ struct ResultsGridView: View {
                 }
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .help(cell.isNull ? "NULL" : cell.displayString)
                 // Thin trailing divider on every cell — visually separates
                 // adjacent columns. SwiftUI Table's bordered style only draws
-                // dividers in the header row, so we paint them per-cell.
+                // dividers in the header row, so we paint them per-cell. The
+                // overlay is non-hit-testable so it never absorbs the clicks
+                // that the underlying NSTableView needs for row selection.
                 .overlay(alignment: .trailing) {
                     Rectangle()
                         .fill(Color(nsColor: .separatorColor))
                         .frame(width: 0.5)
+                        .padding(.trailing, -8)
+                        .allowsHitTesting(false)
                 }
-                .contentShape(Rectangle())
-                .help(cell.isNull ? "NULL" : cell.displayString)
-                .onTapGesture(count: 2) {
-                    guard isEditable else { return }
-                    if editingCell != nil {
-                        commitEdit()
+                // simultaneousGesture lets the underlying Table still receive
+                // single-clicks for row selection while we keep the
+                // double-click-to-edit behavior on cells.
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        guard isEditable else { return }
+                        if editingCell != nil { commitEdit() }
+                        if needsRichEditor(kind: kind) {
+                            fieldEditorCell = (row: rowIdx, col: colIdx)
+                        } else {
+                            startEditing(row: rowIdx, col: colIdx, cell: cell)
+                        }
                     }
-                    if needsRichEditor(kind: kind) {
-                        fieldEditorCell = (row: rowIdx, col: colIdx)
-                    } else {
-                        startEditing(row: rowIdx, col: colIdx, cell: cell)
-                    }
-                }
+                )
                 .popover(
                     isPresented: Binding(
                         get: { fieldEditorCell?.row == rowIdx && fieldEditorCell?.col == colIdx },
