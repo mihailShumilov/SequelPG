@@ -316,6 +316,10 @@ actor DatabaseClient: PostgresClientProtocol {
         .timestamp: { cell in (try? cell.decode(Date.self)).map { .text(dateFormatter.string(from: $0)) } },
         .timestamptz: { cell in (try? cell.decode(Date.self)).map { .text(dateFormatter.string(from: $0)) } },
         .date: { cell in (try? cell.decode(Date.self)).map { .text(dateOnlyFormatter.string(from: $0)) } },
+        .inet: { cell in decodeInet(cell, alwaysShowMask: false).map { .text($0) } },
+        .cidr: { cell in decodeInet(cell, alwaysShowMask: true).map { .text($0) } },
+        .macaddr: { cell in decodeMacaddr(cell, byteCount: 6).map { .text($0) } },
+        .macaddr8: { cell in decodeMacaddr(cell, byteCount: 8).map { .text($0) } },
         .bytea: { _ in .text("<binary>") },
     ]
 
@@ -334,6 +338,85 @@ actor DatabaseClient: PostgresClientProtocol {
         // to "<binary>".
         guard let v = try? cell.decode(String.self) else { return .text("<binary>") }
         return .text(v.count > 10_000 ? String(v.prefix(10_000)) + "…" : v)
+    }
+
+    /// Decodes an `inet` or `cidr` value. PostgreSQL's binary wire format is a
+    /// 4-byte header (family, mask bits, is_cidr flag, address byte count) plus
+    /// the raw address bytes. PG uses its own family constants — 2 for IPv4,
+    /// 3 for IPv6 — independent of the system AF_INET/AF_INET6 values.
+    /// `alwaysShowMask` is true for `cidr` (always emit /bits) and false for
+    /// `inet` (omit /bits when it equals the address-family maximum).
+    static func decodeInet(_ cell: PostgresCell, alwaysShowMask: Bool) -> String? {
+        if cell.format == .text {
+            return try? cell.decode(String.self)
+        }
+        guard var buf = cell.bytes,
+              let family: UInt8 = buf.readInteger(),
+              let bits: UInt8 = buf.readInteger(),
+              let _: UInt8 = buf.readInteger(),
+              let nb: UInt8 = buf.readInteger(),
+              let bytes = buf.readBytes(length: Int(nb))
+        else { return nil }
+
+        let address: String
+        let maxBits: UInt8
+        switch family {
+        case 2:
+            guard bytes.count == 4 else { return nil }
+            address = bytes.map(String.init).joined(separator: ".")
+            maxBits = 32
+        case 3:
+            guard bytes.count == 16 else { return nil }
+            address = formatIPv6(bytes: bytes)
+            maxBits = 128
+        default:
+            return nil
+        }
+
+        return (alwaysShowMask || bits != maxBits) ? "\(address)/\(bits)" : address
+    }
+
+    /// Formats 16 raw IPv6 bytes as a colon-separated string, collapsing the
+    /// longest run of zero groups (length ≥ 2) to "::" per RFC 5952.
+    static func formatIPv6(bytes: [UInt8]) -> String {
+        var groups: [UInt16] = []
+        groups.reserveCapacity(8)
+        for i in stride(from: 0, to: 16, by: 2) {
+            groups.append((UInt16(bytes[i]) << 8) | UInt16(bytes[i + 1]))
+        }
+
+        var bestStart = -1, bestLen = 0
+        var curStart = -1, curLen = 0
+        for (i, g) in groups.enumerated() {
+            if g == 0 {
+                if curStart == -1 { curStart = i }
+                curLen += 1
+                if curLen > bestLen { bestStart = curStart; bestLen = curLen }
+            } else {
+                curStart = -1; curLen = 0
+            }
+        }
+
+        let hex: (UInt16) -> String = { String($0, radix: 16) }
+        guard bestLen >= 2 else {
+            return groups.map(hex).joined(separator: ":")
+        }
+        let head = groups[0 ..< bestStart].map(hex).joined(separator: ":")
+        let tail = groups[(bestStart + bestLen) ..< groups.count].map(hex).joined(separator: ":")
+        return "\(head)::\(tail)"
+    }
+
+    /// Decodes a `macaddr` (6 bytes) or `macaddr8` (8 bytes) cell to its
+    /// canonical colon-separated lowercase hex form (e.g. `08:00:2b:01:02:03`).
+    static func decodeMacaddr(_ cell: PostgresCell, byteCount: Int) -> String? {
+        if cell.format == .text {
+            return try? cell.decode(String.self)
+        }
+        guard var buf = cell.bytes,
+              let bytes = buf.readBytes(length: byteCount),
+              bytes.count == byteCount
+        else { return nil }
+        return bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 
     // MARK: - Error Formatting
