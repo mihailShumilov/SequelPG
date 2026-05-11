@@ -922,12 +922,32 @@ struct DataGridView: NSViewRepresentable {
             hosting.rootView = rootView
         }
 
+        // Catch the click at the cell level — if we let it fall through to
+        // the inner NSHostingView, SwiftUI's gesture machinery absorbs the
+        // mouseDown without doing anything useful (we have no gestures on
+        // the cell content), and the table never gets a chance to select.
         override func hitTest(_ point: NSPoint) -> NSView? {
-            // Pass mouse events through to the NSTableView so click → select
-            // works on the first click. The cell's SwiftUI content stays
-            // visible and reactive to data updates; it just doesn't capture
-            // mouse input.
-            return nil
+            frame.contains(point) ? self : nil
+        }
+
+        // Required so the first click on the table — even when the table
+        // isn't yet first responder — registers as a real selection click
+        // rather than getting consumed by window activation.
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        // Forward the mouseDown up to the host NSTableView so its built-in
+        // selection logic runs. Walking via superview chain (rather than
+        // nextResponder) is more reliable here because NSTableRowView's
+        // default mouseDown silently consumes the event.
+        override func mouseDown(with event: NSEvent) {
+            var view: NSView? = superview
+            while let v = view {
+                if let table = v as? NSTableView {
+                    table.mouseDown(with: event)
+                    return
+                }
+                view = v.superview
+            }
         }
     }
 

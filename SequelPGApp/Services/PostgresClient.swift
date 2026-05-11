@@ -497,6 +497,14 @@ actor DatabaseClient: PostgresClientProtocol {
             if isArrayOID(type) {
                 return formatArray(buffer: &buffer)
             }
+            // Unknown OIDs are most often user-defined composite types
+            // (CREATE TYPE x AS (...)). Try parsing as a composite — the
+            // binary layout is self-describing so a header that doesn't
+            // look like a composite naturally fails the validation guards
+            // and we fall through to the bytea label.
+            if let s = formatComposite(buffer: &buffer) {
+                return s
+            }
             return nil
         }
     }
@@ -590,6 +598,64 @@ actor DatabaseClient: PostgresClientProtocol {
         let lo = lowerInf ? "" : (readBound() ?? "?")
         let hi = upperInf ? "" : (readBound() ?? "?")
         return "\(lowerInc ? "[" : "(")\(lo),\(hi)\(upperInc ? "]" : ")")"
+    }
+
+    /// Decodes a PG composite (record / row) binary payload. Layout:
+    /// 4-byte field count, then per field: 4-byte type OID + 4-byte length
+    /// (or -1 for NULL) + N bytes of subtype binary. Renders as PG's text
+    /// form, e.g. `(field1,field2,...)`. NULL fields show as empty between
+    /// commas to match PG's psql output.
+    ///
+    /// Field count is bounded to a sane upper limit so a buffer that *isn't*
+    /// a composite (e.g. random bytea) doesn't sail through validation.
+    /// Returns nil if the header looks wrong; caller falls back to `<binary>`.
+    private static func formatComposite(buffer: inout ByteBuffer) -> String? {
+        let start = buffer.readerIndex
+        guard let fieldCount = buffer.readInteger(as: Int32.self),
+              fieldCount >= 0, fieldCount <= 512
+        else {
+            buffer.moveReaderIndex(to: start)
+            return nil
+        }
+        if fieldCount == 0 { return "()" }
+
+        var fields: [String] = []
+        fields.reserveCapacity(Int(fieldCount))
+        for _ in 0 ..< Int(fieldCount) {
+            guard let fieldOID = buffer.readInteger(as: UInt32.self),
+                  let len = buffer.readInteger(as: Int32.self)
+            else {
+                buffer.moveReaderIndex(to: start)
+                return nil
+            }
+            if len < 0 {
+                fields.append("")
+                continue
+            }
+            guard var sub = buffer.readSlice(length: Int(len)) else {
+                buffer.moveReaderIndex(to: start)
+                return nil
+            }
+            let raw = formatBinary(buffer: &sub, type: PostgresDataType(fieldOID)) ?? ""
+            fields.append(quoteCompositeField(raw))
+        }
+        return "(\(fields.joined(separator: ",")))"
+    }
+
+    /// Quotes a composite field the way PG does in its text output: bare
+    /// content for simple values, double-quoted with backslash escapes when
+    /// the value contains a comma, parenthesis, quote, backslash, or
+    /// whitespace.
+    private static func quoteCompositeField(_ s: String) -> String {
+        if s.isEmpty { return "" }
+        let needsQuote = s.contains(where: { c in
+            c == "," || c == "(" || c == ")" || c == "\"" || c == "\\" || c.isWhitespace
+        })
+        if !needsQuote { return s }
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     /// Decodes a PG multirange — count followed by length-prefixed range
