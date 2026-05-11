@@ -420,13 +420,17 @@ struct ResultsGridView: View {
                 }
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: renderKind.alignment == .trailing ? .trailing : .leading)
-                // Trailing column divider: thin, non-hit-testable line that
-                // lines up with the bordered table style's header rule.
+                // Trailing column divider: thin, non-hit-testable line at the
+                // cell's trailing edge so adjacent columns are visually
+                // separated. The bordered table style draws header rules at
+                // the column boundary; SwiftUI Table doesn't expose where
+                // exactly that boundary lands relative to the cell's frame,
+                // so we sit flush at the cell trailing edge — close enough
+                // that header and data rules read as a single line.
                 .overlay(alignment: .trailing) {
                     Rectangle()
                         .fill(Color(nsColor: .separatorColor))
-                        .frame(width: 0.5)
-                        .padding(.trailing, -8)
+                        .frame(width: 1)
                         .allowsHitTesting(false)
                 }
                 // Native AppKit double-click handler — forwards single clicks
