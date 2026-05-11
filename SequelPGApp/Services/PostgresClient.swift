@@ -974,8 +974,12 @@ actor DatabaseClient: PostgresClientProtocol {
         // version-dependent `kindFilter` is a static SQL fragment so it goes
         // into the SQL verbatim via unsafe interpolation.
         let kindFilter = pgVersion >= 11 ? "p.prokind = 'f'" : "NOT p.proisagg AND NOT p.proiswindow"
+        // oidvectortypes(proargtypes) returns the IN-arg data types only —
+        // the exact form regprocedure expects when looking the function up
+        // for getObjectDDL. PG18's pg_get_function_identity_arguments now
+        // includes parameter names too, which would break that round-trip.
         let query: PostgresQuery = """
-            SELECT p.proname || '(' || COALESCE(pg_get_function_identity_arguments(p.oid), '') || ')' AS func_sig
+            SELECT p.proname || '(' || oidvectortypes(p.proargtypes) || ')' AS func_sig
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
             WHERE n.nspname = \(schema)
