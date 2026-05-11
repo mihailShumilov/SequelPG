@@ -343,11 +343,20 @@ struct CascadeDeleteBuilder {
             )
             tableVM.setColumns(columns)
 
-            let approxRows = try await dbClient.getApproximateRowCount(
-                schema: object.schema,
-                table: object.name
-            )
-            tableVM.approximateRowCount = approxRows
+            // getApproximateRowCount falls back to SELECT COUNT(*) when
+            // pg_class.reltuples is -1 (no ANALYZE yet). That fallback errors
+            // for non-relation objects (composite types, sequences, …) with
+            // "cannot open relation". Skip the lookup entirely there — there
+            // are no rows to report anyway.
+            if object.type.hasQueryableContent {
+                let approxRows = try await dbClient.getApproximateRowCount(
+                    schema: object.schema,
+                    table: object.name
+                )
+                tableVM.approximateRowCount = approxRows
+            } else {
+                tableVM.approximateRowCount = 0
+            }
             tableVM.selectedObjectName = object.name
             tableVM.selectedObjectColumnCount = columns.count
 

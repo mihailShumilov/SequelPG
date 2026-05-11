@@ -1344,13 +1344,21 @@ actor DatabaseClient: PostgresClientProtocol {
         guard let client else { throw AppError.notConnected }
 
         let query = makeObjectDDLQuery(schema: schema, name: name, type: type)
-        let rows = try await client.query(query)
-        for try await row in rows {
-            if let (ddl,) = try? row.decode(String.self) {
-                return ddl
+        do {
+            let rows = try await client.query(query)
+            for try await row in rows {
+                if let (ddl,) = try? row.decode(String.self) {
+                    return ddl
+                }
             }
+            return "-- Definition not available"
+        } catch let error as PSQLError {
+            // Surface the server's actual error in the Definition pane instead
+            // of letting it bubble up as the generic NSError text
+            // "(PostgresNIO.PSQLError error 1.)". Server-side PG errors are
+            // useful (e.g. "is an aggregate function") and should be readable.
+            return "-- Error loading definition for \(schema).\(name):\n-- \(Self.formatPSQLError(error))"
         }
-        return "-- Definition not available"
     }
 
     /// Builds the parameterized lookup query for each DDL object type.
@@ -1359,7 +1367,7 @@ actor DatabaseClient: PostgresClientProtocol {
     /// concatenate into the output just like string literals did.
     private func makeObjectDDLQuery(schema: String, name: String, type: DBObjectType) -> PostgresQuery {
         switch type {
-        case .function, .procedure, .aggregate, .triggerFunction:
+        case .function, .procedure, .triggerFunction:
             // `name` may include args like "my_func(integer, text)". Match by
             // full identity signature via regprocedure so overloads resolve to
             // the exact function the user is viewing. Fall back to name-only
@@ -1379,6 +1387,30 @@ actor DatabaseClient: PostgresClientProtocol {
                 SELECT pg_get_functiondef(p.oid)
                 FROM pg_proc p
                 JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = \(schema) AND p.proname = \(baseName)
+                LIMIT 1
+                """
+        case .aggregate:
+            // pg_get_functiondef errors on aggregate OIDs ("is an aggregate
+            // function"), so reconstruct CREATE AGGREGATE from pg_aggregate
+            // ourselves: state transition function (SFUNC), state type (STYPE),
+            // optional final function and initial value.
+            let (baseName, _) = splitFunctionSignature(name)
+            return """
+                SELECT 'CREATE AGGREGATE ' || n.nspname || '.' || p.proname
+                    || '(' || COALESCE(pg_get_function_identity_arguments(p.oid), '') || ') ('
+                    || chr(10) || '  SFUNC = ' || a.aggtransfn::regproc::text
+                    || ',' || chr(10) || '  STYPE = ' || pg_catalog.format_type(a.aggtranstype, NULL)
+                    || CASE WHEN a.aggfinalfn <> 0
+                            THEN ',' || chr(10) || '  FINALFUNC = ' || a.aggfinalfn::regproc::text
+                            ELSE '' END
+                    || CASE WHEN a.agginitval IS NOT NULL
+                            THEN ',' || chr(10) || '  INITCOND = ' || quote_literal(a.agginitval)
+                            ELSE '' END
+                    || chr(10) || ');'
+                FROM pg_aggregate a
+                JOIN pg_proc p ON p.oid = a.aggfnoid
+                JOIN pg_namespace n ON n.oid = p.pronamespace
                 WHERE n.nspname = \(schema) AND p.proname = \(baseName)
                 LIMIT 1
                 """
