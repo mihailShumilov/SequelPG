@@ -311,7 +311,11 @@ actor DatabaseClient: PostgresClientProtocol {
         .int8: { cell in (try? cell.decode(Int64.self)).map { .text(String($0)) } },
         .float4: { cell in (try? cell.decode(Float.self)).map { .text(String(Double($0))) } },
         .float8: { cell in (try? cell.decode(Double.self)).map { .text(String($0)) } },
-        .numeric: { cell in (try? cell.decode(String.self)).map { .text($0) } },
+        // Foundation's `Decimal` decoder handles binary numeric correctly; the
+        // String decoder PostgresNIO ships falls into a bytes-as-UTF-8 default
+        // path for `numeric` and produces garbage like ")0" or "0&0".
+        .numeric: { cell in (try? cell.decode(Decimal.self)).map { .text($0.description) } },
+        .money: { cell in decodeMoney(cell).map { .text($0) } },
         .uuid: { cell in (try? cell.decode(UUID.self)).map { .text($0.uuidString) } },
         .timestamp: { cell in (try? cell.decode(Date.self)).map { .text(dateFormatter.string(from: $0)) } },
         .timestamptz: { cell in (try? cell.decode(Date.self)).map { .text(dateFormatter.string(from: $0)) } },
@@ -404,6 +408,24 @@ actor DatabaseClient: PostgresClientProtocol {
         let head = groups[0 ..< bestStart].map(hex).joined(separator: ":")
         let tail = groups[(bestStart + bestLen) ..< groups.count].map(hex).joined(separator: ":")
         return "\(head)::\(tail)"
+    }
+
+    /// Decodes a `money` cell. PG's binary money is an Int64 in 1/100 units of
+    /// the cluster's locale currency. We don't try to apply a locale-specific
+    /// currency symbol — the column header already says it's money — and
+    /// instead just emit the value with two fractional digits.
+    static func decodeMoney(_ cell: PostgresCell) -> String? {
+        if cell.format == .text {
+            return try? cell.decode(String.self)
+        }
+        guard var buf = cell.bytes,
+              let raw: Int64 = buf.readInteger()
+        else { return nil }
+        let negative = raw < 0
+        let units = abs(raw)
+        let major = units / 100
+        let minor = units % 100
+        return String(format: "%@%lld.%02lld", negative ? "-" : "", major, minor)
     }
 
     /// Decodes a `macaddr` (6 bytes) or `macaddr8` (8 bytes) cell to its
