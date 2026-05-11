@@ -1,41 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Catches double-clicks via AppKit's responder chain so single clicks reach
-/// the host NSTableView for row selection. SwiftUI's `.onTapGesture(count: 2)`
-/// participates in gesture arbitration that, inside `Table`, swallows the
-/// initial mouseDown long enough for `NSTableView` to never see it.
-///
-/// Single-clicks fall through unmodified (we forward to nextResponder); only
-/// genuine double-clicks fire the closure.
-struct DoubleClickGate: NSViewRepresentable {
-    let onDoubleClick: () -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let v = ClickPassthroughView()
-        v.onDoubleClick = onDoubleClick
-        return v
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? ClickPassthroughView)?.onDoubleClick = onDoubleClick
-    }
-
-    private final class ClickPassthroughView: NSView {
-        var onDoubleClick: (() -> Void)?
-
-        override func mouseDown(with event: NSEvent) {
-            if event.clickCount == 2 {
-                onDoubleClick?()
-                return
-            }
-            // Single click → let it bubble up to the next responder
-            // (eventually the NSTableView that drives row selection).
-            super.mouseDown(with: event)
-        }
-    }
-}
-
 struct QueryTabView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(QueryViewModel.self) var queryVM
@@ -325,49 +290,62 @@ struct ResultsGridView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Table(identifiedRows, selection: $selectedRowIndex, sortOrder: $sortOrder) {
-                TableColumnForEach(identifiedColumns) { column in
-                    TableColumn(headerTitle(for: column.name), sortUsing: ColumnSortComparator(
-                        columnIndex: column.id,
-                        columnName: column.name,
-                        order: .forward
-                    )) { row in
-                        cellView(rowIdx: row.id, colIdx: column.id)
+            DataGridView(
+                rowCount: identifiedRows.count,
+                columns: identifiedColumns.map { col in
+                    DataGridView.Column(
+                        id: col.id,
+                        title: headerTitle(for: col.name),
+                        rawName: col.name,
+                        minWidth: columnMinWidth
+                    )
+                },
+                selectedRowIndex: $selectedRowIndex,
+                sortColumnName: sortColumn,
+                sortAscending: sortAscending,
+                onSelectionChanged: { idx in
+                    if let idx { onRowSelected?(idx) }
+                },
+                onColumnHeaderClicked: { colName in
+                    onColumnHeaderTapped?(colName)
+                },
+                onDoubleClick: { rowIdx, colIdx in
+                    handleCellDoubleClick(row: rowIdx, col: colIdx)
+                },
+                onDeleteSelected: {
+                    if let onDeleteRow, let idx = selectedRowIndex {
+                        onDeleteRow(idx)
                     }
-                    .width(min: columnMinWidth)
+                },
+                contextMenuItems: { rowIdx in
+                    guard let onDeleteRow else { return [] }
+                    return [
+                        DataGridView.MenuItem(title: "Delete Row", isDestructive: true) {
+                            onDeleteRow(rowIdx)
+                        },
+                    ]
+                },
+                renderCell: { rowIdx, colIdx in
+                    AnyView(cellView(rowIdx: rowIdx, colIdx: colIdx))
                 }
-            }
-            .tableStyle(.bordered(alternatesRowBackgrounds: true))
-            .contextMenu(forSelectionType: IdentifiedRow.ID.self) { selectedIds in
-                if let onDeleteRow, let rowIdx = selectedIds.first {
-                    Button(role: .destructive) {
-                        onDeleteRow(rowIdx)
-                    } label: {
-                        Label("Delete Row", systemImage: "trash")
-                    }
-                }
-            }
-            .onChange(of: selectedRowIndex) { _, newValue in
-                if let newValue {
-                    onRowSelected?(newValue)
-                }
-            }
-            .onChange(of: sortOrder) { _, newOrder in
-                if let first = newOrder.first {
-                    onColumnHeaderTapped?(first.columnName)
-                }
-            }
-            .focusable()
-            .focused($isFocused)
-            .onDeleteCommand {
-                guard let onDeleteRow, let idx = selectedRowIndex else { return }
-                onDeleteRow(idx)
-            }
+            )
 
             if isInsertingRow, let binding = insertRowValues {
                 Divider()
                 insertRowView(binding: binding)
             }
+        }
+    }
+
+    private func handleCellDoubleClick(row: Int, col: Int) {
+        guard isEditable, row < result.rows.count, col < result.rows[row].count else { return }
+        let cell = result.rows[row][col]
+        let kind = editorKind(for: col, cell: cell)
+        if editingCell != nil { commitEdit() }
+        if needsRichEditor(kind: kind) {
+            fieldEditorCell = (row: row, col: col)
+        } else {
+            startEditing(row: row, col: col, cell: cell)
         }
     }
 
@@ -418,33 +396,9 @@ struct ResultsGridView: View {
                     cellContentView(cell: cell, renderKind: renderKind)
                     if renderKind.alignment == .leading { Spacer(minLength: 0) }
                 }
+                .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: renderKind.alignment == .trailing ? .trailing : .leading)
-                // Trailing column divider: thin, non-hit-testable line at the
-                // cell's trailing edge so adjacent columns are visually
-                // separated. The bordered table style draws header rules at
-                // the column boundary; SwiftUI Table doesn't expose where
-                // exactly that boundary lands relative to the cell's frame,
-                // so we sit flush at the cell trailing edge — close enough
-                // that header and data rules read as a single line.
-                .overlay(alignment: .trailing) {
-                    Rectangle()
-                        .fill(Color(nsColor: .separatorColor))
-                        .frame(width: 1)
-                        .allowsHitTesting(false)
-                }
-                // Native AppKit double-click handler — forwards single clicks
-                // to the table for selection (SwiftUI's onTapGesture(count: 2)
-                // would otherwise sit in gesture-arbitration and swallow them).
-                .background(DoubleClickGate {
-                    guard isEditable else { return }
-                    if editingCell != nil { commitEdit() }
-                    if needsRichEditor(kind: kind) {
-                        fieldEditorCell = (row: rowIdx, col: colIdx)
-                    } else {
-                        startEditing(row: rowIdx, col: colIdx, cell: cell)
-                    }
-                })
                 .popover(
                     isPresented: Binding(
                         get: { fieldEditorCell?.row == rowIdx && fieldEditorCell?.col == colIdx },
@@ -688,5 +642,281 @@ extension ColumnInfo {
             "boolean": "bool",
         ]
         return longMap[dt] ?? dt
+    }
+}
+
+// MARK: - DataGridView (AppKit-backed)
+
+/// Native AppKit data grid wrapping NSScrollView + NSTableView. Replaces
+/// SwiftUI's `Table` so we get reliable first-click row selection, hardware-
+/// accelerated scrolling on large result sets, and native vertical column
+/// dividers via `gridStyleMask` that always line up with the header.
+///
+/// Cells are still SwiftUI views — each NSTableCellView hosts an
+/// `NSHostingView` whose root view is the SwiftUI cell content. That keeps
+/// the type-aware rendering, badges, NULL styling, etc., while delegating
+/// the heavy lifting (scrolling, selection, sort, drag-resize) to AppKit.
+struct DataGridView: NSViewRepresentable {
+    struct Column {
+        let id: Int
+        let title: String
+        let rawName: String
+        let minWidth: CGFloat
+    }
+
+    struct MenuItem {
+        let title: String
+        let isDestructive: Bool
+        let action: () -> Void
+    }
+
+    let rowCount: Int
+    let columns: [Column]
+    @Binding var selectedRowIndex: Int?
+    var sortColumnName: String?
+    var sortAscending: Bool
+    var onSelectionChanged: (Int?) -> Void
+    var onColumnHeaderClicked: (String) -> Void
+    var onDoubleClick: (Int, Int) -> Void
+    var onDeleteSelected: () -> Void
+    var contextMenuItems: (Int) -> [MenuItem]
+    var renderCell: (Int, Int) -> AnyView
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = true
+
+        let tableView = FocusableTableView()
+        tableView.usesAlternatingRowBackgroundColors = true
+        tableView.gridStyleMask = [.solidVerticalGridLineMask]
+        tableView.gridColor = NSColor.separatorColor
+        tableView.style = .inset
+        tableView.allowsEmptySelection = true
+        tableView.allowsMultipleSelection = false
+        tableView.allowsColumnSelection = false
+        tableView.allowsColumnReordering = false
+        tableView.allowsColumnResizing = true
+        tableView.usesAutomaticRowHeights = false
+        tableView.rowHeight = 22
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.dataSource = context.coordinator
+        tableView.delegate = context.coordinator
+        tableView.target = context.coordinator
+        tableView.doubleAction = #selector(Coordinator.handleDoubleClick(_:))
+        tableView.menu = NSMenu()
+        tableView.menu?.delegate = context.coordinator
+        tableView.headerView?.menu = nil
+
+        // Initial column install. We rebuild on column-shape changes in update().
+        for col in columns {
+            tableView.addTableColumn(makeColumn(for: col))
+        }
+
+        scrollView.documentView = tableView
+        context.coordinator.tableView = tableView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let tableView = scrollView.documentView as? FocusableTableView else { return }
+        let coordinator = context.coordinator
+        coordinator.parent = self
+
+        // Rebuild columns only if the column set actually changed — column
+        // identity is the IdentifiedColumn id (its index in the result).
+        let currentIDs = tableView.tableColumns.compactMap { Int($0.identifier.rawValue) }
+        let desiredIDs = columns.map(\.id)
+        let columnsChanged = currentIDs != desiredIDs ||
+            zip(tableView.tableColumns, columns).contains { $0.0.title != $0.1.title }
+
+        if columnsChanged {
+            for c in tableView.tableColumns { tableView.removeTableColumn(c) }
+            for col in columns { tableView.addTableColumn(makeColumn(for: col)) }
+        }
+
+        // Reload data. NSTableView reuses cell views, but our cell content is
+        // generated by a SwiftUI closure that captures fresh state, so we need
+        // to redraw to pick up edits/inserts/sort changes.
+        tableView.reloadData()
+
+        // Sync selection from the binding into the table.
+        let desiredSelection = selectedRowIndex.flatMap { ($0 >= 0 && $0 < rowCount) ? IndexSet(integer: $0) : nil } ?? IndexSet()
+        if tableView.selectedRowIndexes != desiredSelection {
+            tableView.selectRowIndexes(desiredSelection, byExtendingSelection: false)
+        }
+
+        // Sort indicator on the header.
+        for col in tableView.tableColumns {
+            tableView.setIndicatorImage(nil, in: col)
+        }
+        if let name = sortColumnName,
+           let col = tableView.tableColumns.first(where: { ($0.headerCell as? NSTableHeaderCell)?.stringValue.hasPrefix(name) == true || coordinator.rawName(forColumnId: Int($0.identifier.rawValue) ?? -1) == name })
+        {
+            let indicator = NSImage(named: sortAscending ? "NSAscendingSortIndicator" : "NSDescendingSortIndicator")
+            tableView.setIndicatorImage(indicator, in: col)
+            tableView.highlightedTableColumn = col
+        }
+    }
+
+    private func makeColumn(for col: Column) -> NSTableColumn {
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(rawValue: String(col.id)))
+        column.title = col.title
+        column.minWidth = col.minWidth
+        column.width = max(col.minWidth, 140)
+        column.resizingMask = .userResizingMask
+        // Sort descriptor key uses the raw column name so we can map it back
+        // to the caller's sort callback (which expects the SQL column name).
+        column.sortDescriptorPrototype = NSSortDescriptor(key: col.rawName, ascending: true)
+        return column
+    }
+
+    // MARK: - Coordinator
+
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+        var parent: DataGridView
+        weak var tableView: NSTableView?
+        private let cellIdentifier = NSUserInterfaceItemIdentifier(rawValue: "DataGridCell")
+
+        init(_ parent: DataGridView) {
+            self.parent = parent
+        }
+
+        func rawName(forColumnId id: Int) -> String? {
+            parent.columns.first(where: { $0.id == id })?.rawName
+        }
+
+        // MARK: NSTableViewDataSource
+
+        func numberOfRows(in tableView: NSTableView) -> Int {
+            parent.rowCount
+        }
+
+        func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
+            guard let key = tableView.sortDescriptors.first?.key else { return }
+            parent.onColumnHeaderClicked(key)
+        }
+
+        // MARK: NSTableViewDelegate
+
+        func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+            guard let tableColumn,
+                  let colId = Int(tableColumn.identifier.rawValue),
+                  row >= 0, row < parent.rowCount
+            else { return nil }
+
+            // We always recreate the hosting view's root view — SwiftUI cell
+            // content is cheap and this is the simplest path to "always
+            // reflects the latest model state".
+            let view = parent.renderCell(row, colId)
+
+            if let cellView = tableView.makeView(withIdentifier: cellIdentifier, owner: self) as? HostingCellView {
+                cellView.update(rootView: view)
+                return cellView
+            }
+            let cellView = HostingCellView(rootView: view)
+            cellView.identifier = cellIdentifier
+            return cellView
+        }
+
+        func tableViewSelectionDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTableView else { return }
+            let newIdx: Int? = tv.selectedRow >= 0 ? tv.selectedRow : nil
+            // Avoid the reentrant binding write/update loop: only push if the
+            // value actually changed.
+            if parent.selectedRowIndex != newIdx {
+                parent.selectedRowIndex = newIdx
+                parent.onSelectionChanged(newIdx)
+            }
+        }
+
+        @objc func handleDoubleClick(_ sender: Any?) {
+            guard let tv = tableView else { return }
+            let row = tv.clickedRow
+            let col = tv.clickedColumn
+            guard row >= 0, col >= 0,
+                  let colId = Int(tv.tableColumns[col].identifier.rawValue) else { return }
+            parent.onDoubleClick(row, colId)
+        }
+
+        // MARK: Context menu
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let tv = tableView else { return }
+            // Right-click semantics: the row under the cursor is the operand
+            // even if it isn't selected. Mirror Finder-style behavior.
+            let targetRow = tv.clickedRow >= 0 ? tv.clickedRow : tv.selectedRow
+            guard targetRow >= 0 else { return }
+
+            for item in parent.contextMenuItems(targetRow) {
+                let menuItem = NSMenuItem(title: item.title, action: #selector(menuItemClicked(_:)), keyEquivalent: "")
+                menuItem.target = self
+                menuItem.representedObject = item.action
+                if item.isDestructive { menuItem.attributedTitle = NSAttributedString(string: item.title, attributes: [.foregroundColor: NSColor.systemRed]) }
+                menu.addItem(menuItem)
+            }
+        }
+
+        @objc private func menuItemClicked(_ sender: NSMenuItem) {
+            (sender.representedObject as? () -> Void)?()
+        }
+    }
+
+    // MARK: - HostingCellView
+
+    /// NSTableCellView that hosts a SwiftUI view edge-to-edge. Reused across
+    /// scrolling via NSTableView's normal recycling.
+    private final class HostingCellView: NSTableCellView {
+        private var hosting: NSHostingView<AnyView>
+
+        init(rootView: AnyView) {
+            self.hosting = NSHostingView(rootView: rootView)
+            super.init(frame: .zero)
+            hosting.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(hosting)
+            NSLayoutConstraint.activate([
+                hosting.leadingAnchor.constraint(equalTo: leadingAnchor),
+                hosting.trailingAnchor.constraint(equalTo: trailingAnchor),
+                hosting.topAnchor.constraint(equalTo: topAnchor),
+                hosting.bottomAnchor.constraint(equalTo: bottomAnchor),
+            ])
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        func update(rootView: AnyView) {
+            hosting.rootView = rootView
+        }
+    }
+
+    // MARK: - FocusableTableView
+
+    /// NSTableView subclass that accepts the first mouse click as a real
+    /// click — both becomes-first-responder AND selects the row in one
+    /// gesture. The default behavior swallows the first click when the view
+    /// isn't already first responder, which is the "have to click twice"
+    /// problem.
+    final class FocusableTableView: NSTableView {
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override var acceptsFirstResponder: Bool { true }
+
+        // Forward delete / backspace to the bound delete callback when a
+        // row is selected, matching SwiftUI Table's onDeleteCommand behavior.
+        override func keyDown(with event: NSEvent) {
+            let chars = event.charactersIgnoringModifiers ?? ""
+            if (chars == "\u{7F}" || chars == "\u{8}") && selectedRow >= 0 {
+                if let coord = delegate as? Coordinator {
+                    coord.parent.onDeleteSelected()
+                    return
+                }
+            }
+            super.keyDown(with: event)
+        }
     }
 }
