@@ -12,6 +12,13 @@ struct StartPageView: View {
     @State private var validationErrors: [String] = []
     @State private var deleteTarget: ConnectionProfile?
     @State private var previousSelectedId: UUID?
+    @State private var isTestingConnection = false
+    @State private var testResult: TestConnectionResult?
+
+    private enum TestConnectionResult: Equatable {
+        case success
+        case failure(String)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -115,6 +122,7 @@ struct StartPageView: View {
             }
             previousSelectedId = newId
             validationErrors = []
+            testResult = nil
         }
         .onAppear {
             if let profile = connectionListVM.selectedProfile {
@@ -202,6 +210,10 @@ struct StartPageView: View {
                         .padding(.bottom, 8)
                     }
 
+                    if let testResult {
+                        testResultBanner(testResult)
+                    }
+
                     Divider()
 
                     HStack {
@@ -216,15 +228,26 @@ struct StartPageView: View {
 
                         Spacer()
 
-                        Button("Test") {}
-                            .disabled(true)
-                            .help("Connection test (coming soon)")
+                        Button {
+                            testSelected()
+                        } label: {
+                            if isTestingConnection {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .frame(width: 32)
+                            } else {
+                                Text("Test")
+                            }
+                        }
+                        .disabled(isTestingConnection)
+                        .help("Test connection")
 
                         Button("Connect") {
                             connectSelected()
                         }
                         .keyboardShortcut(.return, modifiers: .command)
                         .buttonStyle(.borderedProminent)
+                        .disabled(isTestingConnection)
                     }
                     .padding(16)
                 }
@@ -272,6 +295,62 @@ struct StartPageView: View {
         guard let existing = connectionListVM.profiles.first(where: { $0.id == id }) else { return }
         let updated = form.buildProfile(id: id, fallbackPort: existing.port)
         connectionListVM.updateProfile(updated, password: form.password, sshPassword: form.effectiveSSHPassword)
+    }
+
+    @ViewBuilder
+    private func testResultBanner(_ result: TestConnectionResult) -> some View {
+        switch result {
+        case .success:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Connection successful")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        case .failure(let message):
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func testSelected() {
+        guard let id = connectionListVM.selectedProfileId else { return }
+
+        let profile = form.buildProfile(id: id, fallbackPort: 0)
+        let errors = profile.validate()
+        if !errors.isEmpty {
+            validationErrors = errors
+            testResult = nil
+            return
+        }
+        validationErrors = []
+        testResult = nil
+
+        let password: String? = form.password.isEmpty ? nil : form.password
+        let sshPassword = form.effectiveSSHPassword
+        isTestingConnection = true
+
+        Task {
+            let errorMessage = await connectionListVM.testConnection(
+                profile: profile,
+                password: password,
+                sshPassword: sshPassword
+            )
+            isTestingConnection = false
+            testResult = errorMessage.map { .failure($0) } ?? .success
+        }
     }
 
     private func connectSelected() {

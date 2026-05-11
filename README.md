@@ -34,6 +34,7 @@ Or use **Cmd+U** in Xcode.
 ## Feature Checklist
 
 - [x] Connection management (add, edit, delete, connect, disconnect)
+- [x] Test connection without disturbing the active session
 - [x] Keychain-backed password storage with in-memory caching
 - [x] SSL mode toggle (Off / Prefer / Require / Verify-CA / Verify-Full)
 - [x] SSH tunnel support (key file or password auth)
@@ -41,20 +42,23 @@ Or use **Cmd+U** in Xcode.
 - [x] PG version-adaptive object categories (e.g., Procedures for PG 11+)
 - [x] Multi-database browsing (expand any database to see its schemas)
 - [x] iTerm2-style tabs (Cmd+T) for multiple connections in one window
-- [x] Structure tab (column details)
+- [x] Structure tab with column, index, constraint, trigger, and partition sections
 - [x] Content tab with pagination (50 / 100 / 200 rows)
 - [x] Single-click inline cell editing with auto-save
-- [x] Insert and delete records
+- [x] Insert and delete records (with cascade-delete prompt for FK violations)
 - [x] Schema editing (add/drop/rename columns, change types, toggle nullable)
+- [x] Index creation sheet
 - [x] SQL editor with syntax highlighting, autocompletion, and query formatter
+- [x] Query history log of every system- and user-issued query
 - [x] Query timeout (10s default, server-side `statement_timeout`)
 - [x] Query result row cap (2000 rows)
 - [x] Execution time display
-- [x] Native Table grid with column sorting
+- [x] AppKit `DataGridView` results grid: type-aware cell rendering, vertical dividers, column sorting, multi-select
 - [x] Right inspector panel (object name, row count, column count)
 - [x] Create database, schema, table, view, function, sequence, type, and domain from navigator
 - [x] Drop any database object from navigator context menu
 - [x] Object Definition tab (DDL/source viewer for views, functions, sequences, types, etc.)
+- [x] Database-tools sheets: Extensions, Roles, SQL Function Library reference
 - [x] Content filter bar (Cmd+F) with column/operator/value filtering and SQL preview
 - [x] Type-aware field editor (JSON, array, boolean, long text) in Inspector
 - [x] Connection status indicators
@@ -93,7 +97,7 @@ PostgresNIO (database driver)
 - **Hard cap of 2000 rows** on query results to prevent memory issues.
 - **10-second query timeout** with server-side `statement_timeout` and client-side Task cancellation.
 - **Lazy string truncation** for large text fields (10K char limit in UI).
-- **Native Table** with `TableColumnForEach` for dynamic columns, built-in cell reuse, and sort indicators.
+- **AppKit `DataGridView`** results grid: type-aware cell rendering, vertical cell dividers, native single-click selection and multi-select, and binary-wire decoding of numeric / money / inet / cidr / macaddr / jsonb / composite types.
 - **Per-property @Observable tracking** eliminates unnecessary view re-renders (no Combine dependency).
 - **Memoized sort results** with lazy cache and O(1) row index lookups.
 

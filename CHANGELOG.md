@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Working **Test Connection** button on the start page detail form and the modal add/edit form. Runs validation, opens a throwaway connection so the active session isn't disturbed, and reports a green success banner or selectable red error message inline.
+
+## [0.1.11] - 2026-04-19
+
+### Added
+- Database-tools sheets: Extensions (list / enable / disable), Roles (`pg_roles` metadata browser), SQL Function Library reference.
+- Structure tab now lists Indexes, Constraints, and Triggers with drop confirmations; new Index creation sheet.
+- Partitions section for partitioned tables.
+- Query History view with `QueryHistoryViewModel` logging every system- and user-issued query (status, duration, row count).
+- Result grid rebuilt on AppKit (`DataGridView`): native single-click selection, multi-select, vertical cell dividers, type-aware cell rendering (numeric, money, inet/cidr/macaddr, jsonb, composite types decoded from binary wire format), and richer column headers.
+- Dockerized PostgreSQL 18 demo database under `dev-db/` for local testing.
+
+### Changed
+- All internal catalog queries use `PostgresQuery` parameter bindings instead of manual quote-doubling.
+- `CascadeDeleteBuilder` extracts the SQL-construction path from `executeCascadeDelete` for testability.
+- `ConnectionFormModel` consolidates 14 parallel `@State` fields shared by `ConnectionFormView` and `StartPageView`.
+- `RowDeleteConfirming` protocol formalizes the delete-row prompt concern shared by table views.
+- `decodeCellValue` is table-driven via a `PostgresDataType → decoder` dictionary.
+- `ConnectionProfile` drops manual `init(from:)` in favor of `@DecodableDefault` property wrappers.
+
+### Fixed
+- First-click row selection, multi-select, and the freeze that could occur when editing `jsonb` cells.
+- Composite-type values now render correctly in the results grid.
+- Function navigator entries round-trip through `regprocedure` so overload-qualified names survive.
+- Type select no longer raises an error toast; aggregate DDL output is no longer truncated; PSQL errors surface with their underlying message instead of an opaque wrapper.
+- Skipped `SELECT *` against non-relation objects (composite types, sequences, functions) that produced "cannot open relation" errors.
+- Content grid stays mounted during reload to stop the visible blink.
+- `float4` decoded as `Double` and `numeric` / `money` decoded from binary to prevent precision loss.
+
+## [0.1.10] - 2026-04-06
+
+### Changed
+- Documentation refresh covering the v0.1.9 feature set (Object Definition tab, object CRUD, content filters, type-aware editor).
+
 ## [0.1.9] - 2026-04-06
 
 ### Added

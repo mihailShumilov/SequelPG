@@ -14,6 +14,7 @@ enum ConnectionStatus {
 @Observable final class ConnectionListViewModel {
     @ObservationIgnored private let store: ConnectionStore
     @ObservationIgnored private let keychainService: KeychainServiceProtocol
+    @ObservationIgnored private let testClientFactory: @Sendable () -> any PostgresClientProtocol
 
     /// In-memory password cache to avoid repeated Keychain reads.
     /// Populated lazily on first access per profile; written through on save.
@@ -36,9 +37,14 @@ enum ConnectionStatus {
         profiles.first { $0.id == selectedProfileId }
     }
 
-    init(store: ConnectionStore, keychainService: KeychainServiceProtocol) {
+    init(
+        store: ConnectionStore,
+        keychainService: KeychainServiceProtocol,
+        testClientFactory: @Sendable @escaping () -> any PostgresClientProtocol = { DatabaseClient() }
+    ) {
         self.store = store
         self.keychainService = keychainService
+        self.testClientFactory = testClientFactory
         self.profiles = store.loadAll()
         self.selectedProfileId = profiles.first?.id
     }
@@ -139,5 +145,25 @@ enum ConnectionStatus {
         case .error: return .red
         default: return .gray
         }
+    }
+
+    /// Opens a throwaway connection to verify the profile works without
+    /// disturbing the user's active session. Returns nil on success or the
+    /// localized error message on failure.
+    func testConnection(
+        profile: ConnectionProfile,
+        password: String?,
+        sshPassword: String?
+    ) async -> String? {
+        let client = testClientFactory()
+        let errorMessage: String?
+        do {
+            try await client.connect(profile: profile, password: password, sshPassword: sshPassword)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await client.disconnect()
+        return errorMessage
     }
 }

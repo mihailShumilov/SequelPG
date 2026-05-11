@@ -86,6 +86,13 @@ struct ConnectionFormView: View {
 
     @State private var form = ConnectionFormModel()
     @State private var validationErrors: [String] = []
+    @State private var isTestingConnection = false
+    @State private var testResult: TestConnectionResult?
+
+    private enum TestConnectionResult: Equatable {
+        case success
+        case failure(String)
+    }
 
     private var isEditing: Bool {
         if case .edit = mode { return true }
@@ -151,12 +158,29 @@ struct ConnectionFormView: View {
                 .padding(.horizontal)
             }
 
+            if let testResult {
+                testResultBanner(testResult)
+            }
+
             HStack {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
+                Button {
+                    test()
+                } label: {
+                    if isTestingConnection {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 32)
+                    } else {
+                        Text("Test")
+                    }
+                }
+                .disabled(isTestingConnection)
                 Button(isEditing ? "Save" : "Add") { save() }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(isTestingConnection)
             }
             .padding()
         }
@@ -172,6 +196,58 @@ struct ConnectionFormView: View {
             password: connectionListVM.loadPasswordForProfile(profile),
             sshPassword: connectionListVM.loadSSHPasswordForProfile(profile)
         )
+    }
+
+    @ViewBuilder
+    private func testResultBanner(_ result: TestConnectionResult) -> some View {
+        switch result {
+        case .success:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Connection successful")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+            .padding(.horizontal)
+        case .failure(let message):
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private func test() {
+        let profile = form.buildProfile(id: existingId ?? UUID(), fallbackPort: 0)
+        let errors = profile.validate()
+        if !errors.isEmpty {
+            validationErrors = errors
+            testResult = nil
+            return
+        }
+        validationErrors = []
+        testResult = nil
+
+        let password: String? = form.password.isEmpty ? nil : form.password
+        let sshPassword = form.effectiveSSHPassword
+        isTestingConnection = true
+
+        Task {
+            let errorMessage = await connectionListVM.testConnection(
+                profile: profile,
+                password: password,
+                sshPassword: sshPassword
+            )
+            isTestingConnection = false
+            testResult = errorMessage.map { .failure($0) } ?? .success
+        }
     }
 
     private func save() {
