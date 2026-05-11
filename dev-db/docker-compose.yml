@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: sequelpg_demo
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-demo}
+      POSTGRES_USER: ${POSTGRES_USER:-demo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo}
+      # PG18 ships with `scram-sha-256` as default; keep parity with prod.
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
+    # Bind to localhost only — never expose to the network.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-54318}:5432"
+    volumes:
+      # PG18 docker images expect a single mount at /var/lib/postgresql so
+      # data lives under /var/lib/postgresql/<version> — required for the
+      # `pg_upgrade --link` flow used by future major-version bumps.
+      - sequelpg_demo_data:/var/lib/postgresql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-demo} -d ${POSTGRES_DB:-demo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  sequelpg_demo_data:
+    name: sequelpg_demo_data
