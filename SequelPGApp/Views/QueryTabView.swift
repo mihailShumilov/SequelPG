@@ -1,4 +1,40 @@
+import AppKit
 import SwiftUI
+
+/// Catches double-clicks via AppKit's responder chain so single clicks reach
+/// the host NSTableView for row selection. SwiftUI's `.onTapGesture(count: 2)`
+/// participates in gesture arbitration that, inside `Table`, swallows the
+/// initial mouseDown long enough for `NSTableView` to never see it.
+///
+/// Single-clicks fall through unmodified (we forward to nextResponder); only
+/// genuine double-clicks fire the closure.
+struct DoubleClickGate: NSViewRepresentable {
+    let onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let v = ClickPassthroughView()
+        v.onDoubleClick = onDoubleClick
+        return v
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? ClickPassthroughView)?.onDoubleClick = onDoubleClick
+    }
+
+    private final class ClickPassthroughView: NSView {
+        var onDoubleClick: (() -> Void)?
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                onDoubleClick?()
+                return
+            }
+            // Single click → let it bubble up to the next responder
+            // (eventually the NSTableView that drives row selection).
+            super.mouseDown(with: event)
+        }
+    }
+}
 
 struct QueryTabView: View {
     @Environment(AppViewModel.self) var appVM
@@ -384,8 +420,19 @@ struct ResultsGridView: View {
                 }
                 .padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: renderKind.alignment == .trailing ? .trailing : .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
+                // Trailing column divider: thin, non-hit-testable line that
+                // lines up with the bordered table style's header rule.
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(width: 0.5)
+                        .padding(.trailing, -8)
+                        .allowsHitTesting(false)
+                }
+                // Native AppKit double-click handler — forwards single clicks
+                // to the table for selection (SwiftUI's onTapGesture(count: 2)
+                // would otherwise sit in gesture-arbitration and swallow them).
+                .background(DoubleClickGate {
                     guard isEditable else { return }
                     if editingCell != nil { commitEdit() }
                     if needsRichEditor(kind: kind) {
@@ -393,7 +440,7 @@ struct ResultsGridView: View {
                     } else {
                         startEditing(row: rowIdx, col: colIdx, cell: cell)
                     }
-                }
+                })
                 .popover(
                     isPresented: Binding(
                         get: { fieldEditorCell?.row == rowIdx && fieldEditorCell?.col == colIdx },
