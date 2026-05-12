@@ -1401,8 +1401,21 @@ actor DatabaseClient: PostgresClientProtocol {
                                    FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
                                    ORDER BY ord)
                     END AS proargnames,
-                    p.proargmodes::text[] AS proargmodes,
-                    COALESCE(p.proallargtypes, p.proargtypes::oid[])::int[] AS argtypes,
+                    -- Same NULL/index hygiene as proargnames: when modes are
+                    -- declared, every element is set, so we can decode plain text[].
+                    CASE
+                        WHEN p.proargmodes IS NULL THEN NULL
+                        ELSE ARRAY(SELECT m::text
+                                   FROM unnest(p.proargmodes) WITH ORDINALITY AS u(m, ord)
+                                   ORDER BY ord)
+                    END AS proargmodes,
+                    -- proargtypes is an `oidvector` with 0-based indexing; casting
+                    -- to oid[] preserves that, and PostgresNIO's array decoder
+                    -- rejects non-1-based arrays. Re-aggregate via unnest so the
+                    -- result is a regular 1-based int[].
+                    (SELECT array_agg(a::int ORDER BY ord)
+                     FROM unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[]))
+                          WITH ORDINALITY AS u(a, ord)) AS argtypes,
                     p.pronargdefaults,
                     p.pronargs
                 FROM pg_proc p
@@ -1430,8 +1443,21 @@ actor DatabaseClient: PostgresClientProtocol {
                                    FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
                                    ORDER BY ord)
                     END AS proargnames,
-                    p.proargmodes::text[] AS proargmodes,
-                    COALESCE(p.proallargtypes, p.proargtypes::oid[])::int[] AS argtypes,
+                    -- Same NULL/index hygiene as proargnames: when modes are
+                    -- declared, every element is set, so we can decode plain text[].
+                    CASE
+                        WHEN p.proargmodes IS NULL THEN NULL
+                        ELSE ARRAY(SELECT m::text
+                                   FROM unnest(p.proargmodes) WITH ORDINALITY AS u(m, ord)
+                                   ORDER BY ord)
+                    END AS proargmodes,
+                    -- proargtypes is an `oidvector` with 0-based indexing; casting
+                    -- to oid[] preserves that, and PostgresNIO's array decoder
+                    -- rejects non-1-based arrays. Re-aggregate via unnest so the
+                    -- result is a regular 1-based int[].
+                    (SELECT array_agg(a::int ORDER BY ord)
+                     FROM unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[]))
+                          WITH ORDINALITY AS u(a, ord)) AS argtypes,
                     p.pronargdefaults,
                     p.pronargs
                 FROM pg_proc p
