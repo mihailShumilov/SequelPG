@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.1.12] - 2026-05-12
+## [0.1.13] - 2026-05-12
 
 ### Added
 - **Run / Call sheet** for functions and procedures. Right-click a routine in the navigator (or use the toolbar button on its Definition tab) to open a focused builder: one row per input parameter with a Value / Expression / NULL / DEFAULT mode picker, live SQL preview, and an inline result pane that shapes itself to the return kind (scalar value box, multi-row grid for `SETOF` / `RETURNS TABLE`, "completed" status for procedures). Trigger functions and aggregates explain themselves instead of producing an invalid call.
