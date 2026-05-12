@@ -72,6 +72,7 @@
 		AA10000000000000000057 /* ExtensionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000057; };
 		AA10000000000000000058 /* RolesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000058; };
 		AA10000000000000000059 /* FunctionLibrarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000059; };
+		AA1000000000000000005A /* SQLSyntaxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005A; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -150,6 +151,7 @@
 		AB10000000000000000057 /* ExtensionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000058 /* RolesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RolesSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000059 /* FunctionLibrarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionLibrarySheet.swift; sourceTree = "<group>"; };
+		AB1000000000000000005A /* SQLSyntaxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLSyntaxView.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -259,6 +261,7 @@
 				AB10000000000000000038 /* QueryHistoryView.swift */,
 				AB10000000000000000017 /* QueryTabView.swift */,
 				AB1000000000000000002F /* SQLEditorView.swift */,
+				AB1000000000000000005A /* SQLSyntaxView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
 				AB10000000000000000029 /* StartPageView.swift */,
 				AB10000000000000000030 /* SSHTunnelFormSection.swift */,
@@ -465,6 +468,7 @@
 				AA10000000000000000057 /* ExtensionsSheet.swift in Sources */,
 				AA10000000000000000058 /* RolesSheet.swift in Sources */,
 				AA10000000000000000059 /* FunctionLibrarySheet.swift in Sources */,
+				AA1000000000000000005A /* SQLSyntaxView.swift in Sources */,
 				AA10000000000000000037 /* QueryHistoryViewModel.swift in Sources */,
 				AA10000000000000000038 /* QueryHistoryView.swift in Sources */,
 			);

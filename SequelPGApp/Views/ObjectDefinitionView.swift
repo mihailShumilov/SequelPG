@@ -49,13 +49,7 @@ struct ObjectDefinitionView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    Text(ddlText)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
+                SQLSyntaxView(text: ddlText)
             }
         }
         .task(id: navigatorVM.selectedObject?.id) {
@@ -66,11 +60,6 @@ struct ObjectDefinitionView: View {
     private func loadDDL() async {
         guard let obj = navigatorVM.selectedObject else {
             ddlText = ""
-            return
-        }
-        // Skip for tables (they use Structure tab)
-        guard obj.type != .table else {
-            ddlText = "-- Use the Structure tab to view table details."
             return
         }
         isLoading = true
