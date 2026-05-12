@@ -23,6 +23,7 @@ protocol PostgresClientProtocol: Sendable {
     func listDatabases() async throws -> [String]
     func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
     func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String
+    func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata
     // Per-table metadata
     func listIndexes(schema: String, table: String) async throws -> [IndexInfo]
     func listConstraints(schema: String, table: String) async throws -> [ConstraintInfo]
@@ -1363,6 +1364,204 @@ actor DatabaseClient: PostgresClientProtocol {
             // useful (e.g. "is an aggregate function") and should be readable.
             return "-- Error loading definition for \(schema).\(name):\n-- \(Self.formatPSQLError(error))"
         }
+    }
+
+    /// Resolves one pg_proc entry into a typed `FunctionMetadata`. The Run sheet
+    /// uses this to render typed inputs and to build a SELECT/CALL with explicit
+    /// per-arg type casts — without those casts, ambiguous overloads fail at
+    /// resolution time (e.g. `'42'` could match `f(int)` or `f(text)`).
+    func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata {
+        guard let client else { throw AppError.notConnected }
+
+        // The signature is embedded in `name` for overloaded functions
+        // ("foo(integer, text)"). Round-trip it through regprocedure to
+        // pin down a single pg_proc OID even when the function is overloaded.
+        let (baseName, argList) = splitFunctionSignature(name)
+        let hasSignature = !argList.isEmpty && argList != "*"
+
+        let query: PostgresQuery
+        if hasSignature {
+            let regprocLiteral = "\(schema).\(baseName)(\(argList))"
+            query = """
+                SELECT
+                    n.nspname,
+                    p.proname,
+                    '(' || COALESCE(oidvectortypes(p.proargtypes), '') || ')' AS arg_sig,
+                    p.prokind::text AS prokind,
+                    p.proretset,
+                    pg_catalog.format_type(p.prorettype, NULL) AS rettype,
+                    (SELECT typname FROM pg_type WHERE oid = p.prorettype) AS rettype_internal,
+                    -- Anonymous positional args show as NULL in proargnames,
+                    -- which breaks PostgresNIO array decoding. Coalesce each
+                    -- NULL to '' so the array elements are uniformly text;
+                    -- empty strings are treated as "no name" downstream.
+                    CASE
+                        WHEN p.proargnames IS NULL THEN NULL
+                        ELSE ARRAY(SELECT COALESCE(n, '')
+                                   FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
+                                   ORDER BY ord)
+                    END AS proargnames,
+                    p.proargmodes::text[] AS proargmodes,
+                    COALESCE(p.proallargtypes, p.proargtypes::oid[])::int[] AS argtypes,
+                    p.pronargdefaults,
+                    p.pronargs
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE p.oid = \(regprocLiteral)::regprocedure
+                LIMIT 1
+                """
+        } else {
+            query = """
+                SELECT
+                    n.nspname,
+                    p.proname,
+                    '(' || COALESCE(oidvectortypes(p.proargtypes), '') || ')' AS arg_sig,
+                    p.prokind::text AS prokind,
+                    p.proretset,
+                    pg_catalog.format_type(p.prorettype, NULL) AS rettype,
+                    (SELECT typname FROM pg_type WHERE oid = p.prorettype) AS rettype_internal,
+                    -- Anonymous positional args show as NULL in proargnames,
+                    -- which breaks PostgresNIO array decoding. Coalesce each
+                    -- NULL to '' so the array elements are uniformly text;
+                    -- empty strings are treated as "no name" downstream.
+                    CASE
+                        WHEN p.proargnames IS NULL THEN NULL
+                        ELSE ARRAY(SELECT COALESCE(n, '')
+                                   FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
+                                   ORDER BY ord)
+                    END AS proargnames,
+                    p.proargmodes::text[] AS proargmodes,
+                    COALESCE(p.proallargtypes, p.proargtypes::oid[])::int[] AS argtypes,
+                    p.pronargdefaults,
+                    p.pronargs
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = \(schema) AND p.proname = \(baseName)
+                LIMIT 1
+                """
+        }
+
+        let rows = try await client.query(query)
+        for try await row in rows {
+            // PostgresNIO's auto-tuple decode caps out before 12 fields;
+            // use column-keyed access. `proargnames` can contain NULL
+            // elements when some params are anonymous, so decode as
+            // `[String?]`. `proargmodes` and `argtypes` are all-or-nothing
+            // (NULL as a whole, or no NULLs inside), so the plain element
+            // types are safe.
+            let ra = PostgresRandomAccessRow(row)
+            let nspname = try ra["nspname"].decode(String.self)
+            let proname = try ra["proname"].decode(String.self)
+            let argSig = try ra["arg_sig"].decode(String.self)
+            let prokind = try? ra["prokind"].decode(String.self)
+            let proretset = try ra["proretset"].decode(Bool.self)
+            let rettype = try ra["rettype"].decode(String.self)
+            let rettypeInternal = try? ra["rettype_internal"].decode(String.self)
+            // Empty strings stand in for NULL — the SQL above coalesces them
+            // so PostgresNIO can decode the array cleanly.
+            let proargnames = (try? ra["proargnames"].decode([String].self))
+            let proargmodes = (try? ra["proargmodes"].decode([String].self))
+            let argtypes = (try? ra["argtypes"].decode([Int].self)) ?? []
+            let pronargdefaults = try ra["pronargdefaults"].decode(Int16.self)
+
+            let kind = decodeFunctionKind(prokind)
+            let parameters = try await buildParameterList(
+                client: client,
+                argtypes: argtypes,
+                proargnames: proargnames,
+                proargmodes: proargmodes,
+                defaultsCount: Int(pronargdefaults)
+            )
+            let isTable = parameters.contains(where: { $0.mode == FunctionParameterMode.tableColumn })
+            let returnInfo = FunctionReturn(
+                typeName: rettype,
+                isSetReturning: proretset,
+                isVoid: rettypeInternal == "void",
+                isTrigger: rettypeInternal == "trigger" || rettypeInternal == "event_trigger",
+                isTable: isTable
+            )
+            return FunctionMetadata(
+                schema: nspname,
+                name: proname,
+                signature: argSig,
+                kind: kind,
+                parameters: parameters,
+                returnInfo: returnInfo
+            )
+        }
+        throw AppError.queryFailed("Function \(schema).\(name) not found")
+    }
+
+    /// Translates pg_proc.prokind ('f'/'p'/'a'/'w') into our enum. On PG < 11
+    /// prokind is absent — the caller will pass NULL, and we default to
+    /// .function because the version-specific function lister already filters
+    /// out aggregates/windows on older versions.
+    private func decodeFunctionKind(_ prokind: String?) -> FunctionKind {
+        switch prokind {
+        case "p": return .procedure
+        case "a": return .aggregate
+        case "w": return .window
+        default: return .function
+        }
+    }
+
+    /// Resolves argtype OIDs to formatted type names in one round-trip and
+    /// folds in names / modes / default flags from `pg_proc`. The default flag
+    /// is calculated positionally: PG stores defaults aligned to the *trailing*
+    /// `pronargdefaults` input parameters.
+    private func buildParameterList(
+        client: PostgresClient,
+        argtypes: [Int],
+        proargnames: [String]?,
+        proargmodes: [String]?,
+        defaultsCount: Int
+    ) async throws -> [FunctionParameter] {
+        guard !argtypes.isEmpty else { return [] }
+
+        var typeNames: [Int: String] = [:]
+        // Resolve all OIDs in one go to avoid N round-trips for a wide signature.
+        // Cast oid → int4 so PostgresNIO decodes it as Swift Int without OID-type ambiguity.
+        let oidLiterals = argtypes.map(String.init).joined(separator: ",")
+        let typeQuery: PostgresQuery = """
+            SELECT t.oid::int, pg_catalog.format_type(t.oid, NULL)
+            FROM pg_type t
+            WHERE t.oid = ANY(\(unescaped: "ARRAY[\(oidLiterals)]::oid[]"))
+            """
+        let typeRows = try await client.query(typeQuery)
+        for try await row in typeRows {
+            let (oid, name) = try row.decode((Int, String).self)
+            typeNames[oid] = name
+        }
+
+        // Count input-mode params so we know which positions carry a DEFAULT.
+        let modes: [FunctionParameterMode] = argtypes.indices.map { idx in
+            guard let proargmodes, idx < proargmodes.count else { return .in }
+            return FunctionParameterMode(rawValue: proargmodes[idx]) ?? .in
+        }
+        let inputModePositions = modes.enumerated()
+            .filter { $0.element.takesInput }
+            .map { $0.offset }
+        let defaultedPositions = Set(inputModePositions.suffix(defaultsCount))
+
+        var params: [FunctionParameter] = []
+        for (idx, oid) in argtypes.enumerated() {
+            let position = idx + 1
+            let name: String? = {
+                guard let proargnames, idx < proargnames.count else { return nil }
+                let raw = proargnames[idx]
+                return raw.isEmpty ? nil : raw
+            }()
+            let mode = modes[idx]
+            let typeName = typeNames[oid] ?? "unknown"
+            params.append(FunctionParameter(
+                position: position,
+                name: name,
+                mode: mode,
+                typeName: typeName,
+                hasDefault: defaultedPositions.contains(idx)
+            ))
+        }
+        return params
     }
 
     /// Builds the parameterized lookup query for each DDL object type.

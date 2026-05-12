@@ -30,6 +30,15 @@ struct ObjectDefinitionView: View {
                 .accessibilityLabel("Refresh definition")
                 .disabled(isLoading)
 
+                if let obj = navigatorVM.selectedObject, appVM.isRunnable(obj) {
+                    Button {
+                        appVM.functionRunTarget = obj
+                    } label: {
+                        Label(obj.type == .procedure ? "Call..." : "Run...", systemImage: "play.fill")
+                    }
+                    .help(obj.type == .procedure ? "Call this procedure" : "Run this function")
+                }
+
                 Button("Edit in Query") {
                     editInQuery()
                 }

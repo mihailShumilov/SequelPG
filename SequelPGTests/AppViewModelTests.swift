@@ -191,6 +191,23 @@ actor MockDatabaseClient: PostgresClientProtocol {
         return "-- mock DDL"
     }
 
+    var stubbedFunctionMetadata: FunctionMetadata?
+    var shouldThrowOnGetFunctionMetadata = false
+    func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata {
+        if shouldThrowOnGetFunctionMetadata { throw AppError.queryFailed("mock metadata error") }
+        if let stubbedFunctionMetadata { return stubbedFunctionMetadata }
+        return FunctionMetadata(
+            schema: schema,
+            name: name,
+            signature: "()",
+            kind: .function,
+            parameters: [],
+            returnInfo: FunctionReturn(
+                typeName: "void", isSetReturning: false, isVoid: true, isTrigger: false, isTable: false
+            )
+        )
+    }
+
     // MARK: - Per-table metadata (new in index/constraint/trigger support)
 
     var stubbedIndexes: [IndexInfo] = []

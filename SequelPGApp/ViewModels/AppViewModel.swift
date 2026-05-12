@@ -157,6 +157,22 @@ struct CascadeDeleteBuilder {
     var showRolesSheet = false
     var showFunctionLibrary = false
 
+    /// Drives the Run/Call sheet for a selected function or procedure. Setting
+    /// this to a non-nil value presents the sheet; the sheet clears it on close.
+    var functionRunTarget: DBObject?
+
+    /// True when the given object can be invoked via the Run/Call sheet —
+    /// drives the visibility of the "Run…" affordances in Navigator + Definition
+    /// tab. Aggregates and trigger functions are surfaced but with a disabled
+    /// state and explanation, so the menu item is always present (less surprising
+    /// than "where did the action go?").
+    func isRunnable(_ object: DBObject) -> Bool {
+        switch object.type {
+        case .function, .procedure: return true
+        default: return false
+        }
+    }
+
     @ObservationIgnored private var connectedProfile: ConnectionProfile?
     @ObservationIgnored private var connectedPassword: String?
     @ObservationIgnored private var connectedSSHPassword: String?

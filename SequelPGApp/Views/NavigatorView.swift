@@ -79,6 +79,13 @@ struct NavigatorView: View {
                 Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
             }
         }
+        .sheet(item: Binding(
+            get: { appVM.functionRunTarget },
+            set: { appVM.functionRunTarget = $0 }
+        )) { target in
+            FunctionRunSheet(object: target)
+                .environment(appVM)
+        }
         .alert("Drop Object?", isPresented: $showDropConfirmation, presenting: dropTarget) { obj in
             Button("Cancel", role: .cancel) { dropTarget = nil }
             Button("Drop", role: .destructive) {
@@ -100,6 +107,16 @@ struct NavigatorView: View {
             }
         } message: { target in
             Text(target.op.confirmationMessage ?? "Continue?")
+        }
+    }
+
+    /// Verb shown on the navigator context menu when the user can invoke the
+    /// selected routine. Mirrors PG terminology — functions are SELECTed, but
+    /// procedures are CALLed.
+    private func runMenuLabel(for object: DBObject) -> String {
+        switch object.type {
+        case .procedure: return "Call \(object.name)..."
+        default: return "Run \(object.name)..."
         }
     }
 
@@ -319,6 +336,12 @@ struct NavigatorView: View {
                 Label(obj.name, systemImage: category.icon)
                     .tag(obj)
                     .contextMenu {
+                        if appVM.isRunnable(obj) {
+                            Button(runMenuLabel(for: obj)) {
+                                appVM.functionRunTarget = obj
+                            }
+                            Divider()
+                        }
                         let ops = maintenanceOps(for: obj)
                         if !ops.isEmpty {
                             ForEach(ops) { op in

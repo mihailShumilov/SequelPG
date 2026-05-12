@@ -73,6 +73,8 @@
 		AA10000000000000000058 /* RolesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000058; };
 		AA10000000000000000059 /* FunctionLibrarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000059; };
 		AA1000000000000000005A /* SQLSyntaxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005A; };
+		AA1000000000000000005B /* FunctionMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005B; };
+		AA1000000000000000005C /* FunctionRunSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005C; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -152,6 +154,8 @@
 		AB10000000000000000058 /* RolesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RolesSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000059 /* FunctionLibrarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionLibrarySheet.swift; sourceTree = "<group>"; };
 		AB1000000000000000005A /* SQLSyntaxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLSyntaxView.swift; sourceTree = "<group>"; };
+		AB1000000000000000005B /* FunctionMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionMetadata.swift; sourceTree = "<group>"; };
+		AB1000000000000000005C /* FunctionRunSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionRunSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -208,6 +212,7 @@
 				AB10000000000000000051 /* ConstraintInfo.swift */,
 				AB10000000000000000003 /* DBObject.swift */,
 				AB10000000000000000053 /* ExtensionInfo.swift */,
+				AB1000000000000000005B /* FunctionMetadata.swift */,
 				AB10000000000000000050 /* IndexInfo.swift */,
 				AB10000000000000000005 /* QueryResult.swift */,
 				AB10000000000000000054 /* RoleInfo.swift */,
@@ -250,6 +255,7 @@
 				AB10000000000000000010 /* ContentView.swift */,
 				AB10000000000000000057 /* ExtensionsSheet.swift */,
 				AB10000000000000000059 /* FunctionLibrarySheet.swift */,
+				AB1000000000000000005C /* FunctionRunSheet.swift */,
 				AB10000000000000000055 /* IndexCreateSheet.swift */,
 				AB10000000000000000018 /* InspectorView.swift */,
 				AB10000000000000000058 /* RolesSheet.swift */,
@@ -469,6 +475,8 @@
 				AA10000000000000000058 /* RolesSheet.swift in Sources */,
 				AA10000000000000000059 /* FunctionLibrarySheet.swift in Sources */,
 				AA1000000000000000005A /* SQLSyntaxView.swift in Sources */,
+				AA1000000000000000005B /* FunctionMetadata.swift in Sources */,
+				AA1000000000000000005C /* FunctionRunSheet.swift in Sources */,
 				AA10000000000000000037 /* QueryHistoryViewModel.swift in Sources */,
 				AA10000000000000000038 /* QueryHistoryView.swift in Sources */,
 			);
