@@ -6,8 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-05-12
+
 ### Added
+- **Run / Call sheet** for functions and procedures. Right-click a routine in the navigator (or use the toolbar button on its Definition tab) to open a focused builder: one row per input parameter with a Value / Expression / NULL / DEFAULT mode picker, live SQL preview, and an inline result pane that shapes itself to the return kind (scalar value box, multi-row grid for `SETOF` / `RETURNS TABLE`, "completed" status for procedures). Trigger functions and aggregates explain themselves instead of producing an invalid call.
+- **Full CREATE TABLE in the Definition tab**. Tables now reconstruct their DDL from `pg_catalog`: columns with type / default / identity / generated / NOT NULL, table-level constraints in canonical order, `PARTITION BY` for partitioned parents, secondary `CREATE INDEX` statements (skipping the ones backing constraints), and table / column comments.
+- **Syntax-highlighted Definition tab** for every entity type — uses the same tokenizer and colors as the SQL editor instead of plain monospaced text.
 - Working **Test Connection** button on the start page detail form and the modal add/edit form. Runs validation, opens a throwaway connection so the active session isn't disturbed, and reports a green success banner or selectable red error message inline.
+
+### Changed
+- Navigator selection is applied synchronously so the List binding never sees a stale value, which previously caused parent DisclosureGroups to collapse the moment you clicked a leaf row.
+- Disclosure-group **labels** in the navigator (database, schema, category) are now clickable to expand or collapse, not just the chevron.
+
+### Fixed
+- PG17+ named NOT-NULL constraints (`contype = 'n'`) are filtered out of the reconstructed CREATE TABLE so the per-column `NOT NULL` isn't duplicated as a `CONSTRAINT … NOT NULL col` line.
+- Function-metadata query was returning an empty parameter list. `proargtypes` is an `oidvector` with 0-based indexing; the array was re-aggregated through `unnest WITH ORDINALITY` so PostgresNIO's 1-based-only array decoder accepts it.
 
 ## [0.1.11] - 2026-04-19
 
