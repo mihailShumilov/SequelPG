@@ -456,6 +456,68 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertEqual(sut.totalPages, 3)
     }
 
+    // MARK: - foreignKey(forColumn:)
+    // Drives the Content tab's FK-cell affordance and the "Jump to <table>"
+    // context-menu item. The helper looks at `constraints` (populated by
+    // AppViewModel.selectObject from listConstraints) and reports the FK
+    // whose source-column list includes the queried column name.
+
+    func testForeignKeyReturnsNilWhenNoConstraintsLoaded() {
+        XCTAssertNil(sut.foreignKey(forColumn: "user_id"))
+    }
+
+    func testForeignKeyReturnsNilForNonFKColumn() {
+        sut.constraints = [
+            ConstraintInfo(
+                schema: "public", table: "orders", name: "fk_orders_user",
+                kind: .foreignKey, definition: "FOREIGN KEY (user_id) REFERENCES public.users(id)",
+                columns: ["user_id"], referencedTable: "public.users", referencedColumns: ["id"]
+            )
+        ]
+        XCTAssertNil(sut.foreignKey(forColumn: "total"))
+    }
+
+    func testForeignKeyReturnsConstraintForSourceColumn() {
+        let fk = ConstraintInfo(
+            schema: "public", table: "orders", name: "fk_orders_user",
+            kind: .foreignKey, definition: "FOREIGN KEY (user_id) REFERENCES public.users(id)",
+            columns: ["user_id"], referencedTable: "public.users", referencedColumns: ["id"]
+        )
+        sut.constraints = [fk]
+        XCTAssertEqual(sut.foreignKey(forColumn: "user_id"), fk)
+    }
+
+    func testForeignKeyReturnsConstraintForBothColumnsOfCompositeFK() {
+        let fk = ConstraintInfo(
+            schema: "public", table: "order_items", name: "fk_oi_order",
+            kind: .foreignKey,
+            definition: "FOREIGN KEY (order_id, line_no) REFERENCES public.orders(id, line_no)",
+            columns: ["order_id", "line_no"],
+            referencedTable: "public.orders",
+            referencedColumns: ["id", "line_no"]
+        )
+        sut.constraints = [fk]
+        XCTAssertEqual(sut.foreignKey(forColumn: "order_id"), fk)
+        XCTAssertEqual(sut.foreignKey(forColumn: "line_no"), fk)
+    }
+
+    func testForeignKeyIgnoresNonForeignKeyConstraints() {
+        sut.constraints = [
+            ConstraintInfo(
+                schema: "public", table: "users", name: "users_pkey",
+                kind: .primaryKey, definition: "PRIMARY KEY (id)",
+                columns: ["id"]
+            ),
+            ConstraintInfo(
+                schema: "public", table: "users", name: "users_email_key",
+                kind: .unique, definition: "UNIQUE (email)",
+                columns: ["email"]
+            ),
+        ]
+        XCTAssertNil(sut.foreignKey(forColumn: "id"))
+        XCTAssertNil(sut.foreignKey(forColumn: "email"))
+    }
+
     // MARK: - Helpers
 
     private func makeColumn(name: String, position: Int) -> ColumnInfo {

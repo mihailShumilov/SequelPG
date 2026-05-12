@@ -47,6 +47,15 @@ struct ContentTabView: View {
                         },
                         onInsertCancel: {
                             appVM.cancelInsertRow()
+                        },
+                        foreignKeyForColumn: { columnName in
+                            tableVM.foreignKey(forColumn: columnName)
+                        },
+                        onFKJump: { rowIdx, colIdx in
+                            guard rowIdx < result.rows.count, colIdx < result.columns.count else { return }
+                            let colName = result.columns[colIdx]
+                            guard let fk = tableVM.foreignKey(forColumn: colName) else { return }
+                            Task { await appVM.navigateForeignKey(fromRow: result.rows[rowIdx], fk: fk) }
                         }
                     )
                 } else if let obj = navigatorVM.selectedObject, !obj.type.hasQueryableContent {
@@ -86,9 +95,14 @@ struct ContentTabView: View {
             }
         }
         .onChange(of: navigatorVM.selectedObject) { _, _ in
+            // Only auto-load when there's no cached content for the (now) active
+            // tab. Switching between tabs restores their cached contentResult via
+            // AppViewModel.activateTab, so re-fetching here would silently reload
+            // every tab swap and discard pagination/sort state.
             if let obj = navigatorVM.selectedObject,
                obj.type.hasQueryableContent,
-               appVM.selectedTab == .content
+               appVM.selectedTab == .content,
+               tableVM.contentResult == nil
             {
                 Task { await appVM.loadContentPage() }
             }

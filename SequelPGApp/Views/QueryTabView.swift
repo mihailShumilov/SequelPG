@@ -239,6 +239,14 @@ struct ResultsGridView: View {
     var insertRowValues: Binding<[String: String]>?
     var onInsertCommit: (() -> Void)?
     var onInsertCancel: (() -> Void)?
+    /// Resolves a column name to the FK constraint it participates in, if any.
+    /// Drives the inline arrow affordance, the "Jump to <table>" context-menu
+    /// item, and Cmd-click navigation. Pass nil to disable FK navigation
+    /// entirely (e.g., from the Query tab where FK metadata isn't loaded).
+    var foreignKeyForColumn: ((String) -> ConstraintInfo?)?
+    /// Invoked when the user activates FK navigation on a cell (via Cmd-click
+    /// or the context-menu item). Receives the displayed row and column index.
+    var onFKJump: ((Int, Int) -> Void)?
     @Binding var selectedRowIndex: Int?
     @FocusState private var isFocused: Bool
     @FocusState private var editFieldFocused: Bool
@@ -267,7 +275,9 @@ struct ResultsGridView: View {
         isInsertingRow: Bool = false,
         insertRowValues: Binding<[String: String]>? = nil,
         onInsertCommit: (() -> Void)? = nil,
-        onInsertCancel: (() -> Void)? = nil
+        onInsertCancel: (() -> Void)? = nil,
+        foreignKeyForColumn: ((String) -> ConstraintInfo?)? = nil,
+        onFKJump: ((Int, Int) -> Void)? = nil
     ) {
         self.result = result
         self.columns = columns
@@ -283,6 +293,8 @@ struct ResultsGridView: View {
         self.insertRowValues = insertRowValues
         self.onInsertCommit = onInsertCommit
         self.onInsertCancel = onInsertCancel
+        self.foreignKeyForColumn = foreignKeyForColumn
+        self.onFKJump = onFKJump
         self.columnsByName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         self.identifiedRows = result.rows.enumerated().map { IdentifiedRow(id: $0.offset, cells: $0.element) }
         self.identifiedColumns = result.columns.enumerated().map { IdentifiedColumn(id: $0.offset, name: $0.element) }
@@ -318,15 +330,13 @@ struct ResultsGridView: View {
                     }
                 },
                 contextMenuItems: { rowIdx in
-                    guard let onDeleteRow else { return [] }
-                    return [
-                        DataGridView.MenuItem(title: "Delete Row", isDestructive: true) {
-                            onDeleteRow(rowIdx)
-                        },
-                    ]
+                    buildContextMenuItems(rowIdx: rowIdx)
                 },
                 renderCell: { rowIdx, colIdx in
                     AnyView(cellView(rowIdx: rowIdx, colIdx: colIdx))
+                },
+                onCmdClick: { rowIdx, colIdx in
+                    handleCmdClick(row: rowIdx, col: colIdx)
                 }
             )
 
@@ -349,6 +359,54 @@ struct ResultsGridView: View {
                 fieldEditorPopover(rowIdx: editing.row, colIdx: editing.col, cell: result.rows[editing.row][editing.col])
             }
         }
+    }
+
+    /// Cmd-click handler. Returns true only when the click landed on a non-null
+    /// FK cell — for any other cell we let NSTableView's default Cmd-click
+    /// multi-select behavior run.
+    private func handleCmdClick(row: Int, col: Int) -> Bool {
+        guard let onFKJump, foreignKeyForColumn != nil,
+              row < result.rows.count, col < result.columns.count
+        else { return false }
+        let colName = result.columns[col]
+        guard let _ = foreignKeyForColumn?(colName) else { return false }
+        let cell = result.rows[row][col]
+        guard !cell.isNull else { return false }
+        onFKJump(row, col)
+        return true
+    }
+
+    /// Builds the row's context menu, prepending a "Jump to <ref_table>" item
+    /// when the right-clicked column is a non-null FK source.
+    private func buildContextMenuItems(rowIdx: Int) -> [DataGridView.MenuItem] {
+        var items: [DataGridView.MenuItem] = []
+        if let onFKJump,
+           rowIdx < result.rows.count
+        {
+            // The DataGridView coordinator passes a row index but not a column
+            // — its menuNeedsUpdate uses tv.clickedRow only. So we walk the
+            // row's cells and offer a Jump item for each FK column that has a
+            // non-null value. That keeps the right-click surface comprehensive
+            // even though NSTableView doesn't expose the clicked column to the
+            // menu builder.
+            for colIdx in 0 ..< min(result.columns.count, result.rows[rowIdx].count) {
+                let colName = result.columns[colIdx]
+                guard let fk = foreignKeyForColumn?(colName) else { continue }
+                let cell = result.rows[rowIdx][colIdx]
+                guard !cell.isNull, let refTable = fk.referencedTable else { continue }
+                let captured = colIdx
+                items.append(DataGridView.MenuItem(
+                    title: "Jump to \(refTable) via \(colName)",
+                    isDestructive: false
+                ) { onFKJump(rowIdx, captured) })
+            }
+        }
+        if let onDeleteRow {
+            items.append(DataGridView.MenuItem(title: "Delete Row", isDestructive: true) {
+                onDeleteRow(rowIdx)
+            })
+        }
+        return items
     }
 
     private func handleCellDoubleClick(row: Int, col: Int) {
@@ -401,11 +459,23 @@ struct ResultsGridView: View {
                         }
                     }
             } else {
+                let fkInfo = foreignKeyForColumn?(result.columns[colIdx])
                 HStack(spacing: 4) {
                     if renderKind.alignment == .trailing { Spacer(minLength: 0) }
                     CellTypeBadge(kind: kind)
                     cellContentView(cell: cell, renderKind: renderKind)
                     if renderKind.alignment == .leading { Spacer(minLength: 0) }
+                    // FK affordance. HostingCellView returns nil from hitTest
+                    // (so first-click selection works) which means SwiftUI
+                    // gestures can't fire here — the icon is a visual
+                    // affordance only. Activation routes through Cmd-click on
+                    // the cell or the right-click "Jump to <table>" menu item.
+                    if let fkInfo, !cell.isNull, fkInfo.referencedTable != nil {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .help("Foreign key → \(fkInfo.referencedTable ?? ""). Cmd-click or right-click to follow.")
+                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
@@ -688,6 +758,11 @@ struct DataGridView: NSViewRepresentable {
     var onDeleteSelected: () -> Void
     var contextMenuItems: (Int) -> [MenuItem]
     var renderCell: (Int, Int) -> AnyView
+    /// Cmd-click handler. Returns true to consume the event (suppressing the
+    /// default multi-select toggle), false to fall through to normal handling.
+    /// Callers use this for context-sensitive actions like "jump to FK target":
+    /// they return true only when the clicked cell actually has an action.
+    var onCmdClick: ((Int, Int) -> Bool)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -729,6 +804,11 @@ struct DataGridView: NSViewRepresentable {
 
         scrollView.documentView = tableView
         context.coordinator.tableView = tableView
+
+        let coordinator = context.coordinator
+        tableView.onCmdClick = { [weak coordinator] row, col in
+            coordinator?.parent.onCmdClick?(row, col) ?? false
+        }
         return scrollView
     }
 
@@ -961,6 +1041,25 @@ struct DataGridView: NSViewRepresentable {
     final class FocusableTableView: NSTableView {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override var acceptsFirstResponder: Bool { true }
+
+        /// Optional Cmd-click sink. Returns true to consume the click; false
+        /// (or nil) lets NSTableView run its default Cmd-click multi-select.
+        var onCmdClick: ((Int, Int) -> Bool)?
+
+        override func mouseDown(with event: NSEvent) {
+            if event.modifierFlags.contains(.command), let onCmdClick {
+                let point = convert(event.locationInWindow, from: nil)
+                let r = row(at: point)
+                let c = column(at: point)
+                if r >= 0, c >= 0, c < tableColumns.count,
+                   let colId = Int(tableColumns[c].identifier.rawValue),
+                   onCmdClick(r, colId)
+                {
+                    return
+                }
+            }
+            super.mouseDown(with: event)
+        }
 
         // Forward delete / backspace to the bound delete callback when a
         // row is selected, matching SwiftUI Table's onDeleteCommand behavior.

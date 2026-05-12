@@ -1604,6 +1604,300 @@ final class AppViewModelTests: AppViewModelTestCase {
         let connectCount = await mockDB.connectCallCount
         XCTAssertEqual(connectCount, 2)
     }
+
+    // MARK: - navigateForeignKey
+
+    private func sourceFKResult() -> QueryResult {
+        // Mimics an `orders` table page where `user_id` is the FK source.
+        QueryResult(
+            columns: ["id", "user_id", "total"],
+            rows: [
+                [.text("100"), .text("42"), .text("9.99")],
+                [.text("101"), .null,       .text("3.50")],
+            ],
+            executionTime: 0,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+    }
+
+    private func singleColumnFK(refTable: String = "public.users") -> ConstraintInfo {
+        ConstraintInfo(
+            schema: "public", table: "orders", name: "fk_orders_user",
+            kind: .foreignKey,
+            definition: "FOREIGN KEY (user_id) REFERENCES \(refTable)(id)",
+            columns: ["user_id"], referencedTable: refTable, referencedColumns: ["id"]
+        )
+    }
+
+    func testNavigateForeignKeySelectsReferencedTable() async {
+        await makeConnectedVM()
+        vm.tableVM.setContentResult(sourceFKResult())
+        let fk = singleColumnFK()
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: fk)
+
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.schema, "public")
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.name, "users")
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.type, .table)
+    }
+
+    func testNavigateForeignKeyBuildsSingleColumnFilter() async {
+        await makeConnectedVM()
+        vm.tableVM.setContentResult(sourceFKResult())
+        let fk = singleColumnFK()
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: fk)
+
+        XCTAssertEqual(vm.tableVM.filters.count, 1)
+        XCTAssertEqual(vm.tableVM.filters[0].column, "id")
+        XCTAssertEqual(vm.tableVM.filters[0].op, .equals)
+        XCTAssertEqual(vm.tableVM.filters[0].value, "42")
+        XCTAssertTrue(vm.tableVM.activeFilterSQL?.contains("\"id\"::text = ") ?? false,
+                      "expected activeFilterSQL to reference target column 'id'; got: \(vm.tableVM.activeFilterSQL ?? "nil")")
+        XCTAssertTrue(vm.tableVM.activeFilterSQL?.contains("'42'") ?? false)
+    }
+
+    func testNavigateForeignKeySwitchesToContentTab() async {
+        await makeConnectedVM()
+        vm.selectedTab = .query
+        vm.tableVM.setContentResult(sourceFKResult())
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: singleColumnFK())
+
+        XCTAssertEqual(vm.selectedTab, .content)
+        XCTAssertTrue(vm.tableVM.showFilterBar)
+    }
+
+    func testNavigateForeignKeyBuildsMultipleFiltersForCompositeFK() async {
+        await makeConnectedVM()
+        // Composite source row: (order_id=100, line_no=3, qty=2).
+        vm.tableVM.setContentResult(QueryResult(
+            columns: ["order_id", "line_no", "qty"],
+            rows: [[.text("100"), .text("3"), .text("2")]],
+            executionTime: 0, rowsAffected: nil, isTruncated: false
+        ))
+        let fk = ConstraintInfo(
+            schema: "public", table: "order_items", name: "fk_oi_order",
+            kind: .foreignKey,
+            definition: "FOREIGN KEY (order_id, line_no) REFERENCES public.orders(id, line_no)",
+            columns: ["order_id", "line_no"],
+            referencedTable: "public.orders",
+            referencedColumns: ["id", "line_no"]
+        )
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: fk)
+
+        XCTAssertEqual(vm.tableVM.filters.count, 2)
+        XCTAssertEqual(vm.tableVM.filters[0].column, "id")
+        XCTAssertEqual(vm.tableVM.filters[0].value, "100")
+        XCTAssertEqual(vm.tableVM.filters[1].column, "line_no")
+        XCTAssertEqual(vm.tableVM.filters[1].value, "3")
+        // Both predicates AND'd together in the WHERE clause.
+        XCTAssertTrue(vm.tableVM.activeFilterSQL?.contains(" AND ") ?? false)
+    }
+
+    func testNavigateForeignKeyParsesCrossSchemaReferencedTable() async {
+        await makeConnectedVM()
+        vm.tableVM.setContentResult(sourceFKResult())
+        let fk = singleColumnFK(refTable: "other_schema.users")
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: fk)
+
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.schema, "other_schema")
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.name, "users")
+    }
+
+    func testNavigateForeignKeyAbortsOnNullSourceValue() async {
+        await makeConnectedVM()
+        vm.tableVM.setContentResult(sourceFKResult())
+        // Row 1 has user_id = NULL — navigation must be a no-op.
+        let snapshotTab = vm.selectedTab
+        let snapshotObject = vm.navigatorVM.selectedObject
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[1], fk: singleColumnFK())
+
+        XCTAssertEqual(vm.selectedTab, snapshotTab)
+        XCTAssertEqual(vm.navigatorVM.selectedObject, snapshotObject)
+        XCTAssertNil(vm.tableVM.activeFilterSQL)
+    }
+
+    func testNavigateForeignKeyOpensSecondTabKeepingSourceAvailable() async {
+        await makeConnectedVM()
+        // Open the source object via the normal flow so a tab exists for it.
+        let source = DBObject(schema: "public", name: "orders", type: .table)
+        await vm.selectObject(source)
+        vm.tableVM.setContentResult(sourceFKResult())
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: singleColumnFK())
+
+        XCTAssertEqual(vm.tabs.count, 2)
+        XCTAssertEqual(vm.tabs[0].dbObject.name, "orders")
+        XCTAssertEqual(vm.tabs[1].dbObject.name, "users")
+        XCTAssertEqual(vm.activeTabId, vm.tabs[1].id, "FK target tab should be active")
+    }
+
+    func testNavigateForeignKeyOpensNewTabEvenWhenTargetAlreadyOpen() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        vm.tableVM.setContentResult(sourceFKResult())
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: singleColumnFK())
+
+        XCTAssertEqual(vm.tabs.count, 3, "FK navigation always opens a fresh tab even if target is already open")
+        XCTAssertEqual(vm.tabs.filter { $0.dbObject.name == "users" }.count, 2)
+    }
+
+    func testNavigateForeignKeyAbortOnNullDoesNotCreateNewTab() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        vm.tableVM.setContentResult(sourceFKResult())
+        let tabsBefore = vm.tabs.count
+
+        // Row 1 has user_id = NULL — navigation must be a no-op.
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[1], fk: singleColumnFK())
+
+        XCTAssertEqual(vm.tabs.count, tabsBefore)
+    }
+
+    func testNavigateForeignKeyIsNoOpForNonForeignKeyConstraint() async {
+        await makeConnectedVM()
+        vm.tableVM.setContentResult(sourceFKResult())
+        // Primary key constraint should never trigger navigation, even if some
+        // caller passes it by mistake.
+        let pk = ConstraintInfo(
+            schema: "public", table: "orders", name: "orders_pkey",
+            kind: .primaryKey, definition: "PRIMARY KEY (id)",
+            columns: ["id"], referencedTable: nil, referencedColumns: []
+        )
+        let snapshotTab = vm.selectedTab
+
+        await vm.navigateForeignKey(fromRow: vm.tableVM.contentResult!.rows[0], fk: pk)
+
+        XCTAssertEqual(vm.selectedTab, snapshotTab)
+        XCTAssertNil(vm.tableVM.activeFilterSQL)
+    }
+
+    // MARK: - Object Tabs
+
+    func testSelectObjectFirstTimeOpensNewTab() async {
+        await makeConnectedVM()
+        XCTAssertTrue(vm.tabs.isEmpty)
+
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+
+        XCTAssertEqual(vm.tabs.count, 1)
+        XCTAssertEqual(vm.tabs[0].dbObject.name, "users")
+        XCTAssertEqual(vm.activeTabId, vm.tabs[0].id)
+    }
+
+    func testSelectObjectReactivatesExistingTab() async {
+        await makeConnectedVM()
+        let orders = DBObject(schema: "public", name: "orders", type: .table)
+        let users = DBObject(schema: "public", name: "users", type: .table)
+        await vm.selectObject(orders)
+        let ordersTabId = vm.activeTabId
+        await vm.selectObject(users)
+        XCTAssertEqual(vm.tabs.count, 2)
+
+        // Re-selecting orders should reactivate, not duplicate.
+        await vm.selectObject(orders)
+
+        XCTAssertEqual(vm.tabs.count, 2)
+        XCTAssertEqual(vm.activeTabId, ordersTabId)
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.name, "orders")
+    }
+
+    func testActivateTabRestoresFiltersFromSnapshot() async {
+        await makeConnectedVM()
+        let orders = DBObject(schema: "public", name: "orders", type: .table)
+        let users = DBObject(schema: "public", name: "users", type: .table)
+        await vm.selectObject(orders)
+        let ordersTabId = vm.activeTabId!
+
+        // Stage an active filter on the orders tab.
+        vm.tableVM.filters = [ContentFilter(column: "id", op: .equals, value: "7")]
+        vm.tableVM.activeFilterSQL = "\"id\"::text = '7'"
+        vm.tableVM.currentPage = 3
+
+        await vm.selectObject(users)
+        // Orders state should now live only in its snapshot.
+        XCTAssertNotEqual(vm.activeTabId, ordersTabId)
+        XCTAssertEqual(vm.tableVM.activeFilterSQL ?? "", "")
+
+        vm.activateTab(ordersTabId)
+
+        XCTAssertEqual(vm.activeTabId, ordersTabId)
+        XCTAssertEqual(vm.tableVM.filters.count, 1)
+        XCTAssertEqual(vm.tableVM.filters[0].value, "7")
+        XCTAssertEqual(vm.tableVM.activeFilterSQL, "\"id\"::text = '7'")
+        XCTAssertEqual(vm.tableVM.currentPage, 3)
+    }
+
+    func testActivateTabIsIdempotentWhenAlreadyActive() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        let id = vm.activeTabId!
+
+        vm.activateTab(id)
+
+        XCTAssertEqual(vm.activeTabId, id)
+    }
+
+    func testCloseTabActivatesNeighbor() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        XCTAssertEqual(vm.tabs.count, 2)
+        let usersId = vm.activeTabId!
+
+        vm.closeTab(usersId)
+
+        XCTAssertEqual(vm.tabs.count, 1)
+        XCTAssertEqual(vm.tabs[0].dbObject.name, "orders")
+        XCTAssertEqual(vm.activeTabId, vm.tabs[0].id)
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.name, "orders")
+    }
+
+    func testCloseInactiveTabKeepsActiveTabUnchanged() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        let ordersId = vm.activeTabId!
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        let usersId = vm.activeTabId!
+
+        vm.closeTab(ordersId)
+
+        XCTAssertEqual(vm.tabs.count, 1)
+        XCTAssertEqual(vm.activeTabId, usersId)
+    }
+
+    func testCloseLastTabClearsState() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        let id = vm.activeTabId!
+
+        vm.closeTab(id)
+
+        XCTAssertTrue(vm.tabs.isEmpty)
+        XCTAssertNil(vm.activeTabId)
+        XCTAssertNil(vm.navigatorVM.selectedObject)
+        XCTAssertNil(vm.tableVM.contentResult)
+        XCTAssertEqual(vm.selectedTab, .query, "Last tab closing should fall back to the Query sub-tab")
+    }
+
+    func testDisconnectClearsAllTabs() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        XCTAssertEqual(vm.tabs.count, 2)
+
+        await vm.disconnect()
+
+        XCTAssertTrue(vm.tabs.isEmpty)
+        XCTAssertNil(vm.activeTabId)
+    }
 }
 
 // MARK: - MockDatabaseClient setter helpers

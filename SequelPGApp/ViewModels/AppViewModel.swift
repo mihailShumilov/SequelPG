@@ -152,6 +152,13 @@ struct CascadeDeleteBuilder {
     var errorMessage: String?
     var cascadeDeleteContext: CascadeDeleteContext?
 
+    /// Open object tabs in the main area's tab strip. Each tab is an
+    /// independently navigable view (its own filter, page, sort, content
+    /// snapshot). `activeTabId` indicates which tab's state is currently
+    /// reflected in `tableVM`; switching tabs swaps `tableVM`'s state.
+    var tabs: [ObjectTab] = []
+    var activeTabId: UUID?
+
     // Database-tools sheets (Extensions / Roles / Function Library)
     var showExtensionsSheet = false
     var showRolesSheet = false
@@ -246,7 +253,7 @@ struct CascadeDeleteBuilder {
         connectedSSHPassword = nil
         connectedProfileName = nil
         navigatorVM.clear()
-        tableVM.clear()
+        closeAllTabs()
         selectedTab = .query
         Log.ui.info("UI: disconnected")
     }
@@ -266,7 +273,7 @@ struct CascadeDeleteBuilder {
             updatedProfile.database = name
             connectedProfile = updatedProfile
             navigatorVM.connectedDatabase = name
-            tableVM.clear()
+            closeAllTabs()
 
             // Load schemas if not already cached for this database
             if !navigatorVM.hasSchemasLoaded(for: name) {
@@ -336,13 +343,159 @@ struct CascadeDeleteBuilder {
         // `get` returns the old selection during the brief gap between the
         // setter and the Task body running, which makes the List "roll back"
         // its visual state and collapses parent DisclosureGroups.
-        // We *don't* early-return when the object is already selected —
-        // callers from the navigator binding may have pre-set it.
         if navigatorVM.selectedObject != object {
             navigatorVM.selectedObject = object
         }
-        tableVM.clear()
 
+        // De-duplicate: if a tab for this exact object already exists, just
+        // activate it. Cached metadata + content are restored from the tab's
+        // snapshot — no DB calls needed.
+        if let existing = tabs.first(where: { $0.dbObject == object }) {
+            activateTab(existing.id)
+            adjustSubTabForObjectType(object)
+            return
+        }
+        await openInNewTab(object: object)
+    }
+
+    // MARK: - Object Tabs
+
+    /// Opens a fresh tab for `object`, applies the optional pre-built filter
+    /// list, loads the object's metadata, and (when the Content sub-tab is
+    /// active and the object is queryable) loads its first page of content.
+    /// Used by both `selectObject` for first-time opens and
+    /// `navigateForeignKey` for FK jumps that need to land filtered.
+    func openInNewTab(object: DBObject, filters: [ContentFilter]? = nil) async {
+        snapshotIntoActiveTab()
+
+        var tab = ObjectTab(dbObject: object, pageSize: tableVM.pageSize)
+        if let filters, !filters.isEmpty {
+            tab.filters = filters
+            tab.showFilterBar = true
+        }
+        tabs.append(tab)
+        activeTabId = tab.id
+
+        // Hydrate tableVM into the new tab's initial empty state. Restoring
+        // an empty tab clears stale columns/contentResult from the previous
+        // tab without snapshotting them again.
+        tableVM.clear()
+        tableVM.filters = tab.filters
+        tableVM.showFilterBar = tab.showFilterBar
+        tableVM.selectedObjectName = object.name
+        if navigatorVM.selectedObject != object {
+            navigatorVM.selectedObject = object
+        }
+        adjustSubTabForObjectType(object)
+
+        await loadObjectMetadata(object)
+
+        // Now that columns are loaded, materialize the WHERE clause for any
+        // pre-supplied filters (FK navigation uses this path).
+        if let filters, !filters.isEmpty {
+            tableVM.activeFilterSQL = filters.compactMap { buildFilterCondition($0, columns: tableVM.columns) }
+                .joined(separator: " AND ")
+        }
+
+        snapshotIntoActiveTab()
+
+        if selectedTab == .content, object.type.hasQueryableContent {
+            await loadContentPage()
+            snapshotIntoActiveTab()
+        }
+    }
+
+    /// Activates an existing tab without any DB calls — the swap is purely an
+    /// in-memory state move from the outgoing tab's snapshot into `tableVM`.
+    func activateTab(_ id: UUID) {
+        guard activeTabId != id else { return }
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        snapshotIntoActiveTab()
+        activeTabId = id
+        restoreFromTab(tab)
+    }
+
+    /// Closes a tab. When closing the active tab, activates the neighbor to
+    /// the right (or to the left if it's the rightmost). When the last tab
+    /// closes, clears `tableVM`, drops the navigator selection, and falls
+    /// back to the Query sub-tab — the only one that doesn't require an
+    /// object.
+    func closeTab(_ id: UUID) {
+        guard let idx = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let wasActive = (activeTabId == id)
+        tabs.remove(at: idx)
+        guard wasActive else { return }
+        if tabs.isEmpty {
+            activeTabId = nil
+            tableVM.clear()
+            navigatorVM.selectedObject = nil
+            selectedTab = .query
+            return
+        }
+        let newIdx = min(idx, tabs.count - 1)
+        let neighbor = tabs[newIdx]
+        activeTabId = neighbor.id
+        restoreFromTab(neighbor)
+    }
+
+    /// Closes every tab and resets the main area. Called on disconnect and
+    /// database switch — tab state is bound to the connection.
+    func closeAllTabs() {
+        tabs.removeAll()
+        activeTabId = nil
+        tableVM.clear()
+        navigatorVM.selectedObject = nil
+    }
+
+    /// Writes the currently-displayed `tableVM` state into the active tab's
+    /// snapshot. No-op when there is no active tab (e.g., before any object
+    /// has been opened).
+    private func snapshotIntoActiveTab() {
+        guard let activeTabId else { return }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeTabId }) else { return }
+        var tab = tabs[idx]
+        tab.contentResult = tableVM.contentResult
+        tab.columns = tableVM.columns
+        tab.constraints = tableVM.constraints
+        tab.indexes = tableVM.indexes
+        tab.triggers = tableVM.triggers
+        tab.partitions = tableVM.partitions
+        tab.currentPage = tableVM.currentPage
+        tab.pageSize = tableVM.pageSize
+        tab.approximateRowCount = tableVM.approximateRowCount
+        tab.sortColumn = tableVM.sortColumn
+        tab.sortAscending = tableVM.sortAscending
+        tab.filters = tableVM.filters
+        tab.activeFilterSQL = tableVM.activeFilterSQL
+        tab.selectedRowIndex = tableVM.selectedRowIndex
+        tab.showFilterBar = tableVM.showFilterBar
+        tabs[idx] = tab
+    }
+
+    private func restoreFromTab(_ tab: ObjectTab) {
+        tableVM.setColumns(tab.columns)
+        tableVM.contentResult = tab.contentResult
+        tableVM.constraints = tab.constraints
+        tableVM.indexes = tab.indexes
+        tableVM.triggers = tab.triggers
+        tableVM.partitions = tab.partitions
+        tableVM.currentPage = tab.currentPage
+        tableVM.pageSize = tab.pageSize
+        tableVM.approximateRowCount = tab.approximateRowCount
+        tableVM.sortColumn = tab.sortColumn
+        tableVM.sortAscending = tab.sortAscending
+        tableVM.filters = tab.filters
+        tableVM.activeFilterSQL = tab.activeFilterSQL
+        tableVM.selectedRowIndex = tab.selectedRowIndex
+        tableVM.showFilterBar = tab.showFilterBar
+        tableVM.selectedObjectName = tab.dbObject.name
+        tableVM.selectedObjectColumnCount = tab.columns.count
+        if navigatorVM.selectedObject != tab.dbObject {
+            navigatorVM.selectedObject = tab.dbObject
+        }
+    }
+
+    private func adjustSubTabForObjectType(_ object: DBObject) {
         // If no object-specific tab is active, switch to an appropriate tab.
         if selectedTab == .query {
             switch object.type {
@@ -352,20 +505,25 @@ struct CascadeDeleteBuilder {
                 selectedTab = .definition
             }
         }
-
         // The Content tab only works for relations. Selecting a type, function,
         // or other non-relation while Content is active would otherwise issue
         // SELECT * FROM <type> and fail with "cannot open relation".
         if selectedTab == .content, !object.type.hasQueryableContent {
             selectedTab = .definition
         }
+    }
 
+    /// Loads columns, row count, and per-table extras for the active tab's
+    /// object. Errors land in `errorMessage` rather than throwing so a single
+    /// missing catalog query doesn't abandon the whole open.
+    private func loadObjectMetadata(_ object: DBObject) async {
         do {
             let columns = try await dbClient.getColumns(
                 schema: object.schema,
                 table: object.name
             )
             tableVM.setColumns(columns)
+            tableVM.selectedObjectColumnCount = columns.count
 
             // getApproximateRowCount falls back to SELECT COUNT(*) when
             // pg_class.reltuples is -1 (no ANALYZE yet). That fallback errors
@@ -381,8 +539,6 @@ struct CascadeDeleteBuilder {
             } else {
                 tableVM.approximateRowCount = 0
             }
-            tableVM.selectedObjectName = object.name
-            tableVM.selectedObjectColumnCount = columns.count
 
             // Fetch per-table extras only for tables / partitioned tables; views
             // and other object types don't have these in a meaningful way.
@@ -397,15 +553,8 @@ struct CascadeDeleteBuilder {
                     tableVM.triggers = try await trg
                     tableVM.partitions = try await parts
                 } catch {
-                    // Don't fail object selection on a missing catalog query —
-                    // just leave those sections empty and note it in the error bar.
                     errorMessage = error.localizedDescription
                 }
-            }
-
-            // If content tab is active, load content for the new object.
-            if selectedTab == .content {
-                await loadContentPage()
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -632,6 +781,54 @@ struct CascadeDeleteBuilder {
         tableVM.currentPage = 0
         clearSelectedRow()
         Task { await loadContentPage() }
+    }
+
+    // MARK: - Foreign Key Navigation
+
+    /// Follows a foreign key from the given row in the current Content result
+    /// to the referenced table. Selects the target object in the navigator,
+    /// installs an equality filter on each `(referencedColumn, value)` pair,
+    /// switches to the Content tab, and reloads. Aborts silently when any
+    /// source column is NULL (no row can match) or when `fk` is not a foreign
+    /// key constraint.
+    func navigateForeignKey(fromRow row: [CellValue], fk: ConstraintInfo) async {
+        guard fk.kind == .foreignKey,
+              let refTable = fk.referencedTable,
+              !fk.columns.isEmpty,
+              fk.columns.count == fk.referencedColumns.count,
+              let result = tableVM.contentResult
+        else { return }
+
+        let (targetSchema, targetName) = Self.splitQualifiedName(refTable)
+
+        var filters: [ContentFilter] = []
+        for (sourceCol, refCol) in zip(fk.columns, fk.referencedColumns) {
+            guard let idx = result.columns.firstIndex(of: sourceCol) else { return }
+            let cell = row[idx]
+            if cell.isNull { return }
+            filters.append(ContentFilter(column: refCol, op: .equals, value: cell.displayString))
+        }
+        guard !filters.isEmpty else { return }
+
+        let target = DBObject(schema: targetSchema, name: targetName, type: .table)
+        // FK navigation always opens a fresh tab so the source row remains
+        // available behind it — that's the whole point of "jump to and easy
+        // return". `openInNewTab` handles filter installation atomically with
+        // the metadata + content load.
+        selectedTab = .content
+        clearSelectedRow()
+        await openInNewTab(object: target, filters: filters)
+    }
+
+    /// Splits "schema.table" into its parts. `referencedTable` is always a
+    /// `pg_class.relname` joined to `pg_namespace.nspname` in `listConstraints`
+    /// so a single dot is the only separator; identifiers with embedded dots
+    /// would have been quoted upstream.
+    private static func splitQualifiedName(_ qualified: String) -> (schema: String, name: String) {
+        if let dot = qualified.firstIndex(of: ".") {
+            return (String(qualified[..<dot]), String(qualified[qualified.index(after: dot)...]))
+        }
+        return ("public", qualified)
     }
 
     func previewFilterSQL() -> String {

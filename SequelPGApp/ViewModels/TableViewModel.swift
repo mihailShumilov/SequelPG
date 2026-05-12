@@ -84,6 +84,13 @@ enum FilterOperator: String, CaseIterable {
         hasPrimaryKey = cols.contains { $0.isPrimaryKey }
     }
 
+    /// First FK constraint whose source columns include `columnName`. Composite
+    /// FKs are reported on every member column so an affordance can be rendered
+    /// on each one; the caller reads referenced values out of the row by name.
+    func foreignKey(forColumn columnName: String) -> ConstraintInfo? {
+        constraints.first { $0.kind == .foreignKey && $0.columns.contains(columnName) }
+    }
+
     func setContentResult(_ result: QueryResult) {
         contentResult = result
     }

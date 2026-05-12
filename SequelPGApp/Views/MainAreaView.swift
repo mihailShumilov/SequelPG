@@ -6,6 +6,14 @@ struct MainAreaView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Object tabs (one per open table/view/function/etc.). Hidden
+            // entirely when there is nothing open — the strip is dead weight
+            // before the first navigator selection.
+            if !appVM.tabs.isEmpty {
+                ObjectTabsBar()
+                Divider()
+            }
+
             // Tab bar
             HStack(spacing: 0) {
                 ForEach(Array(AppViewModel.MainTab.allCases.enumerated()), id: \.element) { index, tab in
@@ -96,6 +104,101 @@ struct MainAreaView: View {
         case 2: return "3"
         case 3: return "4"
         default: return .return
+        }
+    }
+}
+
+/// Horizontal strip of object tabs above the main Structure/Content/Definition
+/// /Query bar. Each tab represents one open `DBObject` with its own per-tab
+/// snapshot of filters, pagination, sort, and content. FK navigation always
+/// opens a new tab; navigator selection of an already-open object reactivates
+/// the existing tab.
+private struct ObjectTabsBar: View {
+    @Environment(AppViewModel.self) private var appVM
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 1) {
+                ForEach(appVM.tabs) { tab in
+                    ObjectTabChip(tab: tab)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+}
+
+private struct ObjectTabChip: View {
+    let tab: ObjectTab
+    @Environment(AppViewModel.self) private var appVM
+    @State private var isHovered = false
+
+    private var isActive: Bool { appVM.activeTabId == tab.id }
+
+    private var title: String {
+        // Drop the schema prefix for the `public` schema — that's the noisy
+        // default in most Postgres setups. Keep the qualified name otherwise
+        // so cross-schema tabs read unambiguously in the strip.
+        tab.dbObject.schema == "public"
+            ? tab.dbObject.name
+            : "\(tab.dbObject.schema).\(tab.dbObject.name)"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(.callout))
+                .fontWeight(isActive ? .semibold : .regular)
+                .foregroundStyle(isActive ? Color.primary : Color.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Button {
+                appVM.closeTab(tab.id)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(isHovered || isActive ? Color.primary.opacity(0.7) : Color.clear)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Close tab")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .frame(minWidth: 80, maxWidth: 220)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(isActive ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.15), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { appVM.activateTab(tab.id) }
+        .onHover { isHovered = $0 }
+        .accessibilityLabel("Tab: \(title)")
+        .accessibilityHint(isActive ? "Active tab. Click \u{00D7} to close." : "Click to activate. Click \u{00D7} to close.")
+    }
+
+    /// Small visual cue for the object kind in the tab chip. Keeps tables
+    /// distinguishable from views/functions/types at a glance.
+    private var icon: String {
+        switch tab.dbObject.type {
+        case .table, .foreignTable: return "tablecells"
+        case .view, .materializedView: return "doc.text.magnifyingglass"
+        case .function, .procedure, .triggerFunction, .aggregate: return "function"
+        case .sequence: return "number"
+        case .type, .domain: return "shippingbox"
+        default: return "circle.dotted"
         }
     }
 }
