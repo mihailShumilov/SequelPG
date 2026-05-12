@@ -193,7 +193,14 @@ struct NavigatorView: View {
         return List(selection: Binding<DBObject?>(
             get: { navigatorVM.selectedObject },
             set: { obj in
-                if let obj { Task { await appVM.selectObject(obj) } }
+                guard let obj, obj != navigatorVM.selectedObject else { return }
+                // Apply the selection synchronously so the List's `get` reads
+                // the new value on its next pass. Without this, the brief gap
+                // before the async Task runs makes SwiftUI think the selection
+                // bounced back to the old value and collapse the surrounding
+                // DisclosureGroups. Catalog queries still happen async.
+                navigatorVM.selectedObject = obj
+                Task { await appVM.selectObject(obj) }
             }
         )) {
             ForEach(navigatorVM.databases, id: \.self) { db in
@@ -210,8 +217,9 @@ struct NavigatorView: View {
     private func databaseNode(_ db: String) -> some View {
         let isConnected = db == navigatorVM.connectedDatabase
         let schemas = navigatorVM.schemas(for: db)
+        let binding = dbExpansionBinding(db)
         DisclosureGroup(
-            isExpanded: dbExpansionBinding(db)
+            isExpanded: binding
         ) {
             if schemas.isEmpty, !navigatorVM.hasSchemasLoaded(for: db) {
                 HStack(spacing: 6) {
@@ -238,6 +246,8 @@ struct NavigatorView: View {
                 Image(systemName: "cylinder.split.1x2")
                     .foregroundStyle(isConnected ? .green : .secondary)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { binding.wrappedValue.toggle() }
             .contextMenu {
                 if !isConnected {
                     Button("Switch to \(db)") {
@@ -264,8 +274,9 @@ struct NavigatorView: View {
 
     @ViewBuilder
     private func schemaNode(db: String, schema: String) -> some View {
+        let binding = schemaExpansionBinding(db, schema)
         DisclosureGroup(
-            isExpanded: schemaExpansionBinding(db, schema)
+            isExpanded: binding
         ) {
             // Core categories always visible
             ForEach(navigatorVM.coreCategories, id: \.self) { category in
@@ -286,6 +297,8 @@ struct NavigatorView: View {
             }
         } label: {
             Label(schema, systemImage: "folder")
+                .contentShape(Rectangle())
+                .onTapGesture { binding.wrappedValue.toggle() }
                 .contextMenu {
                     Button("New Table...") {
                         createTableSchema = schema
@@ -328,9 +341,10 @@ struct NavigatorView: View {
     @ViewBuilder
     private func categoryNode(db: String, schema: String, category: ObjectCategory) -> some View {
         let objects = navigatorVM.objects(for: db, schema: schema, category: category)
+        let binding = categoryExpansionBinding(db, schema, category)
 
         DisclosureGroup(
-            isExpanded: categoryExpansionBinding(db, schema, category)
+            isExpanded: binding
         ) {
             ForEach(objects) { obj in
                 Label(obj.name, systemImage: category.icon)
@@ -379,6 +393,8 @@ struct NavigatorView: View {
             } icon: {
                 Image(systemName: category.icon)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { binding.wrappedValue.toggle() }
         }
     }
 

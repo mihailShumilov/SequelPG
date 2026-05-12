@@ -331,8 +331,16 @@ struct CascadeDeleteBuilder {
     }
 
     func selectObject(_ object: DBObject) async {
-        guard navigatorVM.selectedObject != object else { return }
-        navigatorVM.selectedObject = object
+        // Sync-update the model so the List's selection binding returns the
+        // new object on its very next read. Without this, the binding's
+        // `get` returns the old selection during the brief gap between the
+        // setter and the Task body running, which makes the List "roll back"
+        // its visual state and collapses parent DisclosureGroups.
+        // We *don't* early-return when the object is already selected —
+        // callers from the navigator binding may have pre-set it.
+        if navigatorVM.selectedObject != object {
+            navigatorVM.selectedObject = object
+        }
         tableVM.clear()
 
         // If no object-specific tab is active, switch to an appropriate tab.
