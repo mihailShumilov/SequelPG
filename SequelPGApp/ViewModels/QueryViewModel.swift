@@ -98,6 +98,15 @@ import Foundation
         pattern: #"(?i)\bFROM\s+(?:(?:"([^"]+)"|([^\s".,;()\[\]]+))\.)?(?:"([^"]+)"|([^\s".,;()\[\]]+))"#
     )
 
+    /// Memoizes the last `parseTableFromQuery()` answer so repeated reads off
+    /// the same `queryText` (e.g., from `executeQuery` and from any UI-side
+    /// editability gate that re-evaluates the parse) don't re-run the regex.
+    /// Marked `@ObservationIgnored` because SwiftUI observation churn on this
+    /// cache would be counterproductive — invalidation is keyed on the actual
+    /// query text, not on access.
+    @ObservationIgnored private var _parsedTableCacheKey: String?
+    @ObservationIgnored private var _parsedTableCacheValue: (schema: String, table: String)?
+
     /// Attempts to extract a single table reference from a simple SELECT query.
     /// Returns nil for JOINs, subqueries, or queries without a FROM clause.
     /// Also returns nil for CTEs (`WITH ... SELECT`), `UNION`, `UPDATE ... RETURNING`,
@@ -106,6 +115,17 @@ import Foundation
         let trimmed = queryText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
+        if let cacheKey = _parsedTableCacheKey, cacheKey == trimmed {
+            return _parsedTableCacheValue
+        }
+
+        let result = computeParsedTable(trimmed: trimmed)
+        _parsedTableCacheKey = trimmed
+        _parsedTableCacheValue = result
+        return result
+    }
+
+    private func computeParsedTable(trimmed: String) -> (schema: String, table: String)? {
         // Reject queries with JOINs or subqueries
         let upper = trimmed.uppercased()
         if upper.contains(" JOIN ") || upper.contains("(SELECT") {

@@ -13,6 +13,12 @@ struct StructureTabView: View {
     @State private var dropConfirmConstraint: ConstraintInfo?
     @State private var dropConfirmTrigger: TriggerInfo?
 
+    /// Cached background color. `Color(nsColor:)` allocates a fresh wrapper on
+    /// every call, and the index/constraint/trigger/partition sections each
+    /// render N rows that all wanted the same control-background tone — that
+    /// added up to dozens of identical Color allocations per redraw.
+    private static let rowBackground = Color(nsColor: .controlBackgroundColor)
+
     // Inline editing state
     @State private var editingField: (columnName: String, field: EditableField)?
     @State private var editingText: String = ""
@@ -190,7 +196,11 @@ struct StructureTabView: View {
                 .width(min: 60, ideal: 80, max: 100)
             }
             .tableStyle(.bordered(alternatesRowBackgrounds: true))
-            .frame(minHeight: 160, idealHeight: CGFloat(120 + tableVM.columns.count * 22))
+            // Cap ideal height so wide tables (hundreds of columns) don't ask
+            // SwiftUI Table to render every row up-front — Table doesn't
+            // virtualize columns, so a 4 000 pt ideal height on a 200-column
+            // schema forced eager layout of the entire grid.
+            .frame(minHeight: 160, idealHeight: CGFloat(min(120 + tableVM.columns.count * 22, 600)))
         }
     }
 
@@ -257,7 +267,7 @@ struct StructureTabView: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Self.rowBackground)
         .cornerRadius(4)
     }
 
@@ -303,7 +313,7 @@ struct StructureTabView: View {
                     }
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(Self.rowBackground)
                     .cornerRadius(4)
                 }
             }
@@ -361,7 +371,7 @@ struct StructureTabView: View {
                     }
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(Self.rowBackground)
                     .cornerRadius(4)
                 }
             }
@@ -384,7 +394,7 @@ struct StructureTabView: View {
                 }
                 .padding(.vertical, 3)
                 .padding(.horizontal, 8)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(Self.rowBackground)
                 .cornerRadius(4)
             }
         }

@@ -45,13 +45,17 @@ final class SQLTextStorage: NSTextStorage {
         // Guard against re-entrancy: attribute changes during highlighting
         // trigger another processEditing round; skip it to avoid infinite loops.
         guard !isHighlighting else { return }
+        // Re-tokenizing the whole document on every attribute-only edit is
+        // wasted work — SQL tokens depend on character content, not on
+        // highlight colors. Limit the expensive tokenize+attribute pass to
+        // actual character changes (typing, paste, programmatic replace).
+        guard mask.contains(.editedCharacters) else { return }
+
         isHighlighting = true
         defer { isHighlighting = false }
         applyHighlighting()
 
-        if mask.contains(.editedCharacters) {
-            onChange?(string)
-        }
+        onChange?(string)
     }
 
     private func applyHighlighting() {

@@ -159,6 +159,14 @@ struct CascadeDeleteBuilder {
     var tabs: [ObjectTab] = []
     var activeTabId: UUID?
 
+    /// Maximum number of open object tabs. Each tab's snapshot retains a full
+    /// `QueryResult` (rows + columns) plus columns/indexes/constraints/triggers
+    /// metadata — visiting dozens of large tables would otherwise pile up
+    /// megabytes of String data in `tabs` for the whole session. We trim the
+    /// oldest non-active tab when the count exceeds this cap; the most recent
+    /// activity always survives.
+    static let maxOpenTabs = 12
+
     // Database-tools sheets (Extensions / Roles / Function Library)
     var showExtensionsSheet = false
     var showRolesSheet = false
@@ -375,6 +383,7 @@ struct CascadeDeleteBuilder {
         }
         tabs.append(tab)
         activeTabId = tab.id
+        trimOldestNonActiveTab()
 
         // Hydrate tableVM into the new tab's initial empty state. Restoring
         // an empty tab clears stale columns/contentResult from the previous
@@ -445,6 +454,18 @@ struct CascadeDeleteBuilder {
         activeTabId = nil
         tableVM.clear()
         navigatorVM.selectedObject = nil
+    }
+
+    /// Drops the oldest tab when `tabs.count` exceeds `maxOpenTabs`. The active
+    /// tab is exempt — losing the *current* tab while the user is working in it
+    /// would be jarring. Each tab snapshot can carry megabytes of `QueryResult`
+    /// String data, so this keeps a long browsing session from accumulating
+    /// retention forever.
+    private func trimOldestNonActiveTab() {
+        while tabs.count > Self.maxOpenTabs {
+            guard let victim = tabs.firstIndex(where: { $0.id != activeTabId }) else { break }
+            tabs.remove(at: victim)
+        }
     }
 
     /// Writes the currently-displayed `tableVM` state into the active tab's
@@ -669,8 +690,25 @@ struct CascadeDeleteBuilder {
     }
 
     func selectRow(index: Int, columns: [String], values: [CellValue]) {
+        // Short-circuit when the user re-clicks the same row that's already
+        // selected — the AppKit grid fires this on every click whether the
+        // selection changed or not, and rebuilding the row-data array (plus
+        // the observation churn it kicks off in InspectorView) was visible
+        // when the Inspector was open on wide tables.
+        if tableVM.selectedRowIndex == index,
+           let existing = tableVM.selectedRowData,
+           existing.count == columns.count,
+           zip(existing, values).allSatisfy({ $0.value == $1 })
+        {
+            return
+        }
         tableVM.selectedRowIndex = index
-        tableVM.selectedRowData = zip(columns, values).map { (column: $0.0, value: $0.1) }
+        var rowData: [(column: String, value: CellValue)] = []
+        rowData.reserveCapacity(columns.count)
+        for (col, val) in zip(columns, values) {
+            rowData.append((column: col, value: val))
+        }
+        tableVM.selectedRowData = rowData
     }
 
     func clearSelectedRow() {

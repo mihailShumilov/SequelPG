@@ -7,6 +7,10 @@ struct ContentTabView: View {
 
     @State private var showSQLPreview = false
 
+    /// Cached background to avoid re-allocating Color wrappers in each redraw
+    /// of the spinner backdrop and the filter bar.
+    private static let chromeBackground = Color(nsColor: .controlBackgroundColor)
+
     var body: some View {
         @Bindable var tableVM = tableVM
         VStack(spacing: 0) {
@@ -79,7 +83,7 @@ struct ContentTabView: View {
                 if tableVM.isLoadingContent, tableVM.contentResult == nil {
                     ProgressView("Loading...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color(nsColor: .controlBackgroundColor))
+                        .background(Self.chromeBackground)
                 }
             }
 
@@ -163,9 +167,13 @@ struct ContentTabView: View {
 
     private var filterBar: some View {
         @Bindable var tableVM = tableVM
+        // Materialize the column-name list once per filter-bar render rather
+        // than rebuilding it inside every filter row's Picker. For a 100-col
+        // table with 3 filters that was 300 Picker items rebuilt per redraw.
+        let columnNames = tableVM.columns.map(\.name)
         return VStack(spacing: 6) {
             ForEach($tableVM.filters) { $filter in
-                filterRow(filter: $filter)
+                filterRow(filter: $filter, columnNames: columnNames)
             }
 
             HStack(spacing: 8) {
@@ -195,16 +203,17 @@ struct ContentTabView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Self.chromeBackground)
     }
 
-    private func filterRow(filter: Binding<ContentFilter>) -> some View {
+    private func filterRow(filter: Binding<ContentFilter>, columnNames: [String]) -> some View {
         HStack(spacing: 6) {
-            // Column picker
+            // Column picker — column names are passed in from `filterBar` so
+            // they're materialized once per redraw rather than per filter row.
             Picker("", selection: filter.column) {
                 Text("Any Column").tag("")
-                ForEach(tableVM.columns, id: \.name) { col in
-                    Text(col.name).tag(col.name)
+                ForEach(columnNames, id: \.self) { name in
+                    Text(name).tag(name)
                 }
             }
             .frame(width: 140)

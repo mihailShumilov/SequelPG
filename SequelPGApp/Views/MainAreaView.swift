@@ -4,6 +4,8 @@ struct MainAreaView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(NavigatorViewModel.self) var navigatorVM
 
+    fileprivate static let chromeBackground = Color(nsColor: .controlBackgroundColor)
+
     var body: some View {
         VStack(spacing: 0) {
             // Object tabs (one per open table/view/function/etc.). Hidden
@@ -47,7 +49,7 @@ struct MainAreaView: View {
                 }
                 Spacer()
             }
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(MainAreaView.chromeBackground)
 
             Divider()
 
@@ -127,7 +129,7 @@ private struct ObjectTabsBar: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(MainAreaView.chromeBackground)
     }
 }
 

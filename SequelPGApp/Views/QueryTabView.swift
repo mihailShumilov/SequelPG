@@ -188,38 +188,57 @@ struct QueryTabView: View {
     }
 }
 
-/// Wrapper that gives each row a stable identity for use with Table.
-struct IdentifiedRow: Identifiable {
-    let id: Int // row index
-    let cells: [CellValue]
-}
-
-/// Wrapper that gives each column a stable identity for TableColumnForEach.
-struct IdentifiedColumn: Identifiable {
-    let id: Int // column index
+/// Per-column metadata derived once when a `ResultsGridView` is constructed.
+/// Caching here means `cellView` doesn't redo the `String.lowercased()` /
+/// type-class lookups for every visible row × column on every reload.
+private struct GridColumnMeta {
+    let id: Int
     let name: String
+    let info: ColumnInfo?
+    let headerTitle: String
+    let editorKind: FieldEditorKindResolved
+    let foreignKey: ConstraintInfo?
 }
 
-/// Comparator that sorts IdentifiedRow values by a specific column index.
-struct ColumnSortComparator: SortComparator {
-    var columnIndex: Int
-    var columnName: String
-    var order: SortOrder
+/// `FieldEditorKind` derives from a cell's value (specifically the long-text
+/// branch which inspects character count). For pre-computed column metadata
+/// we resolve everything *except* the value-dependent fallback; cells then
+/// pick the final kind by checking their own length on the long-text edge.
+private enum FieldEditorKindResolved {
+    case json
+    case array
+    case boolean
+    /// Plain text: may degrade to `.longText` per cell on the cell's own
+    /// length / multi-line content. Carried here so cells don't need to
+    /// re-call `dataType.lowercased()` to figure it out.
+    case plainOrLong
 
-    func compare(_ lhs: IdentifiedRow, _ rhs: IdentifiedRow) -> ComparisonResult {
-        let lVal = lhs.cells[columnIndex].displayString
-        let rVal = rhs.cells[columnIndex].displayString
-        let result = lVal.localizedStandardCompare(rVal)
-        return order == .forward ? result : result.reversed
-    }
-}
-
-private extension ComparisonResult {
-    var reversed: ComparisonResult {
+    func resolved(forValue value: String) -> FieldEditorKind {
         switch self {
-        case .orderedAscending: return .orderedDescending
-        case .orderedDescending: return .orderedAscending
-        case .orderedSame: return .orderedSame
+        case .json: return .json
+        case .array: return .array
+        case .boolean: return .boolean
+        case .plainOrLong:
+            return value.utf16.count > FieldEditorKind.longTextThreshold || value.contains("\n")
+                ? .longText
+                : .plain
+        }
+    }
+
+    init(udtName: String?, dataType: String) {
+        if let udt = udtName?.lowercased(), udt.hasPrefix("_") {
+            self = .array
+            return
+        }
+        let normalized = dataType.lowercased().trimmingCharacters(in: .whitespaces)
+        if normalized == "json" || normalized == "jsonb" {
+            self = .json
+        } else if normalized == "boolean" || normalized == "bool" {
+            self = .boolean
+        } else if normalized.hasSuffix("[]") || normalized == "array" || normalized.hasPrefix("_") {
+            self = .array
+        } else {
+            self = .plainOrLong
         }
     }
 }
@@ -254,12 +273,14 @@ struct ResultsGridView: View {
     @State private var editingCell: (row: Int, col: Int)?
     @State private var editingText: String = ""
     @State private var originalEditText: String = ""
-    @State private var sortOrder: [ColumnSortComparator] = []
     @State private var fieldEditorCell: (row: Int, col: Int)?
     private let columnMinWidth: CGFloat = 100
     private let columnsByName: [String: ColumnInfo]
-    private let identifiedRows: [IdentifiedRow]
-    private let identifiedColumns: [IdentifiedColumn]
+    /// Per-column derived metadata. Indexed by display column position (i.e.
+    /// the same index passed to `cellView(rowIdx:colIdx:)`). Computed once at
+    /// init so each cell render is a single subscript instead of repeated
+    /// `dataType.lowercased()` / set lookups / FK-by-name dictionary walks.
+    private let columnMeta: [GridColumnMeta]
 
     init(
         result: QueryResult,
@@ -295,20 +316,38 @@ struct ResultsGridView: View {
         self.onInsertCancel = onInsertCancel
         self.foreignKeyForColumn = foreignKeyForColumn
         self.onFKJump = onFKJump
-        self.columnsByName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
-        self.identifiedRows = result.rows.enumerated().map { IdentifiedRow(id: $0.offset, cells: $0.element) }
-        self.identifiedColumns = result.columns.enumerated().map { IdentifiedColumn(id: $0.offset, name: $0.element) }
+        let byName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        self.columnsByName = byName
+        self.columnMeta = result.columns.enumerated().map { (idx, name) in
+            let info = byName[name]
+            let headerTitle: String
+            if let info {
+                let short = ColumnInfo.shortTypeName(dataType: info.dataType, udtName: info.udtName)
+                headerTitle = short.isEmpty ? name : "\(name)  ·  \(short)"
+            } else {
+                headerTitle = name
+            }
+            return GridColumnMeta(
+                id: idx,
+                name: name,
+                info: info,
+                headerTitle: headerTitle,
+                editorKind: info.map { FieldEditorKindResolved(udtName: $0.udtName, dataType: $0.dataType) } ?? .plainOrLong,
+                foreignKey: foreignKeyForColumn?(name)
+            )
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             DataGridView(
-                rowCount: identifiedRows.count,
-                columns: identifiedColumns.map { col in
+                rowCount: result.rows.count,
+                resultRevision: result.revision,
+                columns: columnMeta.map { meta in
                     DataGridView.Column(
-                        id: col.id,
-                        title: headerTitle(for: col.name),
-                        rawName: col.name,
+                        id: meta.id,
+                        title: meta.headerTitle,
+                        rawName: meta.name,
                         minWidth: columnMinWidth
                     )
                 },
@@ -420,10 +459,9 @@ struct ResultsGridView: View {
 
     /// Returns the FieldEditorKind for a column index, or .plain if no column info.
     private func editorKind(for colIdx: Int, cell: CellValue) -> FieldEditorKind {
-        let colName = colIdx < result.columns.count ? result.columns[colIdx] : ""
-        guard let info = columnsByName[colName] else { return .plain }
+        guard colIdx < columnMeta.count else { return .plain }
         let value = cell.isNull ? "" : cell.displayString
-        return FieldEditorKind(udtName: info.udtName, dataType: info.dataType, value: value)
+        return columnMeta[colIdx].editorKind.resolved(forValue: value)
     }
 
     /// Whether this column should use the rich popover editor instead of inline TextField.
@@ -438,10 +476,11 @@ struct ResultsGridView: View {
     private func cellView(rowIdx: Int, colIdx: Int) -> some View {
         // Guard against stale row/column IDs that the Table may request
         // after the result changes (e.g., when switching tabs).
-        if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count {
+        if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count, colIdx < columnMeta.count {
             let cell = result.rows[rowIdx][colIdx]
-            let kind = editorKind(for: colIdx, cell: cell)
-            let renderKind = CellRenderKind.from(column: columnInfo(for: colIdx), cell: cell)
+            let meta = columnMeta[colIdx]
+            let kind = meta.editorKind.resolved(forValue: cell.isNull ? "" : cell.displayString)
+            let renderKind = CellRenderKind.from(column: meta.info, cell: cell)
             if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
                 TextField("NULL", text: $editingText)
                     .textFieldStyle(.plain)
@@ -459,7 +498,7 @@ struct ResultsGridView: View {
                         }
                     }
             } else {
-                let fkInfo = foreignKeyForColumn?(result.columns[colIdx])
+                let fkInfo = meta.foreignKey
                 HStack(spacing: 4) {
                     if renderKind.alignment == .trailing { Spacer(minLength: 0) }
                     CellTypeBadge(kind: kind)
@@ -492,9 +531,11 @@ struct ResultsGridView: View {
     }
 
     /// Returns the ColumnInfo for a column index by name, if available.
+    /// Kept for callers that look up by index; cell rendering reads `columnMeta`
+    /// directly so it doesn't pay the dictionary-lookup cost per cell.
     private func columnInfo(for colIdx: Int) -> ColumnInfo? {
-        guard colIdx < result.columns.count else { return nil }
-        return columnsByName[result.columns[colIdx]]
+        guard colIdx < columnMeta.count else { return nil }
+        return columnMeta[colIdx].info
     }
 
     /// Renders the cell's text using a typography appropriate to its category:
@@ -551,21 +592,11 @@ struct ResultsGridView: View {
         }
     }
 
-    /// Builds the column header label, appending a short type tag after the
-    /// column name (e.g. "user_id · text", "amount · int4"). When the column's
-    /// type isn't known (free-form queries with no editable table context),
-    /// falls back to just the column name.
-    private func headerTitle(for columnName: String) -> String {
-        guard let info = columnsByName[columnName] else { return columnName }
-        let short = ColumnInfo.shortTypeName(dataType: info.dataType, udtName: info.udtName)
-        if short.isEmpty { return columnName }
-        return "\(columnName)  ·  \(short)"
-    }
-
     @ViewBuilder
     private func fieldEditorPopover(rowIdx: Int, colIdx: Int, cell: CellValue) -> some View {
-        let colName = colIdx < result.columns.count ? result.columns[colIdx] : "Column"
-        let info = columns.first(where: { $0.name == colName })
+        let meta = colIdx < columnMeta.count ? columnMeta[colIdx] : nil
+        let colName = meta?.name ?? "Column"
+        let info = meta?.info
         FieldEditorView(
             columnName: colName,
             dataType: info?.dataType ?? "text",
@@ -748,6 +779,11 @@ struct DataGridView: NSViewRepresentable {
     }
 
     let rowCount: Int
+    /// Stable identity of the underlying result. Bumped whenever rows change
+    /// (new query, inline cell edit, etc.). The Coordinator uses this to skip
+    /// the expensive `reloadData()` pass when only selection or unrelated
+    /// SwiftUI inputs changed.
+    let resultRevision: UUID
     let columns: [Column]
     @Binding var selectedRowIndex: Int?
     var sortColumnName: String?
@@ -818,7 +854,7 @@ struct DataGridView: NSViewRepresentable {
         coordinator.parent = self
 
         // Rebuild columns only if the column set actually changed — column
-        // identity is the IdentifiedColumn id (its index in the result).
+        // identity is the column index in the result.
         let currentIDs = tableView.tableColumns.compactMap { Int($0.identifier.rawValue) }
         let desiredIDs = columns.map(\.id)
         let columnsChanged = currentIDs != desiredIDs ||
@@ -829,10 +865,23 @@ struct DataGridView: NSViewRepresentable {
             for col in columns { tableView.addTableColumn(makeColumn(for: col)) }
         }
 
-        // Reload data. NSTableView reuses cell views, but our cell content is
-        // generated by a SwiftUI closure that captures fresh state, so we need
-        // to redraw to pick up edits/inserts/sort changes.
-        tableView.reloadData()
+        // SwiftUI calls updateNSView whenever any observed property the parent
+        // reads changes — selection, loading flags, filter SQL, etc. Reloading
+        // every cell on every one of those was the dominant cost of the grid.
+        // Skip reloadData when neither the columns nor the underlying result
+        // revision changed; selection/sort sync below still runs.
+        let dataChanged = columnsChanged
+            || coordinator.lastReloadRowCount != rowCount
+            || coordinator.lastReloadResultRevision != resultRevision
+            || coordinator.lastReloadSortKey != (sortColumnName ?? "")
+            || coordinator.lastReloadSortAscending != sortAscending
+        if dataChanged {
+            tableView.reloadData()
+            coordinator.lastReloadRowCount = rowCount
+            coordinator.lastReloadResultRevision = resultRevision
+            coordinator.lastReloadSortKey = sortColumnName ?? ""
+            coordinator.lastReloadSortAscending = sortAscending
+        }
 
         // Sync selection from the binding into the table. The flag suppresses
         // the resulting tableViewSelectionDidChange callback so we don't write
@@ -845,16 +894,19 @@ struct DataGridView: NSViewRepresentable {
             coordinator.isSyncingFromSwiftUI = false
         }
 
-        // Sort indicator on the header.
-        for col in tableView.tableColumns {
-            tableView.setIndicatorImage(nil, in: col)
-        }
-        if let name = sortColumnName,
-           let col = tableView.tableColumns.first(where: { ($0.headerCell as? NSTableHeaderCell)?.stringValue.hasPrefix(name) == true || coordinator.rawName(forColumnId: Int($0.identifier.rawValue) ?? -1) == name })
-        {
-            let indicator = NSImage(named: sortAscending ? "NSAscendingSortIndicator" : "NSDescendingSortIndicator")
-            tableView.setIndicatorImage(indicator, in: col)
-            tableView.highlightedTableColumn = col
+        // Sort indicator on the header. Cheap to refresh unconditionally — it
+        // touches a handful of NSTableColumn objects, not the row body.
+        if columnsChanged || dataChanged {
+            for col in tableView.tableColumns {
+                tableView.setIndicatorImage(nil, in: col)
+            }
+            if let name = sortColumnName,
+               let col = tableView.tableColumns.first(where: { ($0.headerCell as? NSTableHeaderCell)?.stringValue.hasPrefix(name) == true || coordinator.rawName(forColumnId: Int($0.identifier.rawValue) ?? -1) == name })
+            {
+                let indicator = NSImage(named: sortAscending ? "NSAscendingSortIndicator" : "NSDescendingSortIndicator")
+                tableView.setIndicatorImage(indicator, in: col)
+                tableView.highlightedTableColumn = col
+            }
         }
     }
 
@@ -880,6 +932,14 @@ struct DataGridView: NSViewRepresentable {
         // resulting tableViewSelectionDidChange notification doesn't bounce
         // back through the binding mid-view-update.
         var isSyncingFromSwiftUI = false
+
+        // Last-reload signature. updateNSView compares against the new values
+        // and only invokes `reloadData()` when the *data* actually changed —
+        // selection/binding-only edits skip the expensive cell rebuild.
+        var lastReloadRowCount: Int = -1
+        var lastReloadResultRevision: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        var lastReloadSortKey: String = ""
+        var lastReloadSortAscending: Bool = true
 
         init(_ parent: DataGridView) {
             self.parent = parent

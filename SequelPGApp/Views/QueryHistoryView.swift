@@ -5,6 +5,8 @@ struct QueryHistoryView: View {
     @Environment(QueryHistoryViewModel.self) var historyVM
     @Environment(QueryViewModel.self) var queryVM
 
+    private static let toolbarBackground = Color(nsColor: .controlBackgroundColor)
+
     var body: some View {
         // `filteredEntries` lives on the view model so the filter runs only
         // when `entries` or `filterSource` changes, not on every redraw.
@@ -79,7 +81,7 @@ struct QueryHistoryView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Self.toolbarBackground)
     }
 
     // MARK: - Empty State

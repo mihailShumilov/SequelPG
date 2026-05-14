@@ -7,13 +7,8 @@ struct InspectorView: View {
     @State private var editingText: String = ""
     @State private var showDeleteConfirmation = false
     @State private var fieldEditorColumn: String?
+    @State private var columnInfoIndex: [String: ColumnInfo] = [:]
     @FocusState private var editFieldFocused: Bool
-
-    /// O(1) column metadata lookup — the previous `first(where:)` call inside
-    /// the per-row ForEach was O(columns × rows) on every render.
-    private var columnInfoByName: [String: ColumnInfo] {
-        Dictionary(uniqueKeysWithValues: tableVM.columns.map { ($0.name, $0) })
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -73,7 +68,6 @@ struct InspectorView: View {
                     .accessibilityLabel("Dismiss row detail")
                 }
 
-                let columnInfoIndex = columnInfoByName
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
@@ -164,6 +158,15 @@ struct InspectorView: View {
             Spacer()
         }
         .padding()
+        // Rebuild the O(1) column lookup only when the columns array actually
+        // changes. The previous implementation was a computed property, which
+        // SwiftUI re-evaluated on every body pass — and Inspector's body fires
+        // for many unrelated `tableVM` mutations (selection, page, sort), so
+        // the dictionary was being rebuilt dozens of times per second on a
+        // wide table.
+        .onAppear { rebuildColumnIndexIfNeeded() }
+        .onChange(of: tableVM.columns.count) { _, _ in rebuildColumnIndexIfNeeded() }
+        .onChange(of: tableVM.selectedObjectName) { _, _ in rebuildColumnIndexIfNeeded() }
         .alert("Delete Row?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -172,6 +175,20 @@ struct InspectorView: View {
         } message: {
             Text("This row will be permanently deleted from the database.")
         }
+    }
+
+    private func rebuildColumnIndexIfNeeded() {
+        // Reseed only when the columns set really changed. Tracking the count
+        // and the active object name catches add/drop column DDL and tab
+        // switches; a true content rebuild of the dictionary still runs only
+        // when the column array's identity differs from the stored snapshot.
+        let cols = tableVM.columns
+        if columnInfoIndex.count == cols.count,
+           cols.allSatisfy({ columnInfoIndex[$0.name]?.dataType == $0.dataType })
+        {
+            return
+        }
+        columnInfoIndex = Dictionary(cols.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private var inspectorCanDelete: Bool {

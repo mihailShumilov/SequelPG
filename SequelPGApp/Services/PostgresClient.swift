@@ -41,17 +41,20 @@ actor DatabaseClient: PostgresClientProtocol {
     private var runTask: Task<Void, Never>?
     private let sshTunnel = SSHTunnelService()
 
-    // Introspection cache
+    // Introspection caches. Bounded LRU so a long session browsing many tables
+    // can't accumulate unbounded ColumnInfo / DBObject arrays — the per-entry
+    // payload is small individually but adds up over hundreds of visited
+    // tables and competes with the active result set for memory.
     private var cachedServerVersion: Int?
     private var cachedSchemas: [String]?
-    private var cachedTables: [String: [DBObject]] = [:]
-    private var cachedViews: [String: [DBObject]] = [:]
-    private var cachedMatViews: [String: [DBObject]] = [:]
-    private var cachedFunctions: [String: [DBObject]] = [:]
-    private var cachedSequences: [String: [DBObject]] = [:]
-    private var cachedTypes: [String: [DBObject]] = [:]
-    private var cachedColumns: [String: [ColumnInfo]] = [:]
-    private var cachedPrimaryKeys: [String: [String]] = [:]
+    private var cachedTables = BoundedLRU<String, [DBObject]>(capacity: 64)
+    private var cachedViews = BoundedLRU<String, [DBObject]>(capacity: 64)
+    private var cachedMatViews = BoundedLRU<String, [DBObject]>(capacity: 64)
+    private var cachedFunctions = BoundedLRU<String, [DBObject]>(capacity: 64)
+    private var cachedSequences = BoundedLRU<String, [DBObject]>(capacity: 64)
+    private var cachedTypes = BoundedLRU<String, [DBObject]>(capacity: 64)
+    private var cachedColumns = BoundedLRU<String, [ColumnInfo]>(capacity: 128)
+    private var cachedPrimaryKeys = BoundedLRU<String, [String]>(capacity: 128)
 
     var isConnected: Bool {
         client != nil
@@ -321,7 +324,15 @@ actor DatabaseClient: PostgresClientProtocol {
     }
 
     private static func truncate(_ s: String) -> String {
-        s.count > 10_000 ? String(s.prefix(10_000)) + "…" : s
+        // s.utf8.count is O(1) on native Swift strings, whereas s.count is O(N)
+        // because Character grapheme-cluster counting walks the whole scalar
+        // view. This runs once per cell for every page load — 6,000+ calls per
+        // 200×30 page — so the O(N) form was a measurable hit on large blobs.
+        // The 10 000-char cap is a soft display cap; using the byte count
+        // instead of grapheme count means a string with multi-byte characters
+        // gets truncated slightly sooner, which is acceptable for a preview.
+        guard s.utf8.count > 10_000 else { return s }
+        return String(s.prefix(10_000)) + "…"
     }
 
     /// Recursive binary decoder. Maps PG's wire format for one value of `type`
@@ -926,8 +937,8 @@ actor DatabaseClient: PostgresClientProtocol {
 
     func listTables(schema: String) async throws -> [DBObject] {
         return try await cachedList(
-            read: { self.cachedTables[schema] },
-            write: { self.cachedTables[schema] = $0 },
+            read: { self.cachedTables.get(schema) },
+            write: { self.cachedTables.set(schema, $0) },
             schema: schema, label: "tables", type: .table,
             query: """
                 SELECT table_name
@@ -940,8 +951,8 @@ actor DatabaseClient: PostgresClientProtocol {
 
     func listViews(schema: String) async throws -> [DBObject] {
         return try await cachedList(
-            read: { self.cachedViews[schema] },
-            write: { self.cachedViews[schema] = $0 },
+            read: { self.cachedViews.get(schema) },
+            write: { self.cachedViews.set(schema, $0) },
             schema: schema, label: "views", type: .view,
             query: """
                 SELECT table_name
@@ -954,8 +965,8 @@ actor DatabaseClient: PostgresClientProtocol {
 
     func listMaterializedViews(schema: String) async throws -> [DBObject] {
         return try await cachedList(
-            read: { self.cachedMatViews[schema] },
-            write: { self.cachedMatViews[schema] = $0 },
+            read: { self.cachedMatViews.get(schema) },
+            write: { self.cachedMatViews.set(schema, $0) },
             schema: schema, label: "materialized views", type: .materializedView,
             query: """
                 SELECT matviewname
@@ -967,7 +978,7 @@ actor DatabaseClient: PostgresClientProtocol {
     }
 
     func listFunctions(schema: String) async throws -> [DBObject] {
-        if let cached = cachedFunctions[schema] { return cached }
+        if let cached = cachedFunctions.get(schema) { return cached }
         guard let client else { throw AppError.notConnected }
 
         let pgVersion = await detectServerVersion(client: client)
@@ -989,15 +1000,15 @@ actor DatabaseClient: PostgresClientProtocol {
             ORDER BY p.proname
             """
         let functions = try await fetchNamedObjects(client: client, schema: schema, query: query, type: .function)
-        cachedFunctions[schema] = functions
+        cachedFunctions.set(schema, functions)
         Log.db.info("Loaded \(functions.count) functions in schema \(schema, privacy: .public)")
         return functions
     }
 
     func listSequences(schema: String) async throws -> [DBObject] {
         return try await cachedList(
-            read: { self.cachedSequences[schema] },
-            write: { self.cachedSequences[schema] = $0 },
+            read: { self.cachedSequences.get(schema) },
+            write: { self.cachedSequences.set(schema, $0) },
             schema: schema, label: "sequences", type: .sequence,
             query: """
                 SELECT sequence_name
@@ -1010,8 +1021,8 @@ actor DatabaseClient: PostgresClientProtocol {
 
     func listTypes(schema: String) async throws -> [DBObject] {
         return try await cachedList(
-            read: { self.cachedTypes[schema] },
-            write: { self.cachedTypes[schema] = $0 },
+            read: { self.cachedTypes.get(schema) },
+            write: { self.cachedTypes.set(schema, $0) },
             schema: schema, label: "types", type: .type,
             query: """
                 SELECT t.typname
@@ -1164,7 +1175,7 @@ actor DatabaseClient: PostgresClientProtocol {
 
     func getColumns(schema: String, table: String) async throws -> [ColumnInfo] {
         let cacheKey = "\(schema).\(table)"
-        if let cached = cachedColumns[cacheKey] { return cached }
+        if let cached = cachedColumns.get(cacheKey) { return cached }
         guard let client else { throw AppError.notConnected }
 
         let pkNames = try await getPrimaryKeys(schema: schema, table: table)
@@ -1210,14 +1221,14 @@ actor DatabaseClient: PostgresClientProtocol {
                 identityGeneration: identityGeneration ?? nil
             ))
         }
-        cachedColumns[cacheKey] = columns
+        cachedColumns.set(cacheKey, columns)
         Log.db.info("Loaded \(columns.count) columns for \(cacheKey, privacy: .public)")
         return columns
     }
 
     func getPrimaryKeys(schema: String, table: String) async throws -> [String] {
         let cacheKey = "\(schema).\(table)"
-        if let cached = cachedPrimaryKeys[cacheKey] { return cached }
+        if let cached = cachedPrimaryKeys.get(cacheKey) { return cached }
         guard let client else { throw AppError.notConnected }
 
         let query: PostgresQuery = """
@@ -1237,7 +1248,7 @@ actor DatabaseClient: PostgresClientProtocol {
             let (name,) = try row.decode(String.self)
             keys.append(name)
         }
-        cachedPrimaryKeys[cacheKey] = keys
+        cachedPrimaryKeys.set(cacheKey, keys)
         Log.db.info("Loaded \(keys.count) primary keys for \(cacheKey, privacy: .public)")
         return keys
     }

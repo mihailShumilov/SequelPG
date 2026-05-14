@@ -21,8 +21,12 @@ struct QueryHistoryEntry: Identifiable {
 /// Manages query history and system query log.
 @MainActor
 @Observable final class QueryHistoryViewModel {
-    var entries: [QueryHistoryEntry] = []
-    var filterSource: QueryHistoryEntry.QuerySource?
+    var entries: [QueryHistoryEntry] = [] {
+        didSet { _filteredCache = nil }
+    }
+    var filterSource: QueryHistoryEntry.QuerySource? {
+        didSet { _filteredCache = nil }
+    }
 
     /// When true (the default), system-generated DML queries have their string
     /// literals replaced with `***` before they are stored. Protects PII from
@@ -31,11 +35,23 @@ struct QueryHistoryEntry: Identifiable {
 
     private let maxEntries = 500
 
+    /// Cached output of `filteredEntries`. The previous implementation was a
+    /// computed property — but `@Observable` doesn't memoize computed
+    /// properties, so each `body` pass that read `filteredEntries` re-walked
+    /// up to 500 entries. didSet on the inputs invalidates the cache; reads
+    /// repopulate it lazily.
+    @ObservationIgnored private var _filteredCache: [QueryHistoryEntry]?
+
     var filteredEntries: [QueryHistoryEntry] {
+        if let cached = _filteredCache { return cached }
+        let computed: [QueryHistoryEntry]
         if let filter = filterSource {
-            return entries.filter { $0.source == filter }
+            computed = entries.filter { $0.source == filter }
+        } else {
+            computed = entries
         }
-        return entries
+        _filteredCache = computed
+        return computed
     }
 
     func logQuery(
