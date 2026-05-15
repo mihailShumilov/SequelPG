@@ -11,50 +11,48 @@ struct InspectorView: View {
     @FocusState private var editFieldFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Inspector")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Inspector")
+                    .appDisplayItalic(20)
+                Spacer()
+                Text("ii.")
+                    .appMono(11, color: Theme.ink4)
+            }
+            .padding(.bottom, 8)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Theme.line).frame(height: 1)
+            }
 
             if let name = tableVM.selectedObjectName {
-                LabeledContent("Object") {
-                    Text(name)
-                        .fontWeight(.medium)
-                }
-
-                LabeledContent("Approx. Rows") {
-                    Text("\(tableVM.approximateRowCount)")
-                        .monospacedDigit()
-                }
-
-                LabeledContent("Columns") {
-                    Text("\(tableVM.selectedObjectColumnCount)")
-                        .monospacedDigit()
-                }
+                inspectorRow(label: "Object", value: name)
+                inspectorRow(label: "Approx. Rows", value: "\(tableVM.approximateRowCount)")
+                inspectorRow(label: "Columns", value: "\(tableVM.selectedObjectColumnCount)")
             } else {
                 Text("No object selected")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                    .appMono(11, color: Theme.ink4)
+                    .italic()
             }
 
             if let rowData = tableVM.selectedRowData,
                let rowIndex = tableVM.selectedRowIndex {
-                Divider()
+                DottedRule()
 
-                HStack {
+                HStack(alignment: .firstTextBaseline) {
                     Text("Row Detail")
-                        .font(.headline)
-                    Text("#\(rowIndex + 1)")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
+                        .appDisplayItalic(20)
                     Spacer()
+                    Text("#\(rowIndex + 1)")
+                        .appMono(11, color: Theme.ink4)
                     if inspectorCanDelete {
                         Button {
                             showDeleteConfirmation = true
                         } label: {
                             Image(systemName: "trash")
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Theme.rose)
+                                .font(.system(size: 11))
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.plain)
                         .accessibilityLabel("Delete row")
                         .help("Delete this row")
                     }
@@ -62,32 +60,36 @@ struct InspectorView: View {
                         appVM.clearSelectedRow()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.ink3)
+                            .font(.system(size: 12))
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Dismiss row detail")
                 }
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
                             let column = item.column
                             let value = item.value
                             let colInfo = columnInfoIndex[column]
                             let kind = inspectorEditorKind(colInfo: colInfo, value: value)
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 4) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
                                     Text(column)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(Theme.mono(size: 11))
+                                        .foregroundStyle(Theme.ink3)
+                                        .tracking(0.5)
                                     if let dt = colInfo?.dataType {
                                         Text(dt)
-                                            .font(.system(size: 9))
-                                            .padding(.horizontal, 4)
+                                            .font(Theme.mono(size: 9, weight: .medium))
+                                            .tracking(0.8)
+                                            .textCase(.uppercase)
+                                            .padding(.horizontal, 5)
                                             .padding(.vertical, 1)
-                                            .background(inspectorBadgeColor(kind).opacity(0.12))
+                                            .background(inspectorBadgeColor(kind).opacity(0.14))
                                             .foregroundStyle(inspectorBadgeColor(kind))
-                                            .cornerRadius(3)
+                                            .clipShape(.rect(cornerRadius: 3))
                                     }
                                     Spacer()
                                 }
@@ -148,7 +150,8 @@ struct InspectorView: View {
                                 }
                             }
                             if column != rowData.last?.column {
-                                Divider()
+                                DottedRule()
+                                    .padding(.vertical, 2)
                             }
                         }
                     }
@@ -157,7 +160,12 @@ struct InspectorView: View {
 
             Spacer()
         }
-        .padding()
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Theme.bg2)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Theme.line).frame(width: 1)
+        }
         // Rebuild the O(1) column lookup only when the columns array actually
         // changes. The previous implementation was a computed property, which
         // SwiftUI re-evaluated on every body pass — and Inspector's body fires
@@ -175,6 +183,24 @@ struct InspectorView: View {
         } message: {
             Text("This row will be permanently deleted from the database.")
         }
+    }
+
+    /// Single key-value row used by the table-stats block at the top of the
+    /// Inspector. Mirrors the `.insp-row` from the web design — monospaced label
+    /// on the left, monospaced value on the right, baseline-aligned.
+    @ViewBuilder
+    private func inspectorRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(Theme.mono(size: 11))
+                .foregroundStyle(Theme.ink4)
+                .tracking(0.4)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(Theme.mono(size: 12))
+                .foregroundStyle(Theme.ink)
+        }
+        .padding(.vertical, 6)
     }
 
     private func rebuildColumnIndexIfNeeded() {

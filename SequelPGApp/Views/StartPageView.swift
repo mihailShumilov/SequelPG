@@ -23,53 +23,72 @@ struct StartPageView: View {
     var body: some View {
         HStack(spacing: 0) {
             brandingColumn
-            Divider()
+            Rectangle().fill(Theme.line).frame(width: 1)
             connectionListColumn
-            Divider()
+            Rectangle().fill(Theme.line).frame(width: 1)
             detailColumn
         }
+        .background(Theme.bg)
     }
 
     // MARK: - Left Column: Branding
 
     private var brandingColumn: some View {
         @Bindable var connectionListVM = connectionListVM
-        return VStack(spacing: 12) {
-            Spacer()
-
+        return VStack(alignment: .leading, spacing: 14) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 80, height: 80)
+                .frame(width: 56, height: 56)
 
-            Text("SequelPG")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                Text("v\(version)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SequelPG")
+                    .appDisplayItalic(24)
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                    Text("v\(version) · macOS 14+")
+                        .appMono(10.5, color: Theme.ink4)
+                        .tracking(0.6)
+                }
             }
+
+            Text("MIT · No telemetry\nFree, forever")
+                .appMono(10.5, color: Theme.ink4)
+                .lineSpacing(2)
 
             Spacer()
 
-            TextField("Filter...", text: $connectionListVM.filterText)
-                .textFieldStyle(.roundedBorder)
-                .padding(.horizontal, 12)
+            TextField("Filter…", text: $connectionListVM.filterText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.ink2)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Theme.bg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Theme.line, lineWidth: 1)
+                )
 
             Button {
                 createNewProfile()
             } label: {
-                Label("New Server", systemImage: "plus")
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("New server")
+                        .font(.system(size: 12.5, weight: .semibold))
+                }
+                .foregroundStyle(Theme.onAccent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .background(Theme.accent)
+                .clipShape(.rect(cornerRadius: 6))
             }
-            .controlSize(.large)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 16)
+            .buttonStyle(.plain)
         }
-        .frame(width: 180)
-        .background(.background)
+        .padding(22)
+        .frame(width: 220)
+        .background(Theme.bg2)
     }
 
     // MARK: - Center Column: Connection List
@@ -77,13 +96,19 @@ struct StartPageView: View {
     private var connectionListColumn: some View {
         @Bindable var connectionListVM = connectionListVM
         return List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
-            HStack(spacing: 8) {
-                Image(systemName: "server.rack")
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Image(systemName: profile.useSSHTunnel ? "lock.shield.fill" : "server.rack")
+                    .foregroundStyle(Theme.ink3)
+                    .font(.system(size: 12))
                 Text(profile.name)
+                    .font(.system(size: 13))
                     .lineLimit(1)
                 Spacer()
+                Text(profile.useSSHTunnel ? "ssh" : "\(profile.port)")
+                    .font(Theme.mono(size: 10.5))
+                    .foregroundStyle(Theme.ink4)
             }
+            .padding(.vertical, 4)
             .tag(profile.id)
             .contentShape(Rectangle())
             // Two separate tap gestures race each other and cause selection
@@ -110,7 +135,20 @@ struct StartPageView: View {
             }
         }
         .listStyle(.sidebar)
-        .frame(minWidth: 250)
+        .scrollContentBackground(.hidden)
+        .background(Theme.bg)
+        .frame(minWidth: 280)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack {
+                Text("i. — saved servers")
+                    .appSectionLabel()
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            .background(Theme.bg)
+        }
         .onChange(of: connectionListVM.selectedProfileId) { _, newId in
             // Auto-save previous profile before switching
             if let prevId = previousSelectedId, prevId != newId {
@@ -149,8 +187,39 @@ struct StartPageView: View {
 
     private var detailColumn: some View {
         Group {
-            if connectionListVM.selectedProfile != nil {
+            if let selected = connectionListVM.selectedProfile {
                 VStack(spacing: 0) {
+                    // Editorial header above the form
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("ii. — connection")
+                                .appSectionLabel()
+                            Text(selected.name.isEmpty ? "Untitled" : selected.name)
+                                .appDisplayItalic(26)
+                        }
+                        Spacer()
+                        if testResult == .success {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Theme.accent)
+                                    .frame(width: 7, height: 7)
+                                    .overlay(Circle().stroke(Theme.accent.opacity(0.25), lineWidth: 3))
+                                Text("connected")
+                                    .appMono(11, color: Theme.ink3)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 22)
+                    .padding(.bottom, 4)
+
+                    Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
+                        .appMono(11, color: Theme.ink4)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 18)
+
                     Form {
                         Section {
                             TextField("Name:", text: $form.name)
@@ -193,10 +262,12 @@ struct StartPageView: View {
                                 showSSHPassword: $showSSHPassword
                             )
                         } header: {
-                            Text("SSH Tunnel")
+                            Text("iii. — SSH tunnel")
+                                .appSectionLabel()
                         }
                     }
                     .formStyle(.grouped)
+                    .scrollContentBackground(.hidden)
 
                     if !validationErrors.isEmpty {
                         VStack(alignment: .leading, spacing: 2) {
@@ -214,16 +285,27 @@ struct StartPageView: View {
                         testResultBanner(testResult)
                     }
 
-                    Divider()
+                    Rectangle().fill(Theme.line).frame(height: 1)
 
-                    HStack {
-                        Button(role: .destructive) {
+                    HStack(spacing: 10) {
+                        Button {
                             if let profile = connectionListVM.selectedProfile {
                                 deleteTarget = profile
                             }
                         } label: {
-                            Image(systemName: "trash")
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash").font(.system(size: 11))
+                                Text("Delete").font(Theme.mono(size: 11.5))
+                            }
+                            .foregroundStyle(Theme.ink3)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Theme.line, lineWidth: 1)
+                            )
                         }
+                        .buttonStyle(.plain)
                         .help("Delete Connection")
 
                         Spacer()
@@ -231,36 +313,66 @@ struct StartPageView: View {
                         Button {
                             testSelected()
                         } label: {
-                            if isTestingConnection {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .frame(width: 32)
-                            } else {
-                                Text("Test")
+                            Group {
+                                if isTestingConnection {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .frame(width: 32)
+                                } else {
+                                    Text("Test")
+                                        .font(Theme.mono(size: 12, weight: .medium))
+                                        .foregroundStyle(Theme.ink)
+                                }
                             }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Theme.line2, lineWidth: 1)
+                            )
                         }
+                        .buttonStyle(.plain)
                         .disabled(isTestingConnection)
                         .help("Test connection")
 
-                        Button("Connect") {
+                        Button {
                             connectSelected()
+                        } label: {
+                            Text("Connect →")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.onAccent)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 7)
+                                .background(Theme.accent)
+                                .clipShape(.rect(cornerRadius: 6))
                         }
+                        .buttonStyle(.plain)
                         .keyboardShortcut(.return, modifiers: .command)
-                        .buttonStyle(.borderedProminent)
                         .disabled(isTestingConnection)
                     }
-                    .padding(16)
+                    .padding(18)
+                    .background(Theme.bg)
                 }
+                .background(Theme.bg)
             } else {
-                VStack {
+                VStack(spacing: 14) {
                     Spacer()
-                    Text("Select or create a connection")
-                        .foregroundStyle(.secondary)
+                    Text("ii. — connection")
+                        .appSectionLabel()
+                    Text("Pick a server.")
+                        .appDisplayItalic(32)
+                    Text("Select an existing connection from the list, or use New server to add one.")
+                        .appBody()
+                        .foregroundStyle(Theme.ink3)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
                     Spacer()
                 }
+                .frame(maxWidth: .infinity)
+                .background(Theme.bg)
             }
         }
-        .frame(minWidth: 300, idealWidth: 350)
+        .frame(minWidth: 340, idealWidth: 400)
     }
 
     // MARK: - Actions

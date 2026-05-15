@@ -10,22 +10,31 @@ struct ConnectionListView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Connections")
-                    .font(.headline)
+                    .appSectionLabel()
                 Spacer()
                 Button {
                     connectionListVM.showAddForm = true
                 } label: {
                     Image(systemName: "plus")
+                        .foregroundStyle(Theme.ink3)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Add Connection")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Theme.bg2)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Theme.line).frame(height: 1)
+            }
 
             List(connectionListVM.profiles) { profile in
-                HStack {
+                HStack(spacing: 8) {
+                    Image(systemName: profile.useSSHTunnel ? "lock.shield.fill" : "server.rack")
+                        .foregroundStyle(Theme.ink3)
+                        .font(.system(size: 11))
                     Text(profile.name)
+                        .font(.system(size: 12.5))
                         .lineLimit(1)
                     Spacer()
                 }
@@ -40,7 +49,10 @@ struct ConnectionListView: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(Theme.bg)
         }
+        .background(Theme.bg2)
         .sheet(isPresented: $connectionListVM.showAddForm) {
             ConnectionFormView(mode: .add)
                 .environment(connectionListVM)

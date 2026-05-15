@@ -5,16 +5,14 @@ struct QueryHistoryView: View {
     @Environment(QueryHistoryViewModel.self) var historyVM
     @Environment(QueryViewModel.self) var queryVM
 
-    private static let toolbarBackground = Color(nsColor: .controlBackgroundColor)
+    private static let toolbarBackground = Theme.bg2
 
     var body: some View {
-        // `filteredEntries` lives on the view model so the filter runs only
-        // when `entries` or `filterSource` changes, not on every redraw.
         let entries = historyVM.filteredEntries
         VStack(spacing: 0) {
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
             toolbar
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
 
             if entries.isEmpty {
                 emptyState
@@ -25,17 +23,22 @@ struct QueryHistoryView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Theme.bg2)
             }
         }
+        .background(Theme.bg2)
     }
 
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack(spacing: 8) {
-            Text("Query History")
-                .font(.subheadline)
-                .fontWeight(.medium)
+        HStack(spacing: 12) {
+            Text("— Query history")
+                .appDisplayItalic(18)
+            Text("literals redacted")
+                .appMono(11, color: Theme.ink4)
+                .italic()
 
             Spacer()
 
@@ -54,8 +57,10 @@ struct QueryHistoryView: View {
                 historyVM.redactSystemDMLValues.toggle()
             } label: {
                 Image(systemName: historyVM.redactSystemDMLValues ? "eye.slash" : "eye")
+                    .foregroundStyle(Theme.ink3)
+                    .font(.system(size: 11))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help(historyVM.redactSystemDMLValues
                   ? "System DML values are redacted (click to show literals in history)"
                   : "System DML values are shown in plaintext (click to redact)")
@@ -64,85 +69,82 @@ struct QueryHistoryView: View {
                 historyVM.clear()
             } label: {
                 Image(systemName: "trash")
+                    .foregroundStyle(Theme.rose)
+                    .font(.system(size: 11))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .disabled(historyVM.entries.isEmpty)
             .help("Clear history")
+
+            HStack(spacing: 3) {
+                AppKbd(key: "⌘")
+                AppKbd(key: "⇧")
+                AppKbd(key: "Y")
+            }
+            .opacity(0.85)
 
             Button {
                 appVM.showQueryHistory = false
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.ink3)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help("Close panel (Cmd+Shift+Y)")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Self.toolbarBackground)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(Theme.bg2)
     }
 
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             Spacer()
             Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 32))
-                .foregroundStyle(.tertiary)
-            Text("No queries yet")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 30))
+                .foregroundStyle(Theme.ink4)
+            Text("No queries yet.")
+                .appDisplayItalic(22)
             Text("Execute queries to see them here.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .appBody()
+                .foregroundStyle(Theme.ink3)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg2)
     }
 
     // MARK: - Entry Row
 
     private func entryRow(_ entry: QueryHistoryEntry) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                // Source badge
-                Text(entry.source.rawValue)
-                    .font(.system(size: 9, weight: .medium))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(entry.source == .manual ? Color.blue.opacity(0.15) : Color.gray.opacity(0.15))
-                    .foregroundStyle(entry.source == .manual ? .blue : .secondary)
-                    .clipShape(.rect(cornerRadius: 3))
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Tag(entry.source.rawValue, color: entry.source == .manual ? Theme.blue : Theme.ink3)
 
-                // Status indicator
                 Image(systemName: entry.success ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .font(.system(size: 10))
-                    .foregroundStyle(entry.success ? .green : .red)
+                    .foregroundStyle(entry.success ? Theme.accent : Theme.rose)
 
-                // Timestamp
                 Text(entry.timestamp, format: .dateTime.hour().minute().second())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .appMono(11, color: Theme.ink4)
 
                 if let duration = entry.duration {
-                    Text("\(String(format: "%.3f", duration))s")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    Text("\(Int(duration * 1000)) ms")
+                        .appMono(11, color: duration > 0.2 ? Theme.amber : Theme.ink3)
                 }
 
                 if let rows = entry.rowCount {
-                    Text("\(rows) row\(rows == 1 ? "" : "s")")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                    Text("\(rows)")
+                        .appMono(11, color: Theme.ink3)
                 }
 
                 if entry.isRedacted {
                     Image(systemName: "eye.slash.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.ink4)
                         .help("Literal values redacted from this entry")
                 }
 
@@ -185,18 +187,19 @@ struct QueryHistoryView: View {
 
             // SQL text
             Text(entry.sql)
-                .font(.system(.caption, design: .monospaced))
+                .font(Theme.mono(size: 11.5))
                 .lineLimit(3)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Theme.ink2)
                 .textSelection(.enabled)
 
             if let error = entry.errorMessage {
                 Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+                    .font(Theme.mono(size: 11))
+                    .foregroundStyle(Theme.rose)
                     .lineLimit(2)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+        .listRowBackground(Theme.bg2)
     }
 }

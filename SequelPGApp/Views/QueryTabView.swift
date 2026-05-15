@@ -57,42 +57,64 @@ struct QueryTabView: View {
     private var editorArea: some View {
         @Bindable var queryVM = queryVM
         return VStack(spacing: 0) {
-            HStack {
-                Button {
+            HStack(spacing: 8) {
+                QueryActionButton(
+                    title: "Run", systemImage: "play.fill", isPrimary: true,
+                    disabled: queryVM.isExecuting || !appVM.isConnected
+                ) {
                     Task { await appVM.executeQuery(queryVM.queryText) }
-                } label: {
-                    Label("Run", systemImage: "play.fill")
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(queryVM.isExecuting || !appVM.isConnected)
 
-                Button {
+                QueryActionButton(title: "Clear", systemImage: "trash", disabled: false) {
                     queryVM.queryText = ""
                     queryVM.result = nil
                     queryVM.errorMessage = nil
-                } label: {
-                    Label("Clear", systemImage: "trash")
                 }
 
-                Button {
+                QueryActionButton(
+                    title: "Beautify", systemImage: "wand.and.stars",
+                    disabled: queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
                     queryVM.beautify()
-                } label: {
-                    Label("Beautify", systemImage: "wand.and.stars")
                 }
-                .disabled(queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help("Format SQL query")
 
                 Spacer()
+
+                // Meta affordances: keyboard hint + connection status dot.
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        AppKbd(key: "⌘")
+                        AppKbd(key: "↵")
+                        Text("to run")
+                            .appMono(11, color: Theme.ink3)
+                            .padding(.leading, 2)
+                    }
+                    Text("·")
+                        .appMono(11, color: Theme.ink4)
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(appVM.isConnected ? Theme.accent : Theme.ink4)
+                            .frame(width: 7, height: 7)
+                            .overlay(
+                                Circle()
+                                    .stroke(Theme.accent.opacity(appVM.isConnected ? 0.25 : 0), lineWidth: 3)
+                            )
+                        Text(appVM.connectedProfileName ?? "disconnected")
+                            .appMono(11, color: Theme.ink3)
+                    }
+                }
 
                 if queryVM.isExecuting {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(Theme.bg)
 
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
 
             SQLEditorView(
                 text: $queryVM.queryText,
@@ -108,6 +130,37 @@ struct QueryTabView: View {
     private var resultsArea: some View {
         @Bindable var tableVM = tableVM
         return VStack(spacing: 0) {
+            // Results-panel header — sits above the data grid with tabs for
+            // "Results / Messages / EXPLAIN / JSON" and a meta row on the right
+            // showing status, row count, and exec time.
+            if let result = queryVM.sortedResult, !result.columns.isEmpty {
+                HStack(spacing: 14) {
+                    HStack(spacing: 14) {
+                        ResultsTab(label: "Results", isActive: true)
+                        ResultsTab(label: "Messages", isActive: false)
+                        ResultsTab(label: "EXPLAIN", isActive: false)
+                    }
+                    Spacer()
+                    HStack(spacing: 12) {
+                        HStack(spacing: 5) {
+                            Text("●").foregroundStyle(Theme.accent).font(.system(size: 8))
+                            Text("success").appMono(11, color: Theme.ink3)
+                        }
+                        Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
+                            .appMono(11, color: Theme.ink3)
+                        Text("\(Int(result.executionTime * 1000)) ms")
+                            .appMono(11, color: Theme.ink3)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
+                .frame(height: 36)
+                .background(Theme.bg2)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Theme.line).frame(height: 1)
+                }
+            }
+
             if let error = queryVM.errorMessage {
                 errorBanner(error)
             }
@@ -144,47 +197,145 @@ struct QueryTabView: View {
                             selectedRowIndex: $tableVM.selectedRowIndex
                         )
 
-                        Divider()
+                        Rectangle().fill(Theme.line).frame(height: 1)
 
-                        HStack {
+                        HStack(spacing: 12) {
                             Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
+                                .appMono(11, color: Theme.ink3)
                             if result.isTruncated {
-                                Text("(capped at 2000)")
-                                    .foregroundStyle(.orange)
+                                Text("capped at 2000")
+                                    .appMono(11, color: Theme.amber)
                             }
                             Spacer()
-                            Text("\(String(format: "%.3f", result.executionTime))s")
-                                .foregroundStyle(.secondary)
+                            Text("\(Int(result.executionTime * 1000)) ms")
+                                .appMono(11, color: Theme.ink3)
                         }
-                        .font(.caption)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .frame(height: 30)
+                        .background(Theme.bg2)
                     }
                 }
             } else if !queryVM.isExecuting {
-                Text("Enter a query and press Cmd+Enter to execute.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 14) {
+                    Text("v. — empty")
+                        .appSectionLabel()
+                    Text("A fresh query.")
+                        .appDisplayItalic(32)
+                    Text("Type SQL above, or pick a table from the navigator.\nCmd+Enter runs the statement under the caret.")
+                        .appBody()
+                        .foregroundStyle(Theme.ink3)
+                        .multilineTextAlignment(.center)
+                    HStack(spacing: 10) {
+                        AppKbd(key: "⌘")
+                        AppKbd(key: "↵")
+                        Text("execute")
+                            .appMono(11, color: Theme.ink3)
+                            .padding(.leading, 2)
+                        Text("·").appMono(11, color: Theme.ink4)
+                        AppKbd(key: "⌘")
+                        AppKbd(key: "⇧")
+                        AppKbd(key: "F")
+                        Text("beautify")
+                            .appMono(11, color: Theme.ink3)
+                            .padding(.leading, 2)
+                    }
+                    .padding(.top, 6)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.bg)
             }
         }
+        .background(Theme.bg)
     }
 
     private func errorBanner(_ message: String) -> some View {
         @Bindable var queryVM = queryVM
-        return HStack {
+        return HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(Theme.rose)
             Text(message)
+                .font(Theme.mono(size: 11.5))
+                .foregroundStyle(Theme.rose)
                 .lineLimit(2)
             Spacer()
             Button("Dismiss") {
                 queryVM.errorMessage = nil
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.ink3)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.red.opacity(0.1))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Theme.rose.opacity(0.08))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.line).frame(height: 1)
+        }
+    }
+}
+
+/// Underlined tab strip used at the top of the Query results panel. Mirrors
+/// the `.results-head .tabs .t` pattern from the web design — active tab gets
+/// a 2px lime underline.
+private struct ResultsTab: View {
+    let label: String
+    let isActive: Bool
+
+    var body: some View {
+        Text(label)
+            .font(Theme.mono(size: 11.5, weight: isActive ? .medium : .regular))
+            .foregroundStyle(isActive ? Theme.ink : Theme.ink3)
+            .padding(.vertical, 4)
+            .overlay(alignment: .bottom) {
+                if isActive {
+                    Rectangle()
+                        .fill(Theme.accent)
+                        .frame(height: 2)
+                        .offset(y: 10)
+                }
+            }
+    }
+}
+
+/// Editorial toolbar button used in the Query tab's action row. Renders as
+/// either a pill-outline secondary button or — with `isPrimary` — a solid lime
+/// chip for the dominant "Run" affordance.
+private struct QueryActionButton: View {
+    let title: String
+    let systemImage: String
+    var isPrimary: Bool = false
+    var disabled: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 10, weight: isPrimary ? .bold : .regular))
+                Text(title)
+                    .font(Theme.mono(size: 11.5, weight: isPrimary ? .semibold : .regular))
+            }
+            .foregroundStyle(isPrimary ? Theme.onAccent : Theme.ink2)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Group {
+                    if isPrimary {
+                        Theme.accent
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(isPrimary ? Theme.accent : Theme.line2, lineWidth: 1)
+            )
+            .clipShape(.rect(cornerRadius: 5))
+            .opacity(disabled ? 0.45 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 }
 

@@ -13,11 +13,9 @@ struct StructureTabView: View {
     @State private var dropConfirmConstraint: ConstraintInfo?
     @State private var dropConfirmTrigger: TriggerInfo?
 
-    /// Cached background color. `Color(nsColor:)` allocates a fresh wrapper on
-    /// every call, and the index/constraint/trigger/partition sections each
-    /// render N rows that all wanted the same control-background tone — that
-    /// added up to dozens of identical Color allocations per redraw.
-    private static let rowBackground = Color(nsColor: .controlBackgroundColor)
+    /// Cached background color for index/constraint/trigger row tiles. Reuses
+    /// the theme's secondary panel tone so each row reads as a distinct card.
+    private static let rowBackground = Theme.bg2
 
     // Inline editing state
     @State private var editingField: (columnName: String, field: EditableField)?
@@ -36,11 +34,13 @@ struct StructureTabView: View {
         VStack(spacing: 0) {
             if tableVM.columns.isEmpty {
                 Text("Select a table or view to see its structure.")
-                    .foregroundStyle(.secondary)
+                    .font(Theme.serifItalic(size: 22))
+                    .foregroundStyle(Theme.ink3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        structureHeader
                         columnsSection
                         if isTable {
                             indexesSection
@@ -51,15 +51,18 @@ struct StructureTabView: View {
                             }
                         }
                     }
-                    .padding(12)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 18)
                 }
+                .background(Theme.bg)
             }
 
             if isTable {
-                Divider()
+                Rectangle().fill(Theme.line).frame(height: 1)
                 toolbar
             }
         }
+        .background(Theme.bg)
         .sheet(isPresented: $showAddColumn) {
             AddColumnSheet { name, dataType, nullable, defaultValue in
                 Task { await appVM.addColumn(name: name, dataType: dataType, nullable: nullable, defaultValue: defaultValue) }
@@ -135,10 +138,44 @@ struct StructureTabView: View {
         }
     }
 
+    // MARK: - Editorial Header
+
+    /// Top "i. — definition / app · table / orders" header. Mirrors the
+    /// `.struct-h` block in the web design.
+    @ViewBuilder
+    private var structureHeader: some View {
+        if let obj = navigatorVM.selectedObject {
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                Text("i.")
+                    .appMono(11, color: Theme.ink4)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(obj.schema) · \(obj.type.rawValue)")
+                        .appSectionLabel()
+                    Text(obj.name)
+                        .appDisplayItalic(30)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    Text("≈ \(tableVM.approximateRowCount) rows")
+                        .appMono(11, color: Theme.ink3)
+                    Text("·").appMono(11, color: Theme.ink4)
+                    Text("\(tableVM.columns.count) columns")
+                        .appMono(11, color: Theme.ink3)
+                    if !tableVM.partitions.isEmpty {
+                        Text("·").appMono(11, color: Theme.ink4)
+                        Text("partitioned")
+                            .appMono(11, color: Theme.ink3)
+                    }
+                }
+            }
+            .padding(.bottom, 4)
+        }
+    }
+
     // MARK: - Columns Section
 
     private var columnsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             sectionHeader("Columns", count: tableVM.columns.count)
             Table(tableVM.columns, selection: $selectedColumnId) {
                 TableColumn("#") { col in
@@ -207,26 +244,32 @@ struct StructureTabView: View {
     // MARK: - Indexes
 
     private var indexesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                sectionHeader("Indexes", count: tableVM.indexes.count)
-                Spacer()
+        VStack(alignment: .leading, spacing: 0) {
+            SubSectionHeader("Indexes", count: tableVM.indexes.count) {
                 Button {
                     showCreateIndex = true
                 } label: {
-                    Label("Add Index", systemImage: "plus")
-                        .labelStyle(.iconOnly)
+                    Image(systemName: "plus")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.ink3)
+                        .frame(width: 22, height: 22)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(Theme.line2, lineWidth: 1)
+                        )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Create a new index on this table")
             }
             if tableVM.indexes.isEmpty {
                 Text("No indexes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .appMono(11, color: Theme.ink4)
+                    .padding(.top, 8)
             } else {
-                ForEach(tableVM.indexes) { idx in
-                    indexRow(idx)
+                VStack(spacing: 0) {
+                    ForEach(tableVM.indexes) { idx in
+                        indexRow(idx)
+                    }
                 }
             }
         }
@@ -234,87 +277,93 @@ struct StructureTabView: View {
 
     @ViewBuilder
     private func indexRow(_ idx: IndexInfo) -> some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: idx.isPrimary ? "key.fill" : (idx.isUnique ? "lock.fill" : "list.number"))
-                .foregroundStyle(idx.isPrimary ? .yellow : (idx.isUnique ? .orange : .secondary))
-                .font(.caption)
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 2) {
+                .foregroundStyle(idx.isPrimary ? Theme.amber : (idx.isUnique ? Theme.amber : Theme.ink3))
+                .font(.system(size: 12))
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(idx.name).font(.callout.weight(.medium))
-                    badgeText(idx.method.uppercased(), color: .blue)
-                    if idx.isPrimary { badgeText("PRIMARY", color: .yellow) }
-                    else if idx.isUnique { badgeText("UNIQUE", color: .orange) }
-                    if idx.isPartial { badgeText("PARTIAL", color: .purple) }
+                    Text(idx.name)
+                        .font(Theme.mono(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                    Tag(idx.method, color: Theme.blue)
+                    if idx.isPrimary { Tag("primary", color: Theme.amber) }
+                    else if idx.isUnique { Tag("unique", color: Theme.amber) }
+                    if idx.isPartial { Tag("partial", color: Theme.mauve) }
                 }
                 Text(idx.columns.joined(separator: ", "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospaced()
+                    .font(Theme.mono(size: 11.5))
+                    .foregroundStyle(Theme.ink3)
             }
-            Spacer()
+            Spacer(minLength: 0)
             if !idx.isPrimary {
                 Button {
                     dropConfirmIndex = idx
                 } label: {
                     Image(systemName: "trash")
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                        .foregroundStyle(Theme.rose)
+                        .font(.system(size: 11))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Drop index")
             }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(Self.rowBackground)
-        .cornerRadius(4)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.line).frame(height: 1)
+        }
     }
 
     // MARK: - Constraints
 
     private var constraintsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Constraints", count: tableVM.constraints.count)
+        VStack(alignment: .leading, spacing: 0) {
+            SubSectionHeader("Constraints", count: tableVM.constraints.count)
             if tableVM.constraints.isEmpty {
                 Text("No constraints.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .appMono(11, color: Theme.ink4)
+                    .padding(.top, 8)
             } else {
-                ForEach(tableVM.constraints) { c in
-                    HStack(alignment: .top) {
-                        Image(systemName: constraintIcon(c.kind))
-                            .foregroundStyle(constraintColor(c.kind))
-                            .font(.caption)
-                            .frame(width: 16)
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(c.name).font(.callout.weight(.medium))
-                                badgeText(c.kind.rawValue, color: constraintColor(c.kind))
+                VStack(spacing: 0) {
+                    ForEach(tableVM.constraints) { c in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: constraintIcon(c.kind))
+                                .foregroundStyle(constraintColor(c.kind))
+                                .font(.system(size: 12))
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(c.name)
+                                        .font(Theme.mono(size: 12, weight: .medium))
+                                        .foregroundStyle(Theme.ink)
+                                    Tag(c.kind.rawValue, color: constraintColor(c.kind))
+                                }
+                                Text(c.definition)
+                                    .font(Theme.mono(size: 11.5))
+                                    .foregroundStyle(Theme.ink3)
+                                    .textSelection(.enabled)
                             }
-                            Text(c.definition)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospaced()
-                                .textSelection(.enabled)
+                            Spacer(minLength: 0)
+                            if c.kind != .primaryKey {
+                                Button {
+                                    dropConfirmConstraint = c
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(Theme.rose)
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Drop constraint")
+                            }
                         }
-                        Spacer()
-                        if c.kind != .primaryKey {
-                            Button {
-                                dropConfirmConstraint = c
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Drop constraint")
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 4)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Theme.line).frame(height: 1)
                         }
                     }
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 8)
-                    .background(Self.rowBackground)
-                    .cornerRadius(4)
                 }
             }
         }
@@ -323,56 +372,61 @@ struct StructureTabView: View {
     // MARK: - Triggers
 
     private var triggersSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Triggers", count: tableVM.triggers.count)
+        VStack(alignment: .leading, spacing: 0) {
+            SubSectionHeader("Triggers", count: tableVM.triggers.count)
             if tableVM.triggers.isEmpty {
                 Text("No triggers.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .appMono(11, color: Theme.ink4)
+                    .padding(.top, 8)
             } else {
-                ForEach(tableVM.triggers) { t in
-                    HStack(alignment: .top) {
-                        Image(systemName: t.isDisabled ? "bolt.slash" : "bolt.fill")
-                            .foregroundStyle(t.isDisabled ? Color.secondary : Color.orange)
-                            .font(.caption)
-                            .frame(width: 16)
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(t.name).font(.callout.weight(.medium))
-                                badgeText(t.timing, color: .purple)
-                                badgeText(t.event, color: .blue)
-                                if t.isDisabled { badgeText("DISABLED", color: .gray) }
+                VStack(spacing: 0) {
+                    ForEach(tableVM.triggers) { t in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: t.isDisabled ? "bolt.slash" : "bolt.fill")
+                                .foregroundStyle(t.isDisabled ? Theme.ink4 : Theme.amber)
+                                .font(.system(size: 12))
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(t.name)
+                                        .font(Theme.mono(size: 12, weight: .medium))
+                                        .foregroundStyle(Theme.ink)
+                                    Tag(t.timing, color: Theme.ink3)
+                                    Tag(t.event, color: Theme.rose)
+                                    if t.isDisabled { Tag("disabled", color: Theme.ink4) }
+                                }
+                                Text(t.actionStatement)
+                                    .font(Theme.mono(size: 11.5))
+                                    .foregroundStyle(Theme.ink3)
+                                    .lineLimit(2)
+                                    .textSelection(.enabled)
                             }
-                            Text(t.actionStatement)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospaced()
-                                .lineLimit(2)
-                                .textSelection(.enabled)
+                            Spacer(minLength: 0)
+                            Button {
+                                Task { await appVM.setTriggerEnabled(t, enabled: t.isDisabled) }
+                            } label: {
+                                Image(systemName: t.isDisabled ? "play.fill" : "pause.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.ink3)
+                            }
+                            .buttonStyle(.plain)
+                            .help(t.isDisabled ? "Enable trigger" : "Disable trigger")
+                            Button {
+                                dropConfirmTrigger = t
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(Theme.rose)
+                                    .font(.system(size: 11))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Drop trigger")
                         }
-                        Spacer()
-                        Button {
-                            Task { await appVM.setTriggerEnabled(t, enabled: t.isDisabled) }
-                        } label: {
-                            Image(systemName: t.isDisabled ? "play.fill" : "pause.fill")
-                                .font(.caption)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 4)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Theme.line).frame(height: 1)
                         }
-                        .buttonStyle(.borderless)
-                        .help(t.isDisabled ? "Enable trigger" : "Disable trigger")
-                        Button {
-                            dropConfirmTrigger = t
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Drop trigger")
                     }
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 8)
-                    .background(Self.rowBackground)
-                    .cornerRadius(4)
                 }
             }
         }
@@ -381,21 +435,26 @@ struct StructureTabView: View {
     // MARK: - Partitions
 
     private var partitionsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Partitions", count: tableVM.partitions.count)
-            ForEach(tableVM.partitions) { p in
-                HStack(alignment: .top) {
-                    Image(systemName: "rectangle.split.3x1")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                        .frame(width: 16)
-                    Text(p.name).font(.callout)
-                    Spacer()
+        VStack(alignment: .leading, spacing: 0) {
+            SubSectionHeader("Partitions", count: tableVM.partitions.count)
+            VStack(spacing: 0) {
+                ForEach(tableVM.partitions) { p in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "rectangle.split.3x1")
+                            .foregroundStyle(Theme.ink3)
+                            .font(.system(size: 12))
+                            .frame(width: 18)
+                        Text(p.name)
+                            .font(Theme.mono(size: 12))
+                            .foregroundStyle(Theme.ink)
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 4)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Theme.line).frame(height: 1)
+                    }
                 }
-                .padding(.vertical, 3)
-                .padding(.horizontal, 8)
-                .background(Self.rowBackground)
-                .cornerRadius(4)
             }
         }
     }
@@ -403,20 +462,11 @@ struct StructureTabView: View {
     // MARK: - Helpers
 
     private func sectionHeader(_ title: String, count: Int) -> some View {
-        HStack(spacing: 6) {
-            Text(title).font(.headline)
-            Text("(\(count))").font(.subheadline).foregroundStyle(.secondary)
-        }
+        SubSectionHeader(title, count: count)
     }
 
     private func badgeText(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 9, weight: .medium))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(.rect(cornerRadius: 3))
+        Tag(text, color: color)
     }
 
     private func constraintIcon(_ kind: ConstraintInfo.Kind) -> String {
@@ -431,11 +481,11 @@ struct StructureTabView: View {
 
     private func constraintColor(_ kind: ConstraintInfo.Kind) -> Color {
         switch kind {
-        case .primaryKey: return .yellow
-        case .foreignKey: return .blue
-        case .unique: return .orange
-        case .check: return .green
-        case .exclude: return .red
+        case .primaryKey: return Theme.amber
+        case .foreignKey: return Theme.cyan
+        case .unique: return Theme.amber
+        case .check: return Theme.accent
+        case .exclude: return Theme.rose
         }
     }
 

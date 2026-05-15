@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Editorial app theme.** New `Theme` design system — warm-charcoal canvas (`#14130f`), phosphor-lime accent (`#b9f25a`), Instrument Serif italic headlines for object names and section titles, JetBrains Mono for identifiers / types / counts / SQL. Bundled font files ship in `Resources/Fonts/` and register at app launch.
+- **Lime selection across the board.** Sidebar selection, results-grid row selection, primary buttons, tab indicators, the SQL editor caret and active-line gutter all use the lime accent instead of macOS blue. `AccentColor` asset now drives the system control tint.
+- **Editorial chrome on every tab.** Italic-serif object titles (`orders`, `users`) above each tab, roman-numeral kicker labels (`i. — definition`, `ii. — connection`), dotted-rule dividers, monospaced row-count meta — translated faithfully from the SequelPG site mockups.
+- **Type-pill column headers and inspector rows.** Each column carries a tiny uppercase pill in violet / mauve / amber / cyan depending on whether the type is built-in PG, user-defined, JSON, or temporal.
+- **Refined Slonik mark.** New app icon (Option C from the icons design): figurative elephant head with curled trunk, ear, tusk, and eye. Bundled at every macOS AppIcon size from 16px to 1024px.
+
+### Changed
+- SQL syntax highlighting palette retuned to match the editorial tokens — keywords in cool blue, functions in violet, strings in rose, numbers in amber, comments in muted ink. The Definition and Query tabs share the same colors.
+- Object tabs in the main area now render with a 2px lime top accent on the active tab and a monospaced label, replacing the rounded-pill background.
+- Inspector lays out as an editorial card — italic section titles, dotted rules between rows, type-pill keys, monospaced values.
+- Connection picker and the in-tab connection form now use roman-numeral sections (`ii. — connection`, `iii. — SSH tunnel`) and a solid lime Connect / Save button.
+- Empty states across the app are now italic-serif headlines (`A fresh query.`, `Pick a table.`) with editorial roman-numeral kickers and keyboard-cap chips for the next action.
+- Window forces dark color scheme app-wide. Light mode would tear the type colors and is no longer a supported appearance.
+
 ## [0.1.13] - 2026-05-12
 
 ### Added

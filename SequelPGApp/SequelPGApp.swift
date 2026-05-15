@@ -8,10 +8,19 @@ struct SequelPGApp: App {
         keychainService: KeychainService.shared
     )
 
+    init() {
+        // Pick up bundled Instrument Serif + JetBrains Mono so Theme.serifItalic
+        // / Theme.mono resolve to the editorial faces rather than system fallbacks.
+        Theme.registerBundledFonts()
+    }
+
     var body: some Scene {
         WindowGroup {
             TabRootView()
                 .environment(connectionListVM)
+                .preferredColorScheme(.dark)
+                .tint(Theme.accent)
+                .background(Theme.bg)
         }
         .commands {
             CommandGroup(after: .newItem) {

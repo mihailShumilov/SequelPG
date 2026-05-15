@@ -101,9 +101,18 @@ struct ConnectionFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(isEditing ? "Edit Connection" : "New Connection")
-                .font(.headline)
-                .padding()
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isEditing ? "ii. — edit" : "ii. — new")
+                        .appSectionLabel()
+                    Text(isEditing ? "Edit connection" : "New connection")
+                        .appDisplayItalic(24)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 22)
+            .padding(.bottom, 12)
 
             ScrollView {
                 Form {
@@ -120,13 +129,9 @@ struct ConnectionFormView: View {
                             }
                         }
                     } header: {
-                        Text("Connection")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        Text("ii. — connection")
+                            .appSectionLabel()
                     }
-
-                    Divider()
-                        .padding(.vertical, 4)
 
                     Section {
                         SSHTunnelFormSection(
@@ -139,13 +144,14 @@ struct ConnectionFormView: View {
                             sshPassword: $form.sshPassword
                         )
                     } header: {
-                        Text("SSH Tunnel")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        Text("iii. — SSH tunnel")
+                            .appSectionLabel()
                     }
                 }
-                .padding()
+                .formStyle(.grouped)
+                .scrollContentBackground(.hidden)
             }
+            .background(Theme.bg)
 
             if !validationErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
@@ -162,30 +168,53 @@ struct ConnectionFormView: View {
                 testResultBanner(testResult)
             }
 
-            HStack {
+            Rectangle().fill(Theme.line).frame(height: 1)
+
+            HStack(spacing: 10) {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.ink3)
                 Spacer()
                 Button {
                     test()
                 } label: {
-                    if isTestingConnection {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 32)
-                    } else {
-                        Text("Test")
+                    Group {
+                        if isTestingConnection {
+                            ProgressView().controlSize(.small).frame(width: 32)
+                        } else {
+                            Text("Test").font(Theme.mono(size: 12, weight: .medium))
+                        }
                     }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line2, lineWidth: 1))
                 }
+                .buttonStyle(.plain)
                 .disabled(isTestingConnection)
-                Button(isEditing ? "Save" : "Add") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(isTestingConnection)
+
+                Button {
+                    save()
+                } label: {
+                    Text(isEditing ? "Save →" : "Add →")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.onAccent)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 7)
+                        .background(Theme.accent)
+                        .clipShape(.rect(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isTestingConnection)
             }
-            .padding()
+            .padding(18)
+            .background(Theme.bg)
         }
-        .frame(width: 420)
-        .frame(minHeight: 380, idealHeight: form.useSSHTunnel ? 580 : 420)
+        .frame(width: 460)
+        .frame(minHeight: 420, idealHeight: form.useSSHTunnel ? 620 : 460)
+        .background(Theme.bg)
         .onAppear(perform: loadExisting)
     }
 

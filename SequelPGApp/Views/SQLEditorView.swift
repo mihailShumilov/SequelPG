@@ -24,9 +24,12 @@ struct SQLEditorView: NSViewRepresentable {
         textView.isSelectable = true
         textView.isRichText = false
         textView.allowsUndo = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        textView.textColor = .labelColor
-        textView.backgroundColor = .textBackgroundColor
+        let jbm = NSFont(name: "JetBrainsMono-Regular", size: 13.5)
+            ?? NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular)
+        textView.font = jbm
+        textView.textColor = Theme.inkNS
+        textView.backgroundColor = Theme.bgNS
+        textView.insertionPointColor = Theme.accentNS
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -54,6 +57,7 @@ struct SQLEditorView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.documentView = textView
         scrollView.drawsBackground = true
+        scrollView.backgroundColor = Theme.bgNS
 
         context.coordinator.textStorage = textStorage
 

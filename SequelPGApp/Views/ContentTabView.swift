@@ -7,9 +7,9 @@ struct ContentTabView: View {
 
     @State private var showSQLPreview = false
 
-    /// Cached background to avoid re-allocating Color wrappers in each redraw
-    /// of the spinner backdrop and the filter bar.
-    private static let chromeBackground = Color(nsColor: .controlBackgroundColor)
+    /// Cached background — keeps the spinner backdrop / filter bar on the
+    /// theme's secondary panel tone instead of the system control color.
+    private static let chromeBackground = Theme.bg2
 
     var body: some View {
         @Bindable var tableVM = tableVM
@@ -63,17 +63,30 @@ struct ContentTabView: View {
                         }
                     )
                 } else if let obj = navigatorVM.selectedObject, !obj.type.hasQueryableContent {
-                    VStack(spacing: 4) {
-                        Text("\(obj.name) has no content")
-                            .font(.headline)
-                        Text("Switch to the Definition tab to view this \(obj.type.rawValue).")
-                            .foregroundStyle(.secondary)
+                    VStack(spacing: 12) {
+                        Text(obj.name)
+                            .appDisplayItalic(32)
+                        Text("Has no rows to browse — open the Definition tab for this \(obj.type.rawValue).")
+                            .appBody()
+                            .foregroundStyle(Theme.ink3)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Theme.bg)
                 } else if navigatorVM.selectedObject == nil {
-                    Text("Select a table and switch to Content to browse rows.")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack(spacing: 14) {
+                        Text("v. — content")
+                            .appSectionLabel()
+                        Text("Pick a table.")
+                            .appDisplayItalic(32)
+                        Text("Choose any table from the navigator to start browsing rows.")
+                            .appBody()
+                            .foregroundStyle(Theme.ink3)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 320)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Theme.bg)
                 }
 
                 // Full-screen spinner only appears on the initial load. Once a
@@ -374,13 +387,18 @@ struct ContentTabView: View {
                     .accessibilityLabel("Reloading rows")
             }
 
-            Text("\u{2248} \(tableVM.approximateRowCount) rows")
-                .foregroundStyle(.secondary)
-                .font(.caption)
+            Text("≈ \(tableVM.approximateRowCount) rows")
+                .font(Theme.mono(size: 11))
+                .foregroundStyle(Theme.ink3)
                 .accessibilityLabel("Approximately \(tableVM.approximateRowCount) rows")
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 6)
+        .frame(height: 32)
+        .background(Theme.bg2)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.line).frame(height: 1)
+        }
     }
 }
 

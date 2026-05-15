@@ -25,10 +25,11 @@ struct NavigatorView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
             treeList
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg2)
         .sheet(isPresented: $showCreateDatabase) {
             NameInputSheet(title: "Create Database", fieldLabel: "Database name:") { name in
                 Task { await appVM.createDatabase(name: name) }
@@ -144,9 +145,9 @@ struct NavigatorView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text("Navigator")
-                .font(.headline)
+                .appSectionLabel()
             Spacer()
 
             Picker("", selection: Binding(
@@ -167,6 +168,7 @@ struct NavigatorView: View {
                 Button("New Schema...") { showCreateSchema = true }
             } label: {
                 Image(systemName: "plus")
+                    .foregroundStyle(Theme.ink3)
             }
             .menuStyle(.borderlessButton)
             .frame(width: 20)
@@ -177,13 +179,14 @@ struct NavigatorView: View {
                 Task { await appVM.refreshNavigator() }
             } label: {
                 Image(systemName: "arrow.clockwise")
+                    .foregroundStyle(Theme.ink3)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Refresh navigator")
             .help("Refresh")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Tree List
@@ -241,10 +244,10 @@ struct NavigatorView: View {
         } label: {
             Label {
                 Text(db)
-                    .fontWeight(isConnected ? .medium : .regular)
+                    .font(Theme.mono(size: 12.5, weight: isConnected ? .medium : .regular))
             } icon: {
                 Image(systemName: "cylinder.split.1x2")
-                    .foregroundStyle(isConnected ? .green : .secondary)
+                    .foregroundStyle(isConnected ? Theme.accent : Theme.ink3)
             }
             .contentShape(Rectangle())
             .onTapGesture { binding.wrappedValue.toggle() }
@@ -296,7 +299,13 @@ struct NavigatorView: View {
                 }
             }
         } label: {
-            Label(schema, systemImage: "folder")
+            Label {
+                Text(schema)
+                    .font(Theme.mono(size: 12.5, weight: .regular))
+            } icon: {
+                Image(systemName: "folder")
+                    .foregroundStyle(Theme.ink3)
+            }
                 .contentShape(Rectangle())
                 .onTapGesture { binding.wrappedValue.toggle() }
                 .contextMenu {
@@ -347,7 +356,13 @@ struct NavigatorView: View {
             isExpanded: binding
         ) {
             ForEach(objects) { obj in
-                Label(obj.name, systemImage: category.icon)
+                Label {
+                    Text(obj.name)
+                        .font(Theme.mono(size: 12, weight: .regular))
+                } icon: {
+                    Image(systemName: category.icon)
+                        .foregroundStyle(Theme.ink3)
+                }
                     .tag(obj)
                     .contextMenu {
                         if appVM.isRunnable(obj) {
@@ -384,14 +399,16 @@ struct NavigatorView: View {
             Label {
                 HStack {
                     Text(category.rawValue)
-                    Text("(\(objects.count))")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    Spacer(minLength: 4)
+                    Text("\(objects.count)")
+                        .font(Theme.mono(size: 10.5, weight: .regular))
+                        .foregroundStyle(Theme.ink4)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(category.rawValue), \(objects.count) \(objects.count == 1 ? "object" : "objects")")
             } icon: {
                 Image(systemName: category.icon)
+                    .foregroundStyle(Theme.ink3)
             }
             .contentShape(Rectangle())
             .onTapGesture { binding.wrappedValue.toggle() }

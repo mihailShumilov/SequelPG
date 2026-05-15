@@ -21,9 +21,13 @@ struct SQLSyntaxView: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        textView.textColor = .labelColor
-        textView.backgroundColor = .textBackgroundColor
+        // Prefer the bundled JetBrains Mono face when present, fall back to the
+        // system monospaced font otherwise.
+        let jbm = NSFont(name: "JetBrainsMono-Regular", size: 13)
+            ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.font = jbm
+        textView.textColor = Theme.inkNS
+        textView.backgroundColor = Theme.bgNS
         textView.drawsBackground = true
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -47,6 +51,7 @@ struct SQLSyntaxView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.documentView = textView
         scrollView.drawsBackground = true
+        scrollView.backgroundColor = Theme.bgNS
         return scrollView
     }
 

@@ -11,56 +11,111 @@ struct ObjectDefinitionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar
-            HStack {
+            // Toolbar — editorial header on the left, action chips on the right.
+            HStack(alignment: .top) {
                 if let obj = navigatorVM.selectedObject {
-                    Label(obj.name, systemImage: objectIcon(for: obj.type))
-                        .font(.headline)
-                    Text("(\(obj.type.rawValue))")
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("i. — definition")
+                            .appSectionLabel()
+                        Text("\(obj.schema) · \(obj.type.rawValue)")
+                            .appMono(10.5, color: Theme.ink4)
+                            .tracking(1.5)
+                            .textCase(.uppercase)
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: objectIcon(for: obj.type))
+                                .foregroundStyle(Theme.ink3)
+                                .font(.system(size: 14))
+                            Text(obj.name)
+                                .appDisplayItalic(30)
+                        }
+                    }
+                } else {
+                    Text("Definition")
+                        .appSectionLabel()
                 }
                 Spacer()
 
-                Button {
-                    Task { await loadDDL() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Refresh definition")
-                .disabled(isLoading)
-
-                if let obj = navigatorVM.selectedObject, appVM.isRunnable(obj) {
+                HStack(spacing: 8) {
                     Button {
-                        appVM.functionRunTarget = obj
+                        Task { await loadDDL() }
                     } label: {
-                        Label(obj.type == .procedure ? "Call..." : "Run...", systemImage: "play.fill")
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.ink3)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .strokeBorder(Theme.line2, lineWidth: 1)
+                            )
                     }
-                    .help(obj.type == .procedure ? "Call this procedure" : "Run this function")
-                }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Refresh definition")
+                    .disabled(isLoading)
 
-                Button("Edit in Query") {
-                    editInQuery()
+                    if let obj = navigatorVM.selectedObject, appVM.isRunnable(obj) {
+                        Button {
+                            appVM.functionRunTarget = obj
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 10))
+                                Text(obj.type == .procedure ? "Call…" : "Run…")
+                                    .font(Theme.mono(size: 11, weight: .medium))
+                            }
+                            .foregroundStyle(Theme.ink2)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .strokeBorder(Theme.line2, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help(obj.type == .procedure ? "Call this procedure" : "Run this function")
+                    }
+
+                    Button {
+                        editInQuery()
+                    } label: {
+                        Text("Edit in Query →")
+                            .font(Theme.mono(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.onAccent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Theme.accent)
+                            .clipShape(.rect(cornerRadius: 5))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(ddlText.isEmpty || isLoading)
                 }
-                .disabled(ddlText.isEmpty || isLoading)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 16)
+            .background(Theme.bg)
 
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
 
             // DDL content
             if isLoading {
-                ProgressView("Loading definition...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading definition…")
+                        .appMono(11, color: Theme.ink3)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.bg)
             } else if ddlText.isEmpty {
                 Text("Select an object to view its definition.")
-                    .foregroundStyle(.secondary)
+                    .appDisplayItalic(20, color: Theme.ink3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Theme.bg)
             } else {
                 SQLSyntaxView(text: ddlText)
             }
         }
+        .background(Theme.bg)
         .task(id: navigatorVM.selectedObject?.id) {
             await loadDDL()
         }

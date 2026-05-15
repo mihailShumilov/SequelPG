@@ -4,7 +4,7 @@ struct MainAreaView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(NavigatorViewModel.self) var navigatorVM
 
-    fileprivate static let chromeBackground = Color(nsColor: .controlBackgroundColor)
+    fileprivate static let chromeBackground = Theme.bg
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,7 +13,7 @@ struct MainAreaView: View {
             // before the first navigator selection.
             if !appVM.tabs.isEmpty {
                 ObjectTabsBar()
-                Divider()
+                Rectangle().fill(Theme.line).frame(height: 1)
             }
 
             // Tab bar
@@ -27,19 +27,19 @@ struct MainAreaView: View {
                         }
                     } label: {
                         Text(tab.rawValue)
-                            .font(.body)
-                            .fontWeight(isActive ? .semibold : .regular)
-                            .padding(.horizontal, 20)
+                            .font(.system(size: 13, weight: isActive ? .semibold : .medium))
+                            .padding(.horizontal, 18)
                             .padding(.vertical, 12)
-                            .background(isActive ? Color.accentColor.opacity(0.1) : Color.clear)
-                            .foregroundColor(enabled ? (isActive ? Color.accentColor : .primary) : Color.secondary.opacity(0.5))
+                            .background(Color.clear)
+                            .foregroundColor(enabled ? (isActive ? Theme.ink : Theme.ink3) : Theme.ink4)
                     }
                     .buttonStyle(.plain)
                     .overlay(alignment: .bottom) {
                         if isActive {
-                            Rectangle()
-                                .fill(Color.accentColor)
+                            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                .fill(Theme.accent)
                                 .frame(height: 2)
+                                .padding(.horizontal, 14)
                         }
                     }
                     .disabled(!enabled)
@@ -49,9 +49,9 @@ struct MainAreaView: View {
                 }
                 Spacer()
             }
-            .background(MainAreaView.chromeBackground)
+            .background(Theme.bg)
 
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
 
             // Tab content + optional bottom history panel
             if appVM.showQueryHistory {
@@ -120,16 +120,15 @@ private struct ObjectTabsBar: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 1) {
+            HStack(spacing: 0) {
                 ForEach(appVM.tabs) { tab in
                     ObjectTabChip(tab: tab)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
         }
-        .background(MainAreaView.chromeBackground)
+        .frame(height: 34)
+        .background(Theme.bg2)
     }
 }
 
@@ -150,14 +149,13 @@ private struct ObjectTabChip: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             Image(systemName: icon)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10))
+                .foregroundStyle(isActive ? Theme.ink : Theme.ink4)
             Text(title)
-                .font(.system(.callout))
-                .fontWeight(isActive ? .semibold : .regular)
-                .foregroundStyle(isActive ? Color.primary : Color.secondary)
+                .font(Theme.mono(size: 11.5, weight: isActive ? .medium : .regular))
+                .foregroundStyle(isActive ? Theme.ink : Theme.ink3)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
@@ -166,24 +164,32 @@ private struct ObjectTabChip: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(isHovered || isActive ? Color.primary.opacity(0.7) : Color.clear)
+                    .foregroundStyle(isHovered || isActive ? Theme.ink2 : Color.clear)
                     .frame(width: 14, height: 14)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Close tab")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .frame(minWidth: 80, maxWidth: 220)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .frame(minWidth: 100, maxWidth: 240)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
+            // Top-2px lime accent bar on the active tab — mirrors the
+            // `.app-tab.active::after` rule in the web design.
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(isActive ? Theme.accent : Color.clear)
+                    .frame(height: 2)
+                Rectangle()
+                    .fill(isActive ? Theme.bg : Theme.bg2)
+            }
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(isActive ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.15), lineWidth: 1)
-        )
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Theme.line)
+                .frame(width: 1)
+        }
         .contentShape(Rectangle())
         .onTapGesture { appVM.activateTab(tab.id) }
         .onHover { isHovered = $0 }

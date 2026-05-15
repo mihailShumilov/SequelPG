@@ -77,6 +77,8 @@
 		AA1000000000000000005C /* FunctionRunSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005C; };
 		AA1000000000000000005D /* ObjectTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005D; };
 		AA1000000000000000005E /* BoundedLRU.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005E; };
+		AA1000000000000000005F /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005F; };
+		AA10000000000000000060 /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000060; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -160,6 +162,8 @@
 		AB1000000000000000005C /* FunctionRunSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionRunSheet.swift; sourceTree = "<group>"; };
 		AB1000000000000000005D /* ObjectTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectTab.swift; sourceTree = "<group>"; };
 		AB1000000000000000005E /* BoundedLRU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedLRU.swift; sourceTree = "<group>"; };
+		AB1000000000000000005F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AB10000000000000000060 /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fonts; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -285,6 +289,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000005E /* BoundedLRU.swift */,
+				AB1000000000000000005F /* Theme.swift */,
 				AB1000000000000000001B /* Logger.swift */,
 				AB1000000000000000001A /* QuoteIdent.swift */,
 				AB10000000000000000028 /* QuoteLiteral.swift */,
@@ -301,6 +306,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000001C /* Assets.xcassets */,
+				AB10000000000000000060 /* Fonts */,
 				AB1000000000000000001F /* SequelPGApp.entitlements */,
 			);
 			path = Resources;
@@ -420,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA1000000000000000001C /* Assets.xcassets in Resources */,
+				AA10000000000000000060 /* Fonts in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -485,6 +492,7 @@
 				AA1000000000000000005C /* FunctionRunSheet.swift in Sources */,
 				AA1000000000000000005D /* ObjectTab.swift in Sources */,
 				AA1000000000000000005E /* BoundedLRU.swift in Sources */,
+				AA1000000000000000005F /* Theme.swift in Sources */,
 				AA10000000000000000037 /* QueryHistoryViewModel.swift in Sources */,
 				AA10000000000000000038 /* QueryHistoryView.swift in Sources */,
 			);
@@ -579,11 +587,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.1.14;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -600,11 +609,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.1.14;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -618,9 +628,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.14;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -635,9 +645,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.14;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
