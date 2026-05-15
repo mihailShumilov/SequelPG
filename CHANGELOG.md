@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-15
+
 ### Added
 - **Editorial app theme.** New `Theme` design system — warm-charcoal canvas (`#14130f`), phosphor-lime accent (`#b9f25a`), Instrument Serif italic headlines for object names and section titles, JetBrains Mono for identifiers / types / counts / SQL. Bundled font files ship in `Resources/Fonts/` and register at app launch.
 - **Lime selection across the board.** Sidebar selection, results-grid row selection, primary buttons, tab indicators, the SQL editor caret and active-line gutter all use the lime accent instead of macOS blue. `AccentColor` asset now drives the system control tint.
