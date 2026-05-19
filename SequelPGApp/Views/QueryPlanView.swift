@@ -66,7 +66,7 @@ struct QueryPlanView: View {
             Text(plan.didAnalyze ? "i. — what actually happened" : "i. — what would happen")
                 .appSectionLabel()
             Text(overview.headline)
-                .appDisplayItalic(26)
+                .appDisplay(26)
             Text(overview.timing)
                 .appMono(11.5, color: Theme.ink3)
                 .padding(.top, 2)
@@ -98,7 +98,7 @@ struct QueryPlanView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         nodeKindPill(node.kind)
                         Text(narration.title)
-                            .font(Theme.serifItalic(size: 18))
+                            .font(Theme.display(size: 18))
                             .foregroundStyle(Theme.ink)
                         Spacer(minLength: 0)
                         if !node.children.isEmpty {
@@ -348,7 +348,7 @@ struct QueryPlanView: View {
                     Text("step detail")
                         .appSectionLabel()
                     Text(narration.title)
-                        .appDisplayItalic(22)
+                        .appDisplay(22)
                     Text(node.nodeType)
                         .appMono(11, color: Theme.ink4)
                 }
@@ -472,7 +472,7 @@ struct QueryPlanEmptyView: View {
             Text("vi. — no plan yet")
                 .appSectionLabel()
             Text("How would Postgres run this?")
-                .appDisplayItalic(28)
+                .appDisplay(28)
             Text("Click Explain to preview the plan without running the query,\nor Analyze to run it and report what actually happened.")
                 .appBody()
                 .foregroundStyle(Theme.ink3)

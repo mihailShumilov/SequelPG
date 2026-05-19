@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Typography is now JetBrains Mono throughout.** Replaced the Instrument Serif italic display face with bold JetBrains Mono at the same sizes. A developer tool reads better with a single typographic identity than with an editorial serif. `appDisplayItalic(_:)` / `Theme.serifItalic(_:)` were renamed to `appDisplay(_:)` / `Theme.display(_:)`. Bare `.italic()` modifiers were removed; NULL cells now render as `‹NULL›` with the same dim color cue and no italic.
+
 ### Added
 - **Smarter SQL autocomplete.** Suggestions are now ranked JetBrains-style: case-insensitive **prefix matches win outright** (`SELECT` always beats `SECURITY` for `sele`, no matter how short the partial is); fuzzy subsequence matching (`usp` → `user_profile`) only fires as a fallback when nothing prefix-matches. The top match is pre-selected so Tab / Return commits it immediately without arrow-down. Triggers after 2 characters. Each row carries a category suffix — `users  ·  table`, `user_id  ·  int4  ·  PK`, `SELECT  ·  keyword`, `upper  ·  upper(string)` — so you can tell columns, tables, schemas, functions, and keywords apart at a glance.
 - **Context-aware completion.** A lightweight pass over the tokens preceding the cursor figures out which clause the user is in — after `FROM` / `JOIN` / `UPDATE` / `INSERT INTO` the popup biases toward tables and views; after `SELECT` / `WHERE` / `ON` / `GROUP BY` / `ORDER BY` / `SET` / `RETURNING` it biases toward columns; inside `INSERT INTO tbl (...)` it lists column names. Qualifier detection (`tablename.partial`) restricts column suggestions to that table when its metadata is known.

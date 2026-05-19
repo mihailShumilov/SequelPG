@@ -9,8 +9,8 @@ struct SequelPGApp: App {
     )
 
     init() {
-        // Pick up bundled Instrument Serif + JetBrains Mono so Theme.serifItalic
-        // / Theme.mono resolve to the editorial faces rather than system fallbacks.
+        // Register bundled JetBrains Mono so Theme.display / Theme.mono pick
+        // it up at runtime rather than falling back to the system monospace.
         Theme.registerBundledFonts()
     }
 

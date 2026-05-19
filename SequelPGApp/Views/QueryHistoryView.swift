@@ -35,10 +35,9 @@ struct QueryHistoryView: View {
     private var toolbar: some View {
         HStack(spacing: 12) {
             Text("— Query history")
-                .appDisplayItalic(18)
+                .appDisplay(18)
             Text("literals redacted")
                 .appMono(11, color: Theme.ink4)
-                .italic()
 
             Spacer()
 
@@ -107,7 +106,7 @@ struct QueryHistoryView: View {
                 .font(.system(size: 30))
                 .foregroundStyle(Theme.ink4)
             Text("No queries yet.")
-                .appDisplayItalic(22)
+                .appDisplay(22)
             Text("Execute queries to see them here.")
                 .appBody()
                 .foregroundStyle(Theme.ink3)

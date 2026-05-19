@@ -34,7 +34,7 @@ struct StructureTabView: View {
         VStack(spacing: 0) {
             if tableVM.columns.isEmpty {
                 Text("Select a table or view to see its structure.")
-                    .font(Theme.serifItalic(size: 22))
+                    .font(Theme.display(size: 22))
                     .foregroundStyle(Theme.ink3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -152,7 +152,7 @@ struct StructureTabView: View {
                     Text("\(obj.schema) · \(obj.type.rawValue)")
                         .appSectionLabel()
                     Text(obj.name)
-                        .appDisplayItalic(30)
+                        .appDisplay(30)
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {

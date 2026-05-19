@@ -43,7 +43,7 @@ struct StartPageView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("SequelPG")
-                    .appDisplayItalic(24)
+                    .appDisplay(24)
                 if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
                     Text("v\(version) · macOS 14+")
                         .appMono(10.5, color: Theme.ink4)
@@ -195,7 +195,7 @@ struct StartPageView: View {
                             Text("ii. — connection")
                                 .appSectionLabel()
                             Text(selected.name.isEmpty ? "Untitled" : selected.name)
-                                .appDisplayItalic(26)
+                                .appDisplay(26)
                         }
                         Spacer()
                         if testResult == .success {
@@ -360,7 +360,7 @@ struct StartPageView: View {
                     Text("ii. — connection")
                         .appSectionLabel()
                     Text("Pick a server.")
-                        .appDisplayItalic(32)
+                        .appDisplay(32)
                     Text("Select an existing connection from the list, or use New server to add one.")
                         .appBody()
                         .foregroundStyle(Theme.ink3)

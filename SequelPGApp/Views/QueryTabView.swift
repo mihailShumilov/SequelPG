@@ -256,7 +256,7 @@ struct QueryTabView: View {
                     Text("v. — empty")
                         .appSectionLabel()
                     Text("A fresh query.")
-                        .appDisplayItalic(32)
+                        .appDisplay(32)
                     Text("Type SQL above, or pick a table from the navigator.\nCmd+Enter runs the statement under the caret.")
                         .appBody()
                         .foregroundStyle(Theme.ink3)
@@ -770,9 +770,11 @@ struct ResultsGridView: View {
     private func cellContentView(cell: CellValue, renderKind: CellRenderKind) -> some View {
         switch renderKind {
         case .null:
-            Text("NULL")
+            // ‹NULL› with angle brackets distinguishes the meta-value from a
+            // literal text cell whose contents happen to be "NULL". No italic
+            // — the dim color carries the affordance.
+            Text("‹NULL›")
                 .font(.system(.body, design: .monospaced))
-                .italic()
                 .foregroundStyle(.tertiary)
         case .boolean:
             let isTrue = cell.displayString == "true"
@@ -808,7 +810,6 @@ struct ResultsGridView: View {
         case .binary:
             Text(cell.displayString)
                 .font(.system(.body, design: .monospaced))
-                .italic()
                 .foregroundStyle(.tertiary)
         case .text:
             Text(cell.displayString)

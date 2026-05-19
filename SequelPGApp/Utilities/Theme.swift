@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Visual design system for SequelPG — translates the marketing site's editorial
-/// "technical journal" aesthetic into the native macOS app. Warm charcoal canvas,
-/// phosphor-lime accent, Instrument Serif italic for editorial headlines, JetBrains
-/// Mono for technical content (SQL, types, identifiers), SF Pro for UI chrome.
+/// Visual design system for SequelPG — a developer-tool aesthetic. Warm
+/// charcoal canvas, phosphor-lime accent, JetBrains Mono throughout
+/// (bold for display headlines, regular for technical content), SF Pro for
+/// UI chrome. No serif and no italic anywhere — the typographic hierarchy
+/// comes from size and weight, which reads cleaner in a tool meant for code.
 enum Theme {
     // MARK: - Palette (mirrors --app-* tokens in the web design)
 
@@ -52,8 +53,6 @@ enum Theme {
     // covered by `-apple-system` (SF Pro), so we don't bundle it.
 
     enum FontName {
-        static let displaySerif = "InstrumentSerif-Regular"
-        static let displaySerifItalic = "InstrumentSerif-Italic"
         static let monoRegular = "JetBrainsMono-Regular"
         static let monoMedium = "JetBrainsMono-Medium"
         static let monoBold = "JetBrainsMono-Bold"
@@ -69,13 +68,12 @@ enum Theme {
         return .custom(name, size: size).weight(weight)
     }
 
-    static func serifItalic(size: CGFloat) -> Font {
-        .custom(FontName.displaySerifItalic, size: size)
-            .italic()
-    }
-
-    static func serif(size: CGFloat) -> Font {
-        .custom(FontName.displaySerif, size: size)
+    /// Display headline font — JetBrains Mono Bold. Used for object names,
+    /// section titles, and empty-state headlines. Replaces the earlier
+    /// Instrument Serif italic; a developer tool reads better with a
+    /// consistent monospace identity than with an editorial serif.
+    static func display(size: CGFloat) -> Font {
+        .custom(FontName.monoBold, size: size).weight(.bold)
     }
 
     /// Registers bundled `.ttf` files at runtime. Called once from the app entry
@@ -84,8 +82,6 @@ enum Theme {
     /// we still get the fonts in unit tests / preview hosts that bypass Info.plist.
     static func registerBundledFonts() {
         let fontNames = [
-            "InstrumentSerif-Regular",
-            "InstrumentSerif-Italic",
             "JetBrainsMono-Regular",
             "JetBrainsMono-Medium",
             "JetBrainsMono-Bold",
@@ -144,11 +140,12 @@ extension View {
             .foregroundStyle(color)
     }
 
-    /// Instrument Serif italic — the editorial flourish. Used very sparingly:
-    /// object names ("orders", "users"), inspector section titles, empty-state
-    /// headlines, the app brand. Never for body text.
-    func appDisplayItalic(_ size: CGFloat = 22, color: Color = Theme.ink) -> some View {
-        font(Theme.serifItalic(size: size))
+    /// Display headline — JetBrains Mono Bold. Used sparingly for object
+    /// names, section titles, and empty-state headlines. Same family as the
+    /// body mono so the whole UI reads as a single typographic system; size
+    /// and weight do the work that an editorial serif used to.
+    func appDisplay(_ size: CGFloat = 22, color: Color = Theme.ink) -> some View {
+        font(Theme.display(size: size))
             .foregroundStyle(color)
     }
 
@@ -211,7 +208,7 @@ struct EditorialSectionHeader: View {
                         .appSectionLabel()
                 }
                 Text(title)
-                    .appDisplayItalic(28)
+                    .appDisplay(28)
             }
             Spacer(minLength: 0)
         }

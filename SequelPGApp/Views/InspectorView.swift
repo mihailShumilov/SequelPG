@@ -14,7 +14,7 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Inspector")
-                    .appDisplayItalic(20)
+                    .appDisplay(20)
                 Spacer()
                 Text("ii.")
                     .appMono(11, color: Theme.ink4)
@@ -31,7 +31,6 @@ struct InspectorView: View {
             } else {
                 Text("No object selected")
                     .appMono(11, color: Theme.ink4)
-                    .italic()
             }
 
             if let rowData = tableVM.selectedRowData,
@@ -40,7 +39,7 @@ struct InspectorView: View {
 
                 HStack(alignment: .firstTextBaseline) {
                     Text("Row Detail")
-                        .appDisplayItalic(20)
+                        .appDisplay(20)
                     Spacer()
                     Text("#\(rowIndex + 1)")
                         .appMono(11, color: Theme.ink4)

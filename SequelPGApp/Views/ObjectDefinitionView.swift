@@ -26,7 +26,7 @@ struct ObjectDefinitionView: View {
                                 .foregroundStyle(Theme.ink3)
                                 .font(.system(size: 14))
                             Text(obj.name)
-                                .appDisplayItalic(30)
+                                .appDisplay(30)
                         }
                     }
                 } else {
@@ -108,7 +108,7 @@ struct ObjectDefinitionView: View {
                 .background(Theme.bg)
             } else if ddlText.isEmpty {
                 Text("Select an object to view its definition.")
-                    .appDisplayItalic(20, color: Theme.ink3)
+                    .appDisplay(20, color: Theme.ink3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Theme.bg)
             } else {

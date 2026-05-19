@@ -106,7 +106,7 @@ struct ConnectionFormView: View {
                     Text(isEditing ? "ii. — edit" : "ii. — new")
                         .appSectionLabel()
                     Text(isEditing ? "Edit connection" : "New connection")
-                        .appDisplayItalic(24)
+                        .appDisplay(24)
                 }
                 Spacer()
             }

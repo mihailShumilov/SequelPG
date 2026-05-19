@@ -65,7 +65,7 @@ struct ContentTabView: View {
                 } else if let obj = navigatorVM.selectedObject, !obj.type.hasQueryableContent {
                     VStack(spacing: 12) {
                         Text(obj.name)
-                            .appDisplayItalic(32)
+                            .appDisplay(32)
                         Text("Has no rows to browse — open the Definition tab for this \(obj.type.rawValue).")
                             .appBody()
                             .foregroundStyle(Theme.ink3)
@@ -78,7 +78,7 @@ struct ContentTabView: View {
                         Text("v. — content")
                             .appSectionLabel()
                         Text("Pick a table.")
-                            .appDisplayItalic(32)
+                            .appDisplay(32)
                         Text("Choose any table from the navigator to start browsing rows.")
                             .appBody()
                             .foregroundStyle(Theme.ink3)
