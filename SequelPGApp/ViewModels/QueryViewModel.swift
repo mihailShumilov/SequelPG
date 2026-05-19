@@ -1,5 +1,14 @@
 import Foundation
 
+/// Tabs in the results area of the query editor. The grid (`.results`) and a
+/// transcript view (`.messages`, not yet implemented) live alongside the
+/// EXPLAIN plan view (`.explain`); the active tab controls which one is shown.
+enum ResultsTabKind: Sendable, CaseIterable {
+    case results
+    case messages
+    case explain
+}
+
 /// Manages the query editor state and results.
 @MainActor
 @Observable final class QueryViewModel: RowDeleteConfirming {
@@ -20,6 +29,15 @@ import Foundation
     var sortAscending: Bool = true
 
     var result: QueryResult?
+
+    /// Parsed EXPLAIN / EXPLAIN ANALYZE output. Populated by AppViewModel's
+    /// `explainQuery`; rendered in the EXPLAIN tab of the results area.
+    var plan: QueryPlan?
+
+    /// Which of the results-area tabs the user is looking at. Bound to the
+    /// underline indicator on the tab strip and to the resultsArea body so the
+    /// EXPLAIN tab can render the plan view in place of the data grid.
+    var activeResultsTab: ResultsTabKind = .results
 
     /// Cached sorted result, rebuilt lazily when accessed after invalidation.
     @ObservationIgnored private var _sortedResult: QueryResult?

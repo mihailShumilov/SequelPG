@@ -69,3 +69,26 @@ Tests are in `SequelPGTests/` and use mock implementations of `PostgresClientPro
 - `KeychainService` mock uses in-memory dict conforming to `KeychainServiceProtocol`
 
 **Adding new test files:** New `.swift` test files must be registered in `project.pbxproj` in 4 places (PBXBuildFile, PBXFileReference, SequelPGTests PBXGroup children, test target PBXSourcesBuildPhase). See existing entries for the ID naming pattern.
+
+## Recommended Agents
+
+Reach for these proactively when the task fits:
+
+- **postgresql-function-auditor** — audit which PostgreSQL functions are surfaced in the UI vs. missing, prioritized by real-world usage. Use when planning the feature roadmap or evaluating query-builder coverage.
+- **paranoid-security-auditor** — run after touching anything sensitive: `DatabaseClient`, `KeychainService`, `ConnectionStore`, `SSHTunnelService`, SQL builders, credential handling, export paths. Treat as mandatory before commits in those areas.
+- **ui-performance-optimizer** — for SwiftUI polish, large-result-set scroll/render performance, and modernizing visual consistency.
+- **feature-dev:code-explorer / code-architect / code-reviewer** — three-phase loop for non-trivial features (new panes, new connection types, schema tools). Explorer first → architect → reviewer.
+- **code-smell-detector** — run proactively after any significant Swift change to catch duplication and anti-patterns.
+- **Explore** — fast read-only search across the Swift codebase when locating symbols or call sites across `SequelPGApp/`.
+- **Plan** — design step before larger refactors or cross-cutting changes.
+
+## Recommended Skills
+
+- `/review` and `/code-review:code-review` — review changes on the current branch / a PR.
+- `/security-review` — security pass on pending changes. Required when touching connection/auth/SQL paths above.
+- `/simplify` — review recently changed Swift for reuse and clarity.
+- `/feature-dev:feature-dev` — guided feature development with codebase understanding.
+- `/frontend-design:frontend-design` — for the sequelpg.com Next.js marketing site at `/Users/mihailshumilov/sites/my/sequelpg.com`.
+- `/fewer-permission-prompts` — scan transcripts and auto-allowlist routine Bash/MCP calls (e.g. xcodebuild, swift).
+
+**Skip for this project:** PostHog skills, `claude-api`, telegram/calendar/gmail/drive auth skills — not relevant unless the app is instrumented with those integrations.

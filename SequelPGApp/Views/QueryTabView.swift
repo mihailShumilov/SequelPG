@@ -66,9 +66,32 @@ struct QueryTabView: View {
                 }
                 .keyboardShortcut(.return, modifiers: .command)
 
+                // Explain (no execute) — safe to press on any query, including
+                // DML. Renders the planner's predicted shape.
+                QueryActionButton(
+                    title: "Explain", systemImage: "list.bullet.indent",
+                    disabled: queryVM.isExecuting || !appVM.isConnected ||
+                        queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    Task { await appVM.explainQuery(queryVM.queryText, analyze: false) }
+                }
+
+                // Analyze — actually runs the query. Hold ⌥ for a finer "yes
+                // I know this writes" affordance later; for v1 the user is
+                // trusted to know what their query does.
+                QueryActionButton(
+                    title: "Analyze", systemImage: "stopwatch",
+                    disabled: queryVM.isExecuting || !appVM.isConnected ||
+                        queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    Task { await appVM.explainQuery(queryVM.queryText, analyze: true) }
+                }
+
                 QueryActionButton(title: "Clear", systemImage: "trash", disabled: false) {
                     queryVM.queryText = ""
                     queryVM.result = nil
+                    queryVM.plan = nil
+                    queryVM.activeResultsTab = .results
                     queryVM.errorMessage = nil
                 }
 
@@ -79,9 +102,12 @@ struct QueryTabView: View {
                     queryVM.beautify()
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
                 // Meta affordances: keyboard hint + connection status dot.
+                // Pinned with `.fixedSize` and `.lineLimit(1)` so the toolbar
+                // can't enter a layout-feedback loop where a wrapping label
+                // forces the buttons next to it to compress to a 1-char column.
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
                         AppKbd(key: "⌘")
@@ -102,8 +128,12 @@ struct QueryTabView: View {
                             )
                         Text(appVM.connectedProfileName ?? "disconnected")
                             .appMono(11, color: Theme.ink3)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 200, alignment: .leading)
                     }
                 }
+                .fixedSize(horizontal: true, vertical: false)
 
                 if queryVM.isExecuting {
                     ProgressView()
@@ -130,27 +160,26 @@ struct QueryTabView: View {
     private var resultsArea: some View {
         @Bindable var tableVM = tableVM
         return VStack(spacing: 0) {
-            // Results-panel header — sits above the data grid with tabs for
-            // "Results / Messages / EXPLAIN / JSON" and a meta row on the right
-            // showing status, row count, and exec time.
-            if let result = queryVM.sortedResult, !result.columns.isEmpty {
+            // Results-panel header — tabs for Results / Messages / EXPLAIN, plus
+            // a meta row on the right with status, row count, and exec time.
+            // The header shows whenever there's *anything* to show (a result,
+            // a plan, or an error), not just after a row-returning query.
+            let hasAnyContent = queryVM.sortedResult != nil || queryVM.plan != nil || queryVM.errorMessage != nil
+            if hasAnyContent {
                 HStack(spacing: 14) {
                     HStack(spacing: 14) {
-                        ResultsTab(label: "Results", isActive: true)
-                        ResultsTab(label: "Messages", isActive: false)
-                        ResultsTab(label: "EXPLAIN", isActive: false)
+                        ResultsTab(label: "Results", isActive: queryVM.activeResultsTab == .results) {
+                            queryVM.activeResultsTab = .results
+                        }
+                        ResultsTab(label: "Messages", isActive: queryVM.activeResultsTab == .messages) {
+                            queryVM.activeResultsTab = .messages
+                        }
+                        ResultsTab(label: "EXPLAIN", isActive: queryVM.activeResultsTab == .explain) {
+                            queryVM.activeResultsTab = .explain
+                        }
                     }
                     Spacer()
-                    HStack(spacing: 12) {
-                        HStack(spacing: 5) {
-                            Text("●").foregroundStyle(Theme.accent).font(.system(size: 8))
-                            Text("success").appMono(11, color: Theme.ink3)
-                        }
-                        Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
-                            .appMono(11, color: Theme.ink3)
-                        Text("\(Int(result.executionTime * 1000)) ms")
-                            .appMono(11, color: Theme.ink3)
-                    }
+                    resultsMetaRow
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 8)
@@ -165,7 +194,13 @@ struct QueryTabView: View {
                 errorBanner(error)
             }
 
-            if let result = queryVM.sortedResult {
+            if queryVM.activeResultsTab == .explain {
+                if let plan = queryVM.plan {
+                    QueryPlanView(plan: plan)
+                } else if queryVM.errorMessage == nil {
+                    QueryPlanEmptyView(isConnected: appVM.isConnected)
+                }
+            } else if let result = queryVM.sortedResult {
                 if result.columns.isEmpty {
                     VStack {
                         Text("Query executed successfully.")
@@ -249,6 +284,38 @@ struct QueryTabView: View {
         .background(Theme.bg)
     }
 
+    /// Right-side meta strip for the results header — context shifts with the
+    /// active tab: row/exec stats for the data grid, plan totals for EXPLAIN,
+    /// or a quiet "no plan yet" hint when nothing has been computed.
+    @ViewBuilder
+    private var resultsMetaRow: some View {
+        HStack(spacing: 12) {
+            if queryVM.activeResultsTab == .explain {
+                if let plan = queryVM.plan {
+                    let label = plan.didAnalyze ? "analyzed" : "explained"
+                    HStack(spacing: 5) {
+                        Text("●").foregroundStyle(Theme.accent).font(.system(size: 8))
+                        Text(label).appMono(11, color: Theme.ink3)
+                    }
+                    if let exec = plan.executionTime {
+                        Text("\(Int(exec)) ms execution").appMono(11, color: Theme.ink3)
+                    } else {
+                        Text("plan only").appMono(11, color: Theme.ink3)
+                    }
+                }
+            } else if let result = queryVM.sortedResult, !result.columns.isEmpty {
+                HStack(spacing: 5) {
+                    Text("●").foregroundStyle(Theme.accent).font(.system(size: 8))
+                    Text("success").appMono(11, color: Theme.ink3)
+                }
+                Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
+                    .appMono(11, color: Theme.ink3)
+                Text("\(Int(result.executionTime * 1000)) ms")
+                    .appMono(11, color: Theme.ink3)
+            }
+        }
+    }
+
     private func errorBanner(_ message: String) -> some View {
         @Bindable var queryVM = queryVM
         return HStack(spacing: 10) {
@@ -276,24 +343,29 @@ struct QueryTabView: View {
 
 /// Underlined tab strip used at the top of the Query results panel. Mirrors
 /// the `.results-head .tabs .t` pattern from the web design — active tab gets
-/// a 2px lime underline.
+/// a 2px lime underline. Tapping a tab fires the supplied closure.
 private struct ResultsTab: View {
     let label: String
     let isActive: Bool
+    var onTap: () -> Void = {}
 
     var body: some View {
-        Text(label)
-            .font(Theme.mono(size: 11.5, weight: isActive ? .medium : .regular))
-            .foregroundStyle(isActive ? Theme.ink : Theme.ink3)
-            .padding(.vertical, 4)
-            .overlay(alignment: .bottom) {
-                if isActive {
-                    Rectangle()
-                        .fill(Theme.accent)
-                        .frame(height: 2)
-                        .offset(y: 10)
+        Button(action: onTap) {
+            Text(label)
+                .font(Theme.mono(size: 11.5, weight: isActive ? .medium : .regular))
+                .foregroundStyle(isActive ? Theme.ink : Theme.ink3)
+                .padding(.vertical, 4)
+                .overlay(alignment: .bottom) {
+                    if isActive {
+                        Rectangle()
+                            .fill(Theme.accent)
+                            .frame(height: 2)
+                            .offset(y: 10)
+                    }
                 }
-            }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -314,7 +386,9 @@ private struct QueryActionButton: View {
                     .font(.system(size: 10, weight: isPrimary ? .bold : .regular))
                 Text(title)
                     .font(Theme.mono(size: 11.5, weight: isPrimary ? .semibold : .regular))
+                    .lineLimit(1)
             }
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(isPrimary ? Theme.onAccent : Theme.ink2)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

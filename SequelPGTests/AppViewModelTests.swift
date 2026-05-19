@@ -103,6 +103,24 @@ actor MockDatabaseClient: PostgresClientProtocol {
         return stubbedQueryResult
     }
 
+    var explainQueryHandler: (@Sendable (String, Bool, Bool) throws -> QueryPlan)?
+    var lastExplainSQL: String?
+    var lastExplainAnalyze: Bool?
+
+    func explainQuery(_ sql: String, analyze: Bool, buffers: Bool, timeout: TimeInterval) async throws -> QueryPlan {
+        lastExplainSQL = sql
+        lastExplainAnalyze = analyze
+        if let handler = explainQueryHandler {
+            return try handler(sql, analyze, buffers)
+        }
+        // Default stub plan — a trivial Seq Scan so the visualizer has
+        // something to render in mock-backed tests / previews.
+        let json = """
+        [{"Plan":{"Node Type":"Seq Scan","Relation Name":"mock","Startup Cost":0.0,"Total Cost":1.0,"Plan Rows":1,"Plan Width":0,"Actual Startup Time":0.01,"Actual Total Time":0.02,"Actual Rows":1,"Actual Loops":1},"Planning Time":0.1,"Execution Time":0.2}]
+        """
+        return try QueryPlan.decode(from: json)
+    }
+
     func listSchemas() async throws -> [String] {
         if shouldThrowOnListSchemas { throw AppError.queryFailed("mock schema error") }
         return stubbedSchemas

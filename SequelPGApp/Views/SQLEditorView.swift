@@ -1,6 +1,18 @@
+import AppKit
 import SwiftUI
 
-/// NSViewRepresentable wrapping NSTextView with SQL syntax highlighting and autocompletion.
+/// NSViewRepresentable wrapping NSTextView with SQL syntax highlighting and
+/// context-aware autocompletion. Uses NSTextView's native `complete(_:)` popup
+/// — its UI is plain by macOS standards (system list, no themed chips) but it
+/// participates correctly in the text view's responder chain, which a custom
+/// floating panel does not. A previous custom-panel implementation could steal
+/// key focus mid-typing and corrupt input; falling back to the native popup
+/// trades visual polish for input reliability.
+///
+/// The smart part of completion lives in `SQLCompletionProvider`: prefix-first
+/// ranking with fuzzy fallback, JetBrains-style, and context detection that
+/// biases the candidate pool based on whether the cursor is after FROM,
+/// WHERE, ON, etc.
 struct SQLEditorView: NSViewRepresentable {
     @Binding var text: String
     var completionMetadata: SQLCompletionProvider.Metadata
@@ -47,6 +59,7 @@ struct SQLEditorView: NSViewRepresentable {
         if !text.isEmpty {
             textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
         }
+        context.coordinator.resetGrowthBaseline(to: (text as NSString).length)
 
         textStorage.onChange = { [weak coordinator = context.coordinator] newText in
             coordinator?.storageDidChange(newText)
@@ -105,11 +118,23 @@ struct SQLEditorView: NSViewRepresentable {
 
     // MARK: - Coordinator
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         var metadata = SQLCompletionProvider.Metadata(schemas: [], tables: [], columns: [])
         weak var textStorage: SQLTextStorage?
         private var isUpdatingFromStorage = false
+
+        /// Minimum partial length before completion auto-fires. Two chars
+        /// avoids the popup flickering on every single keystroke.
+        private let autoTriggerMinChars = 2
+
+        /// Length of the document as of the previous `textDidChange`. We auto-
+        /// trigger the completion popup only when the text *grows* — typing,
+        /// not deleting. Without this guard, every backspace would re-fire
+        /// `complete(nil)` and re-suggest whatever the user was trying to
+        /// remove ("public" reappearing while the user tries to delete it).
+        private var lastTextLength: Int = 0
 
         init(text: Binding<String>) {
             _text = text
@@ -124,16 +149,73 @@ struct SQLEditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-
-            // Use cached tokens from the highlighting pass to avoid double tokenization
-            let cursorLocation = textView.selectedRange().location
-            if cursorLocation > 0,
-               let tokens = textStorage?.lastTokens,
-               shouldShowCompletion(tokens: tokens, at: cursorLocation) {
-                textView.complete(nil)
-            }
+            let currentLength = (textView.string as NSString).length
+            let didGrow = currentLength > lastTextLength
+            lastTextLength = currentLength
+            // Don't auto-trigger on deletion — the user is correcting input,
+            // not asking for suggestions. Don't auto-trigger on equal-length
+            // changes either (most common case: undo / programmatic
+            // replacement). The popup can still be manually invoked with
+            // NSTextView's ESC-then-F5 (or via the completion menu item).
+            guard didGrow else { return }
+            maybeAutoComplete(in: textView)
         }
 
+        /// Called from `makeNSView` after the initial text is set, so the
+        /// growth-detection baseline starts at the actual document length
+        /// rather than 0 (which would cause the popup to fire on first edit
+        /// even if the user is deleting from pre-loaded content).
+        func resetGrowthBaseline(to length: Int) {
+            lastTextLength = length
+        }
+
+        /// Triggers NSTextView's native completion popup when the user is
+        /// inside an identifier of at least `autoTriggerMinChars` characters
+        /// and not inside a string/comment.
+        private func maybeAutoComplete(in textView: NSTextView) {
+            let cursor = textView.selectedRange().location
+            guard cursor > 0 else { return }
+
+            let string = textView.string
+            guard cursor <= (string as NSString).length else { return }
+
+            // Find start of the current identifier.
+            let nsString = string as NSString
+            var partialStart = cursor
+            while partialStart > 0 {
+                let prev = nsString.substring(with: NSRange(location: partialStart - 1, length: 1))
+                guard let ch = prev.unicodeScalars.first,
+                      Character(ch).isLetter || Character(ch).isNumber || ch == "_"
+                else { break }
+                partialStart -= 1
+            }
+            let partialLen = cursor - partialStart
+            guard partialLen >= autoTriggerMinChars else { return }
+
+            // Don't pop inside string literals or comments.
+            if let tokens = textStorage?.lastTokens, !shouldShowCompletion(tokens: tokens, at: cursor) {
+                return
+            }
+            textView.complete(nil)
+        }
+
+        // MARK: NSTextViewDelegate
+
+        /// Asked by NSTextView when its native completion popup needs items.
+        /// We ignore the supplied `words` (system-generated guesses) and
+        /// compute our own ranked list from `SQLCompletionProvider`.
+        ///
+        /// Returns **bare identifiers only** — no category suffix. An earlier
+        /// version appended `  ·  category` and stripped it on accept, but
+        /// the strip path bypassed NSTextView's undo manager, leaving the
+        /// user unable to Cmd-Z a wrong completion. We accept a less
+        /// informative popup in exchange for correct undo.
+        ///
+        /// Pre-selection: index 0 only when there's a confident prefix
+        /// match. For fuzzy-only fallbacks we deliberately leave index at -1
+        /// so the user has to actively arrow-down before Tab/Return commits
+        /// — that prevents a stray Tab from inserting a marginal match (the
+        /// `li → public` problem).
         func textView(
             _ textView: NSTextView,
             completions words: [String],
@@ -145,9 +227,16 @@ struct SQLEditorView: NSViewRepresentable {
             else { return [] }
 
             let partial = String(textView.string[range])
-            index?.pointee = -1
+            let tokens = textStorage?.lastTokens ?? []
+            let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: charRange.location + charRange.length)
+            let result = SQLCompletionProvider.result(for: partial, metadata: metadata, context: context)
 
-            return SQLCompletionProvider.completions(for: partial, metadata: metadata)
+            if result.items.isEmpty {
+                index?.pointee = -1
+                return []
+            }
+            index?.pointee = result.preselectTop ? 0 : -1
+            return result.items.map(\.insertText)
         }
 
         /// Check if the cursor is at a position where completion makes sense
@@ -171,9 +260,10 @@ struct SQLEditorView: NSViewRepresentable {
     }
 }
 
-/// NSTextView subclass that overrides rangeForUserCompletion to work correctly
-/// with SQL identifiers containing underscores.
-private final class CompletionTextView: NSTextView {
+/// NSTextView subclass that reports a sensible `rangeForUserCompletion` for
+/// SQL identifiers — NSTextView's default treats `_` as a word boundary, which
+/// truncates `my_column` to just `column`.
+final class CompletionTextView: NSTextView {
     override var rangeForUserCompletion: NSRange {
         let cursorLocation = selectedRange().location
         guard cursorLocation > 0,

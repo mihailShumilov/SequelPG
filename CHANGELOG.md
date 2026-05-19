@@ -6,7 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.2.1] - 2026-05-15
+### Added
+- **Smarter SQL autocomplete.** Suggestions are now ranked JetBrains-style: case-insensitive **prefix matches win outright** (`SELECT` always beats `SECURITY` for `sele`, no matter how short the partial is); fuzzy subsequence matching (`usp` → `user_profile`) only fires as a fallback when nothing prefix-matches. The top match is pre-selected so Tab / Return commits it immediately without arrow-down. Triggers after 2 characters. Each row carries a category suffix — `users  ·  table`, `user_id  ·  int4  ·  PK`, `SELECT  ·  keyword`, `upper  ·  upper(string)` — so you can tell columns, tables, schemas, functions, and keywords apart at a glance.
+- **Context-aware completion.** A lightweight pass over the tokens preceding the cursor figures out which clause the user is in — after `FROM` / `JOIN` / `UPDATE` / `INSERT INTO` the popup biases toward tables and views; after `SELECT` / `WHERE` / `ON` / `GROUP BY` / `ORDER BY` / `SET` / `RETURNING` it biases toward columns; inside `INSERT INTO tbl (...)` it lists column names. Qualifier detection (`tablename.partial`) restricts column suggestions to that table when its metadata is known.
+
+### Fixed
+- Query editor toolbar buttons no longer wrap vertically (one character per line) when the new Explain / Analyze buttons make the row wider than the container. Each button now claims its intrinsic horizontal size, and the connection-status label truncates instead of pushing the layout into a feedback loop.
+- Removed the custom NSPanel completion popup. It repeatedly stole key focus from the editor's text view via the responder chain — typed `l` ended up as `Z`, the popup got stuck on stale partials like `SET` for input `select`. Completion now uses NSTextView's native `complete(_:)` popup, which is plainer (no themed chips or lime selection) but participates correctly in input handling. The smart ranking and context detection are unchanged.
+- Backspace now corrects queries cleanly. The autocomplete popup only auto-fires when the document *grows* (insertion). On deletion the popup stays out of the way so the user can backspace through a mistakenly committed token without it re-suggesting itself. Cmd-Z also works again now that completion insertions go through NSTextView's normal undo path instead of a side-channel storage rewrite.
+
+- **Plain-English EXPLAIN / EXPLAIN ANALYZE visualizer.** Two new buttons in the query editor toolbar: **Explain** (free — predicts the plan without running the query) and **Analyze** (runs the query and reports what actually happened). Results render in the existing EXPLAIN tab as a vertical tree of human-readable steps — "Read the whole `orders` table," "Match rows using a hash table," "Sort by `created_at`" — with a one-sentence summary, a metrics row (took / returned / loops / cost), and findings chips that flag bad row estimates, dominant time hogs, filter waste, and Nested-Loop-over-Seq-Scan anti-patterns in plain language. Right-side detail card shows the raw PostgreSQL fields (Sort Method, Hash Cond, buffer counters, etc.) for users who want them.
+
+
 
 ### Added
 - **Editorial app theme.** New `Theme` design system — warm-charcoal canvas (`#14130f`), phosphor-lime accent (`#b9f25a`), Instrument Serif italic headlines for object names and section titles, JetBrains Mono for identifiers / types / counts / SQL. Bundled font files ship in `Resources/Fonts/` and register at app launch.

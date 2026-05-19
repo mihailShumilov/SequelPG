@@ -79,6 +79,11 @@
 		AA1000000000000000005E /* BoundedLRU.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005E; };
 		AA1000000000000000005F /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000005F; };
 		AA10000000000000000060 /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000060; };
+		AA10000000000000000061 /* QueryPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000061; };
+		AA10000000000000000062 /* PlanNarrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000062; };
+		AA10000000000000000063 /* QueryPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000063; };
+		AA10000000000000000064 /* SQLCompletionWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000064; };
+		AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000065; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -164,6 +169,11 @@
 		AB1000000000000000005E /* BoundedLRU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedLRU.swift; sourceTree = "<group>"; };
 		AB1000000000000000005F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		AB10000000000000000060 /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fonts; sourceTree = "<group>"; };
+		AB10000000000000000061 /* QueryPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryPlan.swift; sourceTree = "<group>"; };
+		AB10000000000000000062 /* PlanNarrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanNarrator.swift; sourceTree = "<group>"; };
+		AB10000000000000000063 /* QueryPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryPlanView.swift; sourceTree = "<group>"; };
+		AB10000000000000000064 /* SQLCompletionWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionWindow.swift; sourceTree = "<group>"; };
+		AB10000000000000000065 /* SQLCompletionProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionProviderTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -223,6 +233,7 @@
 				AB1000000000000000005B /* FunctionMetadata.swift */,
 				AB10000000000000000050 /* IndexInfo.swift */,
 				AB1000000000000000005D /* ObjectTab.swift */,
+				AB10000000000000000061 /* QueryPlan.swift */,
 				AB10000000000000000005 /* QueryResult.swift */,
 				AB10000000000000000054 /* RoleInfo.swift */,
 				AB10000000000000000052 /* TriggerInfo.swift */,
@@ -274,7 +285,9 @@
 				AB10000000000000000033 /* ObjectDefinitionView.swift */,
 				AB10000000000000000036 /* FieldEditorView.swift */,
 				AB10000000000000000038 /* QueryHistoryView.swift */,
+				AB10000000000000000063 /* QueryPlanView.swift */,
 				AB10000000000000000017 /* QueryTabView.swift */,
+				AB10000000000000000064 /* SQLCompletionWindow.swift */,
 				AB1000000000000000002F /* SQLEditorView.swift */,
 				AB1000000000000000005A /* SQLSyntaxView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
@@ -289,6 +302,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000005E /* BoundedLRU.swift */,
+				AB10000000000000000062 /* PlanNarrator.swift */,
 				AB1000000000000000005F /* Theme.swift */,
 				AB1000000000000000001B /* Logger.swift */,
 				AB1000000000000000001A /* QuoteIdent.swift */,
@@ -326,6 +340,7 @@
 				AB10000000000000000027 /* AppViewModelTests.swift */,
 				AB10000000000000000024A /* InsertDeleteTests.swift */,
 				AB10000000000000000025A /* CascadeDeleteTests.swift */,
+				AB10000000000000000065 /* SQLCompletionProviderTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -495,6 +510,10 @@
 				AA1000000000000000005F /* Theme.swift in Sources */,
 				AA10000000000000000037 /* QueryHistoryViewModel.swift in Sources */,
 				AA10000000000000000038 /* QueryHistoryView.swift in Sources */,
+				AA10000000000000000061 /* QueryPlan.swift in Sources */,
+				AA10000000000000000062 /* PlanNarrator.swift in Sources */,
+				AA10000000000000000063 /* QueryPlanView.swift in Sources */,
+				AA10000000000000000064 /* SQLCompletionWindow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -513,6 +532,7 @@
 				AA10000000000000000027 /* AppViewModelTests.swift in Sources */,
 				AA10000000000000000024A /* InsertDeleteTests.swift in Sources */,
 				AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */,
+				AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

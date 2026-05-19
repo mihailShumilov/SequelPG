@@ -8,6 +8,7 @@ protocol PostgresClientProtocol: Sendable {
     func disconnect() async
     var isConnected: Bool { get async }
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
+    func explainQuery(_ sql: String, analyze: Bool, buffers: Bool, timeout: TimeInterval) async throws -> QueryPlan
     func listSchemas() async throws -> [String]
     func listTables(schema: String) async throws -> [DBObject]
     func listViews(schema: String) async throws -> [DBObject]
@@ -284,6 +285,27 @@ actor DatabaseClient: PostgresClientProtocol {
             await resetTimeout()
             throw AppError.queryFailed(error.localizedDescription)
         }
+    }
+
+    /// Runs `EXPLAIN (FORMAT JSON, ANALYZE on/off, BUFFERS on/off) <sql>` and
+    /// decodes the single JSON cell into a `QueryPlan`. ANALYZE actually
+    /// executes the query — callers should confirm this with the user when the
+    /// statement is DML.
+    func explainQuery(
+        _ sql: String,
+        analyze: Bool,
+        buffers: Bool,
+        timeout: TimeInterval = 30.0
+    ) async throws -> QueryPlan {
+        let analyzeFlag = analyze ? "ON" : "OFF"
+        let buffersFlag = buffers ? "ON" : "OFF"
+        let wrapped = "EXPLAIN (FORMAT JSON, ANALYZE \(analyzeFlag), BUFFERS \(buffersFlag), VERBOSE OFF) \(sql)"
+
+        let result = try await runQuery(wrapped, maxRows: 1, timeout: timeout)
+        guard let first = result.rows.first?.first, case let .text(jsonString) = first else {
+            throw AppError.queryFailed("EXPLAIN returned no JSON output")
+        }
+        return try QueryPlan.decode(from: jsonString)
     }
 
     // MARK: - Cell Decoding

@@ -787,6 +787,48 @@ struct CascadeDeleteBuilder {
         }
     }
 
+    /// Runs `EXPLAIN [ANALYZE]` on the current query and stores the parsed
+    /// plan on `queryVM`. Switches the results area to the EXPLAIN tab so the
+    /// new plan is visible immediately. ANALYZE actually executes the query;
+    /// the caller is responsible for any DML confirmation.
+    func explainQuery(_ sql: String, analyze: Bool) async {
+        let trimmed = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        queryVM.isExecuting = true
+        queryVM.errorMessage = nil
+        queryVM.plan = nil
+        queryVM.activeResultsTab = .explain
+
+        do {
+            let plan = try await dbClient.explainQuery(
+                trimmed,
+                analyze: analyze,
+                buffers: analyze,
+                timeout: analyze ? Self.defaultQueryTimeout * 3 : Self.defaultQueryTimeout
+            )
+            queryVM.plan = plan
+            queryVM.isExecuting = false
+
+            queryHistoryVM.logQuery(
+                sql: (analyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + trimmed,
+                source: .manual,
+                duration: plan.executionTime.map { $0 / 1000 } ?? 0,
+                success: true,
+                rowCount: 0
+            )
+        } catch {
+            queryVM.errorMessage = error.localizedDescription
+            queryVM.isExecuting = false
+            queryHistoryVM.logQuery(
+                sql: (analyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + trimmed,
+                source: .manual,
+                success: false,
+                errorMessage: error.localizedDescription
+            )
+        }
+    }
+
     // MARK: - Content Filters
 
     /// Keeps only filters that contribute to the WHERE clause, then builds each
