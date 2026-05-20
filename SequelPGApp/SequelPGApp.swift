@@ -8,6 +8,10 @@ struct SequelPGApp: App {
         keychainService: KeychainService.shared
     )
 
+    /// User's chosen appearance (Auto / Light / Dark). Shared across all
+    /// windows and the Settings scene.
+    @State private var themePreference = ThemePreference.shared
+
     init() {
         // Register bundled JetBrains Mono so Theme.display / Theme.mono pick
         // it up at runtime rather than falling back to the system monospace.
@@ -18,7 +22,8 @@ struct SequelPGApp: App {
         WindowGroup {
             TabRootView()
                 .environment(connectionListVM)
-                .preferredColorScheme(.dark)
+                .environment(themePreference)
+                .preferredColorScheme(themePreference.colorScheme)
                 .tint(Theme.accent)
                 .background(Theme.bg)
         }
@@ -45,6 +50,27 @@ struct SequelPGApp: App {
                 }
                 .keyboardShortcut("y", modifiers: [.command, .shift])
             }
+
+            CommandGroup(after: .appSettings) {
+                Menu("Appearance") {
+                    Picker("Appearance", selection: Binding(
+                        get: { themePreference.mode },
+                        set: { themePreference.mode = $0 }
+                    )) {
+                        ForEach(ThemeMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                }
+            }
+        }
+
+        Settings {
+            SettingsView()
+                .environment(themePreference)
+                .preferredColorScheme(themePreference.colorScheme)
+                .tint(Theme.accent)
         }
     }
 }

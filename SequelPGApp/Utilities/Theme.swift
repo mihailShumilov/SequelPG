@@ -2,48 +2,89 @@ import AppKit
 import SwiftUI
 
 /// Visual design system for SequelPG — a developer-tool aesthetic. Warm
-/// charcoal canvas, phosphor-lime accent, JetBrains Mono throughout
-/// (bold for display headlines, regular for technical content), SF Pro for
-/// UI chrome. No serif and no italic anywhere — the typographic hierarchy
-/// comes from size and weight, which reads cleaner in a tool meant for code.
+/// charcoal canvas in dark mode, warm cream canvas in light mode, phosphor-lime
+/// accent in both, JetBrains Mono throughout (bold for display headlines,
+/// regular for technical content), SF Pro for UI chrome. No serif and no italic
+/// anywhere — the typographic hierarchy comes from size and weight, which
+/// reads cleaner in a tool meant for code.
+///
+/// Colors are built with `NSColor(name:dynamicProvider:)` so a single token
+/// resolves to the dark or light variant based on the host view's effective
+/// appearance. SwiftUI `Color(nsColor:)` and AppKit drawing both honor the
+/// dynamic resolution.
 enum Theme {
     // MARK: - Palette (mirrors --app-* tokens in the web design)
 
-    static let bg = Color(red: 0x14 / 255, green: 0x13 / 255, blue: 0x0f / 255)
-    static let bg2 = Color(red: 0x1a / 255, green: 0x19 / 255, blue: 0x16 / 255)
-    static let panel = Color(red: 0x1d / 255, green: 0x1c / 255, blue: 0x19 / 255)
-    static let panel2 = Color(red: 0x23 / 255, green: 0x21 / 255, blue: 0x20 / 255)
-    static let line = Color(red: 0x2a / 255, green: 0x29 / 255, blue: 0x25 / 255)
-    static let line2 = Color(red: 0x36 / 255, green: 0x34 / 255, blue: 0x2f / 255)
+    static let bg = swiftUI(bgNS)
+    static let bg2 = swiftUI(bg2NS)
+    static let panel = swiftUI(panelNS)
+    static let panel2 = swiftUI(panel2NS)
+    static let line = swiftUI(lineNS)
+    static let line2 = swiftUI(line2NS)
 
-    static let ink = Color(red: 0xf0 / 255, green: 0xec / 255, blue: 0xe2 / 255)
-    static let ink2 = Color(red: 0xc8 / 255, green: 0xc2 / 255, blue: 0xb3 / 255)
-    static let ink3 = Color(red: 0x8c / 255, green: 0x86 / 255, blue: 0x76 / 255)
-    static let ink4 = Color(red: 0x5e / 255, green: 0x5a / 255, blue: 0x4f / 255)
+    static let ink = swiftUI(inkNS)
+    static let ink2 = swiftUI(ink2NS)
+    static let ink3 = swiftUI(ink3NS)
+    static let ink4 = swiftUI(ink4NS)
 
-    static let accent = Color(red: 0xb9 / 255, green: 0xf2 / 255, blue: 0x5a / 255)
-    static let accentDim = Color(red: 0x94 / 255, green: 0xc9 / 255, blue: 0x48 / 255)
+    static let accent = swiftUI(accentNS)
+    static let accentDim = swiftUI(accentDimNS)
 
     // Editorial color tokens — used for syntax highlighting and type pills.
-    static let rose = Color(red: 0xef / 255, green: 0x9b / 255, blue: 0x8a / 255)
-    static let blue = Color(red: 0x9e / 255, green: 0xc5 / 255, blue: 0xff / 255)
-    static let violet = Color(red: 0xc5 / 255, green: 0xa7 / 255, blue: 0xff / 255)
-    static let amber = Color(red: 0xff / 255, green: 0xd4 / 255, blue: 0x79 / 255)
-    static let mauve = Color(red: 0xd4 / 255, green: 0xa3 / 255, blue: 0xff / 255)
-    static let cyan = Color(red: 0x80 / 255, green: 0xd4 / 255, blue: 0xd6 / 255)
+    static let rose = swiftUI(roseNS)
+    static let blue = swiftUI(blueNS)
+    static let violet = swiftUI(violetNS)
+    static let amber = swiftUI(amberNS)
+    static let mauve = swiftUI(mauveNS)
+    static let cyan = swiftUI(cyanNS)
 
     /// Foreground color to use on top of `accent` fills (lime is bright — needs
     /// near-black ink for legibility).
-    static let onAccent = Color(red: 0x0f / 255, green: 0x0f / 255, blue: 0x0e / 255)
+    static let onAccent = swiftUI(onAccentNS)
 
     // MARK: - NSColor bridges (for AppKit views: NSTableView, NSTextView, etc.)
 
-    static let bgNS = NSColor(srgbRed: 0x14 / 255, green: 0x13 / 255, blue: 0x0f / 255, alpha: 1)
-    static let bg2NS = NSColor(srgbRed: 0x1a / 255, green: 0x19 / 255, blue: 0x16 / 255, alpha: 1)
-    static let lineNS = NSColor(srgbRed: 0x2a / 255, green: 0x29 / 255, blue: 0x25 / 255, alpha: 1)
-    static let accentNS = NSColor(srgbRed: 0xb9 / 255, green: 0xf2 / 255, blue: 0x5a / 255, alpha: 1)
-    static let inkNS = NSColor(srgbRed: 0xf0 / 255, green: 0xec / 255, blue: 0xe2 / 255, alpha: 1)
-    static let ink3NS = NSColor(srgbRed: 0x8c / 255, green: 0x86 / 255, blue: 0x76 / 255, alpha: 1)
+    static let bgNS = dynamic("app.bg", dark: 0x14_13_0F, light: 0xFA_F6_EC)
+    static let bg2NS = dynamic("app.bg2", dark: 0x1A_19_16, light: 0xF1_EC_DE)
+    static let panelNS = dynamic("app.panel", dark: 0x1D_1C_19, light: 0xEC_E5_D4)
+    static let panel2NS = dynamic("app.panel2", dark: 0x23_21_20, light: 0xE2_DA_C7)
+    static let lineNS = dynamic("app.line", dark: 0x2A_29_25, light: 0xD3_CC_B6)
+    static let line2NS = dynamic("app.line2", dark: 0x36_34_2F, light: 0xBE_B5_9C)
+
+    static let inkNS = dynamic("app.ink", dark: 0xF0_EC_E2, light: 0x1A_18_12)
+    static let ink2NS = dynamic("app.ink2", dark: 0xC8_C2_B3, light: 0x40_3C_33)
+    static let ink3NS = dynamic("app.ink3", dark: 0x8C_86_76, light: 0x6F_69_59)
+    static let ink4NS = dynamic("app.ink4", dark: 0x5E_5A_4F, light: 0xA0_99_87)
+
+    static let accentNS = dynamic("app.accent", dark: 0xB9_F2_5A, light: 0x73_A8_22)
+    static let accentDimNS = dynamic("app.accentDim", dark: 0x94_C9_48, light: 0x5B_85_1A)
+
+    static let roseNS = dynamic("app.rose", dark: 0xEF_9B_8A, light: 0xC6_5D_3F)
+    static let blueNS = dynamic("app.blue", dark: 0x9E_C5_FF, light: 0x2F_5F_B7)
+    static let violetNS = dynamic("app.violet", dark: 0xC5_A7_FF, light: 0x6A_4A_C8)
+    static let amberNS = dynamic("app.amber", dark: 0xFF_D4_79, light: 0xB0_82_18)
+    static let mauveNS = dynamic("app.mauve", dark: 0xD4_A3_FF, light: 0x84_4F_C0)
+    static let cyanNS = dynamic("app.cyan", dark: 0x80_D4_D6, light: 0x1F_7B_7D)
+
+    static let onAccentNS = dynamic("app.onAccent", dark: 0x0F_0F_0E, light: 0x10_14_06)
+
+    // MARK: - Dynamic color helpers
+
+    private static func dynamic(_ name: String, dark: Int, light: Int) -> NSColor {
+        NSColor(name: NSColor.Name(name)) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .accessibilityHighContrastDarkAqua, .accessibilityHighContrastVibrantDark]) != nil
+            return color(fromHex: isDark ? dark : light)
+        }
+    }
+
+    private static func color(fromHex hex: Int) -> NSColor {
+        let r = CGFloat((hex >> 16) & 0xFF) / 255
+        let g = CGFloat((hex >> 8) & 0xFF) / 255
+        let b = CGFloat(hex & 0xFF) / 255
+        return NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
+    }
+
+    private static func swiftUI(_ ns: NSColor) -> Color { Color(nsColor: ns) }
 
     // MARK: - Fonts
     //

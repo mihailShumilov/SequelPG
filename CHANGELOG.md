@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0]
+
+### Added
+- **Light theme with auto-switching.** The app now ships both a light and a dark palette and respects the system Light/Dark setting by default. Pick **Auto / Light / Dark** under the new Settings window (⌘,) or the **Appearance** menu under the app menu — Auto follows macOS and switches live when the system toggles. Existing chrome (sidebar, tabs, results grid, SQL editor, syntax highlighting, type pills) all resolve to the new light palette: warm cream canvas (`#FAF6EC`), warm-charcoal ink, and a deeper phosphor-lime accent tuned for legibility on cream.
+
 ### Changed
 - **Typography is now JetBrains Mono throughout.** Replaced the Instrument Serif italic display face with bold JetBrains Mono at the same sizes. A developer tool reads better with a single typographic identity than with an editorial serif. `appDisplayItalic(_:)` / `Theme.serifItalic(_:)` were renamed to `appDisplay(_:)` / `Theme.display(_:)`. Bare `.italic()` modifiers were removed; NULL cells now render as `‹NULL›` with the same dim color cue and no italic.
 

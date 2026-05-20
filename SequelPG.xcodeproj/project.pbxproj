@@ -84,6 +84,8 @@
 		AA10000000000000000063 /* QueryPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000063; };
 		AA10000000000000000064 /* SQLCompletionWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000064; };
 		AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000065; };
+		AA10000000000000000066 /* ThemePreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000066; };
+		AA10000000000000000067 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000067; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +176,8 @@
 		AB10000000000000000063 /* QueryPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryPlanView.swift; sourceTree = "<group>"; };
 		AB10000000000000000064 /* SQLCompletionWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionWindow.swift; sourceTree = "<group>"; };
 		AB10000000000000000065 /* SQLCompletionProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionProviderTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000066 /* ThemePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePreference.swift; sourceTree = "<group>"; };
+		AB10000000000000000067 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -248,6 +252,7 @@
 				AB10000000000000000008 /* KeychainService.swift */,
 				AB1000000000000000000A /* PostgresClient.swift */,
 				AB1000000000000000002A /* SSHTunnelService.swift */,
+				AB10000000000000000066 /* ThemePreference.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -292,6 +297,7 @@
 				AB1000000000000000005A /* SQLSyntaxView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
 				AB10000000000000000029 /* StartPageView.swift */,
+				AB10000000000000000067 /* SettingsView.swift */,
 				AB10000000000000000030 /* SSHTunnelFormSection.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
 			);
@@ -514,6 +520,8 @@
 				AA10000000000000000062 /* PlanNarrator.swift in Sources */,
 				AA10000000000000000063 /* QueryPlanView.swift in Sources */,
 				AA10000000000000000064 /* SQLCompletionWindow.swift in Sources */,
+				AA10000000000000000066 /* ThemePreference.swift in Sources */,
+				AA10000000000000000067 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -612,7 +620,7 @@
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -634,7 +642,7 @@
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -650,7 +658,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -667,7 +675,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
