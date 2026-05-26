@@ -15,8 +15,14 @@ enum PGTool: String, Sendable {
 /// server's major version; instead we discover the user's existing install.
 ///
 /// Search order: a directory the user set in Settings, then the common install
-/// locations for Postgres.app, Homebrew (arm64 and x86_64) and the EDB
-/// installer, then whatever is already on `$PATH`.
+/// locations for Homebrew (arm64 and x86_64, including the keg-only `libpq` and
+/// versioned `postgresql@N` formulae), Postgres.app and the EDB installer, then
+/// whatever is already on `$PATH`.
+///
+/// Note: the keg-only locations matter because a GUI app launched from Finder
+/// inherits `launchd`'s minimal `$PATH` — not the shell `$PATH` — and keg-only
+/// formulae like `libpq` are never symlinked into `<prefix>/bin`, so relying on
+/// `$PATH` alone would miss an otherwise valid `brew install libpq`.
 enum PGToolchain {
     static let configuredDirectoryKey = "com.sequelpg.pgToolsDirectory"
 
@@ -49,6 +55,16 @@ enum PGToolchain {
         // Homebrew default prefixes.
         dirs.append("/opt/homebrew/bin") // Apple Silicon
         dirs.append("/usr/local/bin") // Intel / older installs
+
+        // `libpq` is the client-only keg the app recommends (`brew install
+        // libpq`). Being keg-only, it is never symlinked into <prefix>/bin, so
+        // include its well-known location for both prefixes unconditionally.
+        dirs.append("/opt/homebrew/opt/libpq/bin")
+        dirs.append("/usr/local/opt/libpq/bin")
+
+        // A full `postgresql@N` keg also ships the client tools but likewise
+        // isn't linked into <prefix>/bin; discover installed ones, newest first.
+        dirs += homebrewPostgresKegBinDirectories()
 
         // Postgres.app keeps each major version under Versions/<n>/bin; prefer
         // the highest version number, with the "latest" symlink as a fallback.
@@ -107,6 +123,30 @@ enum PGToolchain {
     }
 
     // MARK: - Private
+
+    /// Bin directories of any keg-only `postgresql` / `postgresql@N` formulae
+    /// found under each Homebrew prefix's `opt`, sorted newest major first.
+    private static func homebrewPostgresKegBinDirectories() -> [String] {
+        let fm = FileManager.default
+        var result: [String] = []
+
+        for prefix in ["/opt/homebrew", "/usr/local"] {
+            let optDir = "\(prefix)/opt"
+            guard let entries = try? fm.contentsOfDirectory(atPath: optDir) else { continue }
+            let kegs = entries
+                .filter { $0 == "postgresql" || $0.hasPrefix("postgresql@") }
+                .sorted { postgresMajor($0) > postgresMajor($1) }
+            result += kegs.map { "\(optDir)/\($0)/bin" }
+        }
+        return result
+    }
+
+    /// Major version encoded in a `postgresql@N` keg name; unversioned
+    /// `postgresql` sorts first as it tracks the current release.
+    private static func postgresMajor(_ formula: String) -> Int {
+        guard let at = formula.firstIndex(of: "@") else { return .max }
+        return Int(formula[formula.index(after: at)...]) ?? 0
+    }
 
     /// Returns `<base>/<version>/bin` directories sorted newest-version first,
     /// optionally appending `<base>/<fallbackSymlink>/bin`.

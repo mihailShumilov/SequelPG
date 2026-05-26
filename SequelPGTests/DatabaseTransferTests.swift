@@ -178,6 +178,19 @@ final class DatabaseTransferTests: XCTestCase {
         XCTAssertEqual(PGToolchain.searchDirectories().first, (temp as NSString).expandingTildeInPath)
     }
 
+    func testKegOnlyLibpqDirectoriesAreSearched() {
+        let previous = PGToolchain.configuredDirectory
+        defer { PGToolchain.configuredDirectory = previous }
+        PGToolchain.configuredDirectory = nil
+
+        // Keg-only `libpq` is never symlinked into <prefix>/bin and a GUI app
+        // doesn't inherit the shell $PATH, so its opt location must be searched
+        // explicitly — otherwise `brew install libpq` goes undetected.
+        let dirs = PGToolchain.searchDirectories()
+        XCTAssertTrue(dirs.contains("/opt/homebrew/opt/libpq/bin"))
+        XCTAssertTrue(dirs.contains("/usr/local/opt/libpq/bin"))
+    }
+
     func testLocateFindsExecutableInConfiguredDirectory() throws {
         let previous = PGToolchain.configuredDirectory
         defer { PGToolchain.configuredDirectory = previous }
