@@ -10,6 +10,8 @@ enum AppError: LocalizedError, Sendable {
     case notConnected
     case foreignKeyViolation(String)
     case sshTunnelFailed(String)
+    case exportFailed(String)
+    case importFailed(String)
     case underlying(String)
 
     var errorDescription: String? {
@@ -30,6 +32,10 @@ enum AppError: LocalizedError, Sendable {
             return "Foreign key violation: \(message)"
         case let .sshTunnelFailed(message):
             return "SSH tunnel failed: \(message)"
+        case let .exportFailed(message):
+            return "Export failed: \(message)"
+        case let .importFailed(message):
+            return "Import failed: \(message)"
         case let .underlying(message):
             return message
         }

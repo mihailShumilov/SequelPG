@@ -79,6 +79,12 @@ actor MockDatabaseClient: PostgresClientProtocol {
 
     var isConnected: Bool { connected }
 
+    var stubbedEndpoint = PGConnectionEndpoint(host: "127.0.0.1", port: 5432)
+
+    func currentEndpoint() async -> PGConnectionEndpoint? {
+        connected ? stubbedEndpoint : nil
+    }
+
     func connect(profile: ConnectionProfile, password: String?, sshPassword: String? = nil) async throws {
         connectCallCount += 1
         lastConnectedProfile = profile

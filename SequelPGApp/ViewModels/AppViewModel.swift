@@ -167,10 +167,54 @@ struct CascadeDeleteBuilder {
     /// activity always survives.
     static let maxOpenTabs = 12
 
-    // Database-tools sheets (Extensions / Roles / Function Library)
+    // Database-tools sheets (Extensions / Roles / Function Library / Export / Import)
     var showExtensionsSheet = false
     var showRolesSheet = false
     var showFunctionLibrary = false
+    var showExportSheet = false
+    var showImportSheet = false
+
+    /// Immutable snapshot of the live connection for handing to external tools
+    /// (`pg_dump` / `psql`). The endpoint host/port is fetched separately via
+    /// `dbClient.currentEndpoint()` because the SSH-tunnel loopback port lives
+    /// inside the `DatabaseClient` actor. `nil` when not connected.
+    struct LiveConnection: Sendable {
+        var profile: ConnectionProfile
+        var password: String?
+        var sshPassword: String?
+    }
+
+    var liveConnection: LiveConnection? {
+        guard let connectedProfile else { return nil }
+        return LiveConnection(
+            profile: connectedProfile,
+            password: connectedPassword,
+            sshPassword: connectedSSHPassword
+        )
+    }
+
+    /// Schemas in the connected database, for the export sheet's schema picker.
+    /// Lives here (not in the View) so Views never call `dbClient` directly.
+    /// Returns an empty list on error — the picker simply shows nothing.
+    func schemasForExport() async -> [String] {
+        (try? await dbClient.listSchemas()) ?? []
+    }
+
+    /// Resolves the live connection into the parameters a PostgreSQL client tool
+    /// needs: the effective endpoint (loopback port when tunneled) plus the
+    /// connection's database/user/SSL and password. `nil` when not connected.
+    func toolConnection() async -> (connection: PGToolConnection, password: String?)? {
+        guard let live = liveConnection else { return nil }
+        let endpoint = await dbClient.currentEndpoint()
+        let connection = PGToolConnection(
+            host: endpoint?.host ?? live.profile.host,
+            port: endpoint?.port ?? live.profile.port,
+            database: live.profile.database,
+            username: live.profile.username,
+            sslMode: live.profile.sslMode
+        )
+        return (connection, live.password)
+    }
 
     /// Drives the Run/Call sheet for a selected function or procedure. Setting
     /// this to a non-nil value presents the sheet; the sheet clears it on close.

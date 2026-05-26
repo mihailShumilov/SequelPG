@@ -7,6 +7,10 @@ protocol PostgresClientProtocol: Sendable {
     func connect(profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
     func disconnect() async
     var isConnected: Bool { get async }
+    /// The effective host/port of the live connection — the loopback forwarding
+    /// port for SSH-tunneled profiles, the direct endpoint otherwise. Used by
+    /// external tools (pg_dump/psql). `nil` when not connected.
+    func currentEndpoint() async -> PGConnectionEndpoint?
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
     func explainQuery(_ sql: String, analyze: Bool, buffers: Bool, timeout: TimeInterval) async throws -> QueryPlan
     func listSchemas() async throws -> [String]
@@ -41,6 +45,12 @@ actor DatabaseClient: PostgresClientProtocol {
     private var client: PostgresClient?
     private var runTask: Task<Void, Never>?
     private let sshTunnel = SSHTunnelService()
+
+    /// The host/port the live `PostgresClient` is dialing. Set whenever a client
+    /// is established (connect or database switch) and cleared on disconnect, so
+    /// external tools can reach the same endpoint — including the SSH tunnel's
+    /// loopback port.
+    private var resolvedEndpoint: PGConnectionEndpoint?
 
     // Introspection caches. Bounded LRU so a long session browsing many tables
     // can't accumulate unbounded ColumnInfo / DBObject arrays — the per-entry
@@ -129,6 +139,12 @@ actor DatabaseClient: PostgresClientProtocol {
             await cleanupOnFailure()
             throw AppError.connectionFailed(error.localizedDescription)
         }
+
+        resolvedEndpoint = PGConnectionEndpoint(host: host, port: port)
+    }
+
+    func currentEndpoint() async -> PGConnectionEndpoint? {
+        client == nil ? nil : resolvedEndpoint
     }
 
     /// Build TLS configuration for the given SSL mode.
@@ -155,6 +171,7 @@ actor DatabaseClient: PostgresClientProtocol {
         runTask?.cancel()
         runTask = nil
         client = nil
+        resolvedEndpoint = nil
         await sshTunnel.stop()
         await invalidateCache()
         Log.db.info("Disconnected")

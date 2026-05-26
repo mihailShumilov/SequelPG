@@ -43,6 +43,19 @@ struct TabRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .newTabRequested)) { _ in
             addTab()
         }
+        // File-menu Export/Import target only the focused tab in this window —
+        // posting bare notifications and handling them per-tab would open the
+        // sheet in every connected tab at once.
+        .onReceive(NotificationCenter.default.publisher(for: .exportDatabaseRequested)) { _ in
+            if let appVM = selectedTabAppVM, appVM.isConnected { appVM.showExportSheet = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .importSQLRequested)) { _ in
+            if let appVM = selectedTabAppVM, appVM.isConnected { appVM.showImportSheet = true }
+        }
+    }
+
+    private var selectedTabAppVM: AppViewModel? {
+        tabs.first { $0.id == selectedTabId }?.appVM
     }
 
     private var tabBar: some View {
@@ -153,6 +166,9 @@ struct TabRootView: View {
                     Button("Extensions…") { appVM.showExtensionsSheet = true }
                     Button("Roles & Privileges…") { appVM.showRolesSheet = true }
                     Button("Function Library…") { appVM.showFunctionLibrary = true }
+                    Divider()
+                    Button("Export Database…") { appVM.showExportSheet = true }
+                    Button("Import SQL File…") { appVM.showImportSheet = true }
                 } label: {
                     Image(systemName: "server.rack")
                 }
@@ -178,6 +194,14 @@ struct TabRootView: View {
         .sheet(isPresented: $appVM.showFunctionLibrary) {
             FunctionLibrarySheet()
                 .environment(tab.appVM.queryVM)
+        }
+        .sheet(isPresented: $appVM.showExportSheet) {
+            ExportSheet()
+                .environment(tab.appVM)
+        }
+        .sheet(isPresented: $appVM.showImportSheet) {
+            ImportSheet()
+                .environment(tab.appVM)
         }
         .alert("Error", isPresented: .init(
             get: { tab.appVM.errorMessage != nil },

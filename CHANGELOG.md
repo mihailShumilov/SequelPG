@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Database export with full `pg_dump` options.** A new **Export Database…** command (Database-tools toolbar menu, or **File ▸ Export Database…** / ⇧⌘E) opens a sheet covering the breadth of `pg_dump`: output **format** (Plain SQL, Custom, Directory, Tar) with per-format **compression level**; **contents** (schema + data / schema only / data only); **schema selection** (all or a checklist of the live schemas); **ownership & privileges** (`--no-owner`, `--no-privileges`); **restore preamble** (`--clean`, `--if-exists`, `--create`); **data representation** (`--inserts`, `--column-inserts`); and options for comments, large objects, identifier quoting, tablespaces, and verbose progress. Live tool output streams into the sheet and a **Show in Finder** action reveals the result.
+- **SQL file import into the active database.** A new **Import SQL File…** command (toolbar menu, or **File ▸ Import SQL File…** / ⇧⌘I) runs a chosen `.sql` file through `psql`. Each import asks for its safety behaviour up front — **run in a single transaction** (atomic; rolls back on any error) and **stop on first error** (`ON_ERROR_STOP`) — with a clear warning that statements run against the live connection.
+- **PostgreSQL client-tools location in Settings.** Export/import shell out to your installed `pg_dump` / `psql` (the app is non-sandboxed, like the SSH-tunnel feature). They're auto-detected across Postgres.app, Homebrew (arm64 + Intel), and the EDB installer; Settings ▸ General shows the detected paths and lets you point at a custom `bin` directory.
+
 ## [0.3.0]
 
 ### Added
