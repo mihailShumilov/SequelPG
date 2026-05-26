@@ -37,6 +37,18 @@ struct SequelPGApp: App {
                 .keyboardShortcut("t", modifiers: .command)
             }
 
+            CommandGroup(replacing: .importExport) {
+                Button("Export Database…") {
+                    NotificationCenter.default.post(name: .exportDatabaseRequested, object: nil)
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+
+                Button("Import SQL File…") {
+                    NotificationCenter.default.post(name: .importSQLRequested, object: nil)
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+            }
+
             CommandGroup(replacing: .textEditing) {
                 Button("Find...") {
                     NotificationCenter.default.post(name: .toggleFilterBar, object: nil)
@@ -79,4 +91,6 @@ extension Notification.Name {
     static let newTabRequested = Notification.Name("com.sequelpg.newTabRequested")
     static let toggleFilterBar = Notification.Name("com.sequelpg.toggleFilterBar")
     static let toggleQueryHistory = Notification.Name("com.sequelpg.toggleQueryHistory")
+    static let exportDatabaseRequested = Notification.Name("com.sequelpg.exportDatabaseRequested")
+    static let importSQLRequested = Notification.Name("com.sequelpg.importSQLRequested")
 }

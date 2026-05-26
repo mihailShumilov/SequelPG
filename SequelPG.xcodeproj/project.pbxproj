@@ -86,6 +86,15 @@
 		AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000065; };
 		AA10000000000000000066 /* ThemePreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000066; };
 		AA10000000000000000067 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000067; };
+		AA10000000000000000070 /* DatabaseTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000070; };
+		AA10000000000000000071 /* PGToolchain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000071; };
+		AA10000000000000000072 /* DatabaseTransferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000072; };
+		AA10000000000000000073 /* ExportViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000073; };
+		AA10000000000000000074 /* ImportViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000074; };
+		AA10000000000000000075 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000075; };
+		AA10000000000000000076 /* ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000076; };
+		AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000077; };
+		AA10000000000000000078 /* TransferComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000078; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +187,15 @@
 		AB10000000000000000065 /* SQLCompletionProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionProviderTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000066 /* ThemePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePreference.swift; sourceTree = "<group>"; };
 		AB10000000000000000067 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AB10000000000000000070 /* DatabaseTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransfer.swift; sourceTree = "<group>"; };
+		AB10000000000000000071 /* PGToolchain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PGToolchain.swift; sourceTree = "<group>"; };
+		AB10000000000000000072 /* DatabaseTransferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferService.swift; sourceTree = "<group>"; };
+		AB10000000000000000073 /* ExportViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportViewModel.swift; sourceTree = "<group>"; };
+		AB10000000000000000074 /* ImportViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportViewModel.swift; sourceTree = "<group>"; };
+		AB10000000000000000075 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000076 /* ImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000077 /* DatabaseTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000078 /* TransferComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferComponents.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -232,6 +250,7 @@
 				AB10000000000000000004 /* ColumnInfo.swift */,
 				AB10000000000000000002 /* ConnectionProfile.swift */,
 				AB10000000000000000051 /* ConstraintInfo.swift */,
+				AB10000000000000000070 /* DatabaseTransfer.swift */,
 				AB10000000000000000003 /* DBObject.swift */,
 				AB10000000000000000053 /* ExtensionInfo.swift */,
 				AB1000000000000000005B /* FunctionMetadata.swift */,
@@ -249,7 +268,9 @@
 			isa = PBXGroup;
 			children = (
 				AB10000000000000000009 /* ConnectionStore.swift */,
+				AB10000000000000000072 /* DatabaseTransferService.swift */,
 				AB10000000000000000008 /* KeychainService.swift */,
+				AB10000000000000000071 /* PGToolchain.swift */,
 				AB1000000000000000000A /* PostgresClient.swift */,
 				AB1000000000000000002A /* SSHTunnelService.swift */,
 				AB10000000000000000066 /* ThemePreference.swift */,
@@ -263,6 +284,8 @@
 				AB1000000000000000000B /* AppViewModel.swift */,
 				AB10000000000000000035 /* AppViewModel+ObjectCRUD.swift */,
 				AB1000000000000000000C /* ConnectionListViewModel.swift */,
+				AB10000000000000000073 /* ExportViewModel.swift */,
+				AB10000000000000000074 /* ImportViewModel.swift */,
 				AB1000000000000000000D /* NavigatorViewModel.swift */,
 				AB1000000000000000000F /* QueryViewModel.swift */,
 				AB10000000000000000037 /* QueryHistoryViewModel.swift */,
@@ -278,8 +301,10 @@
 				AB10000000000000000012 /* ConnectionListView.swift */,
 				AB10000000000000000016 /* ContentTabView.swift */,
 				AB10000000000000000010 /* ContentView.swift */,
+				AB10000000000000000075 /* ExportSheet.swift */,
 				AB10000000000000000057 /* ExtensionsSheet.swift */,
 				AB10000000000000000059 /* FunctionLibrarySheet.swift */,
+				AB10000000000000000076 /* ImportSheet.swift */,
 				AB1000000000000000005C /* FunctionRunSheet.swift */,
 				AB10000000000000000055 /* IndexCreateSheet.swift */,
 				AB10000000000000000018 /* InspectorView.swift */,
@@ -300,6 +325,7 @@
 				AB10000000000000000067 /* SettingsView.swift */,
 				AB10000000000000000030 /* SSHTunnelFormSection.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
+				AB10000000000000000078 /* TransferComponents.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -336,6 +362,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000001E /* ConnectionStoreTests.swift */,
+				AB10000000000000000077 /* DatabaseTransferTests.swift */,
 				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
 				AB10000000000000000023 /* TableViewModelTests.swift */,
@@ -522,6 +549,14 @@
 				AA10000000000000000064 /* SQLCompletionWindow.swift in Sources */,
 				AA10000000000000000066 /* ThemePreference.swift in Sources */,
 				AA10000000000000000067 /* SettingsView.swift in Sources */,
+				AA10000000000000000070 /* DatabaseTransfer.swift in Sources */,
+				AA10000000000000000071 /* PGToolchain.swift in Sources */,
+				AA10000000000000000072 /* DatabaseTransferService.swift in Sources */,
+				AA10000000000000000073 /* ExportViewModel.swift in Sources */,
+				AA10000000000000000074 /* ImportViewModel.swift in Sources */,
+				AA10000000000000000075 /* ExportSheet.swift in Sources */,
+				AA10000000000000000076 /* ImportSheet.swift in Sources */,
+				AA10000000000000000078 /* TransferComponents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -531,6 +566,7 @@
 			files = (
 				AA1000000000000000001D /* QuoteIdentTests.swift in Sources */,
 				AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */,
+				AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */,
 				AA10000000000000000020 /* ModelTests.swift in Sources */,
 				AA10000000000000000023 /* TableViewModelTests.swift in Sources */,
 				AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */,
