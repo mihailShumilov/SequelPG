@@ -82,10 +82,14 @@ struct DiagramTabView: View {
                 .frame(width: 42)
             Button { setZoom(erdVM.scale + 0.1) } label: { Image(systemName: "plus.magnifyingglass") }
                 .help("Zoom in")
-            Button { erdVM.resetViewport(); appVM.saveDiagramLayout() } label: {
-                Image(systemName: "arrow.counterclockwise")
+            Button { erdVM.fitToViewport(); appVM.saveDiagramLayout() } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
             }
-            .help("Reset zoom and position")
+            .help("Fit diagram to window")
+            Button { erdVM.resetViewport(); appVM.saveDiagramLayout() } label: {
+                Image(systemName: "1.magnifyingglass")
+            }
+            .help("Reset to 100%")
         }
         .disabled(erdVM.diagram == nil)
     }

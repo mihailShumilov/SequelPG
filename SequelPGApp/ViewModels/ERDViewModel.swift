@@ -20,6 +20,8 @@ import Foundation
     // Viewport.
     var scale: CGFloat = 1
     var offset: CGPoint = .zero
+    /// Size of the on-screen canvas, reported by the view; used for fit-to-window.
+    var viewportSize: CGSize = .zero
 
     // Selection.
     var selectedNodeID: String?
@@ -131,6 +133,26 @@ import Foundation
     func resetViewport() {
         scale = 1
         offset = .zero
+    }
+
+    /// Scales and centers the diagram so the whole thing fits the current
+    /// viewport (never zooming past 100%). No-op until the view has reported a
+    /// size and there is something to show.
+    func fitToViewport() {
+        guard viewportSize.width > 1, viewportSize.height > 1 else { return }
+        let content = ERDGeometry.contentBounds(of: visibleNodes)
+        guard content.width > 1, content.height > 1 else { return }
+        let margin: CGFloat = 24
+        let fit = min(
+            (viewportSize.width - margin * 2) / content.width,
+            (viewportSize.height - margin * 2) / content.height
+        )
+        let clamped = min(max(fit, Self.minScale), 1)
+        scale = clamped
+        offset = CGPoint(
+            x: max(margin, (viewportSize.width - content.width * clamped) / 2),
+            y: max(margin, (viewportSize.height - content.height * clamped) / 2)
+        )
     }
 
     // MARK: - Persistence bridge

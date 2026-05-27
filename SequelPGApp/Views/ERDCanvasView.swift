@@ -27,31 +27,39 @@ struct ERDCanvasView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Theme.bg
-                .contentShape(Rectangle())
-                .onTapGesture { erdVM.selectedNodeID = nil }
-                .gesture(panGesture)
-
-            scaledContent
-        }
-        .coordinateSpace(name: Self.space)
-        .clipped()
-        .simultaneousGesture(magnifyGesture)
-        .onContinuousHover(coordinateSpace: .named(Self.space)) { phase in
-            switch phase {
-            case let .active(location):
-                // Convert the cursor to diagram coordinates (scale/offset are
-                // applied with a top-leading anchor, so this inverse is exact).
-                let point = CGPoint(
-                    x: (location.x - erdVM.offset.x) / erdVM.scale,
-                    y: (location.y - erdVM.offset.y) / erdVM.scale
-                )
-                hoveredEdgeID = edge(at: point)
-            case .ended:
-                hoveredEdgeID = nil
+        // The background is greedy and fixes the view's size to the available
+        // area; the (potentially huge) diagram is an overlay so it never inflates
+        // the layout and push the toolbar/tab bar off-screen. Overflow is clipped.
+        Theme.bg
+            .contentShape(Rectangle())
+            .onTapGesture { erdVM.selectedNodeID = nil }
+            .gesture(panGesture)
+            .overlay(alignment: .topLeading) { scaledContent }
+            .clipped()
+            .coordinateSpace(name: Self.space)
+            .simultaneousGesture(magnifyGesture)
+            .onContinuousHover(coordinateSpace: .named(Self.space)) { phase in
+                switch phase {
+                case let .active(location):
+                    // Convert the cursor to diagram coordinates (scale/offset use
+                    // a top-leading anchor, so this inverse is exact).
+                    let point = CGPoint(
+                        x: (location.x - erdVM.offset.x) / erdVM.scale,
+                        y: (location.y - erdVM.offset.y) / erdVM.scale
+                    )
+                    hoveredEdgeID = edge(at: point)
+                case .ended:
+                    hoveredEdgeID = nil
+                }
             }
-        }
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+                erdVM.viewportSize = size
+                // Fit once on open (when the viewport is still at its default),
+                // so switching to the tab frames the whole diagram.
+                if erdVM.scale == 1, erdVM.offset == .zero, !erdVM.visibleNodes.isEmpty, size.width > 1 {
+                    erdVM.fitToViewport()
+                }
+            }
     }
 
     private var scaledContent: some View {
