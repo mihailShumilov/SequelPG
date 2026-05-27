@@ -31,28 +31,69 @@ final class ERDLayoutEngineTests: XCTestCase {
         XCTAssertTrue(ERDLayoutEngine.gridLayout(nodes: [], edges: []).isEmpty)
     }
 
-    func testGridLayoutNonNegativeOrigins() {
-        let positions = ERDLayoutEngine.gridLayout(nodes: [node("a"), node("b")], edges: [])
+    // MARK: - Force-directed layout
+
+    func testLayoutPositionsEveryNode() {
+        let nodes = [node("a"), node("b"), node("c"), node("d"), node("e")]
+        let positions = ERDLayoutEngine.layout(nodes: nodes, edges: [])
+        XCTAssertEqual(Set(positions.keys), Set(nodes.map(\.id)))
+    }
+
+    func testLayoutIsDeterministic() {
+        let nodes = [node("a"), node("b"), node("c"), node("d")]
+        let edges = [
+            ERDEdge(id: "e1", constraintName: "c1", sourceNodeID: "public.b", sourceColumns: ["x"],
+                    targetNodeID: "public.a", targetColumns: ["id"], cardinality: .manyToOne),
+        ]
+        let first = ERDLayoutEngine.layout(nodes: nodes, edges: edges)
+        let second = ERDLayoutEngine.layout(nodes: nodes, edges: edges)
+        XCTAssertEqual(first, second, "Force-directed layout must be reproducible")
+    }
+
+    func testLayoutNonNegativeOrigins() {
+        let positions = ERDLayoutEngine.layout(nodes: [node("a"), node("b"), node("c")], edges: [])
         for point in positions.values {
             XCTAssertGreaterThanOrEqual(point.x, 0)
             XCTAssertGreaterThanOrEqual(point.y, 0)
         }
     }
 
-    // MARK: - ERDGeometry
-
-    func testBorderPointOnRightEdge() {
-        let rect = CGRect(x: 0, y: 0, width: 100, height: 50)
-        let point = ERDGeometry.borderPoint(of: rect, toward: CGPoint(x: 1000, y: 25))
-        XCTAssertEqual(point.x, 100, accuracy: 0.001)
-        XCTAssertEqual(point.y, 25, accuracy: 0.001)
+    func testLayoutSeparatesNodes() {
+        // After layout, no two cards' frames should overlap.
+        let nodes = [node("a"), node("b"), node("c"), node("d")]
+        let positions = ERDLayoutEngine.layout(nodes: nodes, edges: [])
+        let frames = nodes.map { node -> CGRect in
+            let origin = positions[node.id] ?? .zero
+            return CGRect(origin: origin, size: ERDMetrics.size(of: node))
+        }
+        for i in 0 ..< frames.count {
+            for j in (i + 1) ..< frames.count {
+                XCTAssertFalse(frames[i].intersects(frames[j]), "Cards \(i) and \(j) overlap")
+            }
+        }
     }
 
-    func testBorderPointOnTopEdge() {
-        let rect = CGRect(x: 0, y: 0, width: 100, height: 50)
-        let point = ERDGeometry.borderPoint(of: rect, toward: CGPoint(x: 50, y: -1000))
-        XCTAssertEqual(point.y, 0, accuracy: 0.001)
-        XCTAssertEqual(point.x, 50, accuracy: 0.001)
+    // MARK: - ERDGeometry
+
+    func testRouteStartsAndEndsOnCardBorders() throws {
+        let source = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let target = CGRect(x: 500, y: 0, width: 200, height: 100)
+        let route = ERDGeometry.route(from: source, to: target)
+        let first = try XCTUnwrap(route.points.first)
+        let last = try XCTUnwrap(route.points.last)
+        XCTAssertEqual(first.x, source.maxX, accuracy: 0.001)
+        XCTAssertEqual(last.x, target.minX, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(route.points.count, 2)
+    }
+
+    func testRouteConnectsVerticallyWhenStacked() throws {
+        let source = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let target = CGRect(x: 0, y: 400, width: 200, height: 100)
+        let route = ERDGeometry.route(from: source, to: target)
+        let first = try XCTUnwrap(route.points.first)
+        let last = try XCTUnwrap(route.points.last)
+        XCTAssertEqual(first.y, source.maxY, accuracy: 0.001)
+        XCTAssertEqual(last.y, target.minY, accuracy: 0.001)
     }
 
     func testContentBoundsIncludesNodeAndMargin() {

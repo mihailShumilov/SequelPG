@@ -91,7 +91,7 @@ import Foundation
     /// Re-runs auto-layout over the current nodes, overwriting positions.
     func applyAutoLayout() {
         guard let current = diagram else { return }
-        let positions = ERDLayoutEngine.gridLayout(nodes: current.nodes, edges: current.edges)
+        let positions = ERDLayoutEngine.layout(nodes: current.nodes, edges: current.edges)
         for index in diagram!.nodes.indices {
             if let position = positions[diagram!.nodes[index].id] {
                 diagram!.nodes[index].position = position

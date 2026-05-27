@@ -53,20 +53,52 @@ enum ERDSVGRenderer {
         var out = ""
         for edge in edges {
             guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { continue }
-            let ends = ERDGeometry.connection(from: source, to: target)
-            let from = ends.from
-            let to = ends.to
-            out += "<line x1=\"\(num(from.x))\" y1=\"\(num(from.y))\" x2=\"\(num(to.x))\" y2=\"\(num(to.y))\" "
-            out += "stroke=\"\(Palette.edge)\" stroke-width=\"1.5\"/>\n"
+            let route = ERDGeometry.route(from: source, to: target)
+            guard let from = route.points.first, let to = route.points.last, route.points.count >= 2 else { continue }
+
+            out += "<path d=\"\(svgPathData(from: route.path))\" fill=\"none\" "
+            out += "stroke=\"\(Palette.edge)\" stroke-width=\"1.5\" stroke-linejoin=\"round\"/>\n"
             out += "<circle cx=\"\(num(from.x))\" cy=\"\(num(from.y))\" r=\"3\" fill=\"\(Palette.foreignKey)\"/>\n"
 
-            let angle = atan2(to.y - from.y, to.x - from.x)
+            let incoming = route.points[route.points.count - 2]
+            let angle = atan2(to.y - incoming.y, to.x - incoming.x)
             out += arrowheadMarkup(at: to, angle: angle)
             if edge.cardinality == .oneToOne {
                 out += tickMarkup(at: to, angle: angle)
             }
         }
         return out
+    }
+
+    /// Serializes a `CGPath` (lines + rounded-corner curves) to an SVG path
+    /// `d` string, so the SVG matches the on-screen Canvas route exactly.
+    private static func svgPathData(from path: CGPath) -> String {
+        var data = ""
+        path.applyWithBlock { elementPointer in
+            let element = elementPointer.pointee
+            switch element.type {
+            case .moveToPoint:
+                let p = element.points[0]
+                data += "M\(num(p.x)) \(num(p.y)) "
+            case .addLineToPoint:
+                let p = element.points[0]
+                data += "L\(num(p.x)) \(num(p.y)) "
+            case .addQuadCurveToPoint:
+                let c = element.points[0]
+                let p = element.points[1]
+                data += "Q\(num(c.x)) \(num(c.y)) \(num(p.x)) \(num(p.y)) "
+            case .addCurveToPoint:
+                let c1 = element.points[0]
+                let c2 = element.points[1]
+                let p = element.points[2]
+                data += "C\(num(c1.x)) \(num(c1.y)) \(num(c2.x)) \(num(c2.y)) \(num(p.x)) \(num(p.y)) "
+            case .closeSubpath:
+                data += "Z "
+            @unknown default:
+                break
+            }
+        }
+        return data.trimmingCharacters(in: .whitespaces)
     }
 
     private static func arrowheadMarkup(at tip: CGPoint, angle: CGFloat) -> String {

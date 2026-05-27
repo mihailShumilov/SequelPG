@@ -48,24 +48,24 @@ struct ERDEdgesCanvas: View {
             let frames = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, ERDGeometry.frame(for: $0)) })
             for edge in edges {
                 guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { continue }
-                let ends = ERDGeometry.connection(from: source, to: target)
-                draw(context: context, from: ends.from, to: ends.to, cardinality: edge.cardinality)
+                draw(context: context, route: ERDGeometry.route(from: source, to: target), cardinality: edge.cardinality)
             }
         }
         .frame(width: contentSize.width, height: contentSize.height)
         .allowsHitTesting(false)
     }
 
-    private func draw(context: GraphicsContext, from: CGPoint, to: CGPoint, cardinality: ERDCardinality) {
-        var line = Path()
-        line.move(to: from)
-        line.addLine(to: to)
-        context.stroke(line, with: .color(Theme.line2), lineWidth: 1.5)
+    private func draw(context: GraphicsContext, route: ERDGeometry.Route, cardinality: ERDCardinality) {
+        guard let from = route.points.first, let to = route.points.last, route.points.count >= 2 else { return }
+
+        context.stroke(Path(route.path), with: .color(Theme.line2), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
 
         let childDot = Path(ellipseIn: CGRect(x: from.x - 3, y: from.y - 3, width: 6, height: 6))
         context.fill(childDot, with: .color(Theme.blue))
 
-        let angle = atan2(to.y - from.y, to.x - from.x)
+        // Arrowhead points along the final segment entering the parent.
+        let incoming = route.points[route.points.count - 2]
+        let angle = atan2(to.y - incoming.y, to.x - incoming.x)
         context.fill(arrowhead(at: to, angle: angle, length: 9, spread: .pi / 7), with: .color(Theme.ink3))
 
         if cardinality == .oneToOne {

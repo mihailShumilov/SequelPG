@@ -64,7 +64,7 @@ final class ERDSVGRendererTests: XCTestCase {
             cardinality: .manyToOne
         )
         let svg = ERDSVGRenderer.svg(nodes: nodes, edges: [edge])
-        XCTAssertTrue(svg.contains("<line"))
+        XCTAssertTrue(svg.contains("<path d=\"M"), "Edge should be an orthogonal path")
         XCTAssertTrue(svg.contains("<polygon"), "Arrowhead should be emitted as a polygon")
     }
 

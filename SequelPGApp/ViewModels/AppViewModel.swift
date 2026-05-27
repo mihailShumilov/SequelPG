@@ -245,7 +245,7 @@ struct CascadeDeleteBuilder {
                 columnsByTable: columnsByTable,
                 foreignKeys: foreignKeys
             )
-            let positions = ERDLayoutEngine.gridLayout(nodes: diagram.nodes, edges: diagram.edges)
+            let positions = ERDLayoutEngine.layout(nodes: diagram.nodes, edges: diagram.edges)
             diagram.nodes = diagram.nodes.map { node in
                 var node = node
                 node.position = positions[node.id] ?? node.position
