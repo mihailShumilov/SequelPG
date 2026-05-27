@@ -103,6 +103,9 @@
 		AA10000000000000000E0B /* ERDDiagramContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0B; };
 		AA10000000000000000E03 /* ERDLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E03; };
 		AA10000000000000000E09 /* ERDCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E09; };
+		AA10000000000000000E05 /* ERDSVGRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E05; };
+		AA10000000000000000E06 /* ERDImageExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E06; };
+		AA10000000000000000E0C /* ERDExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0C; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -212,6 +215,9 @@
 		AB10000000000000000E0B /* ERDDiagramContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagramContentView.swift; sourceTree = "<group>"; };
 		AB10000000000000000E03 /* ERDLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutStore.swift; sourceTree = "<group>"; };
 		AB10000000000000000E09 /* ERDCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDCanvasView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E05 /* ERDSVGRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDSVGRenderer.swift; sourceTree = "<group>"; };
+		AB10000000000000000E06 /* ERDImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDImageExporter.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0C /* ERDExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDExportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -349,6 +355,7 @@
 				AB10000000000000000E0A /* ERDTableNodeView.swift */,
 				AB10000000000000000E0B /* ERDDiagramContentView.swift */,
 				AB10000000000000000E09 /* ERDCanvasView.swift */,
+				AB10000000000000000E0C /* ERDExportSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -368,6 +375,8 @@
 				AB1000000000000000002D /* SQLTextStorage.swift */,
 				AB1000000000000000002E /* SQLCompletionProvider.swift */,
 				AB10000000000000000E04 /* ERDLayoutEngine.swift */,
+				AB10000000000000000E05 /* ERDSVGRenderer.swift */,
+				AB10000000000000000E06 /* ERDImageExporter.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -589,6 +598,9 @@
 				AA10000000000000000E0B /* ERDDiagramContentView.swift in Sources */,
 				AA10000000000000000E03 /* ERDLayoutStore.swift in Sources */,
 				AA10000000000000000E09 /* ERDCanvasView.swift in Sources */,
+				AA10000000000000000E05 /* ERDSVGRenderer.swift in Sources */,
+				AA10000000000000000E06 /* ERDImageExporter.swift in Sources */,
+				AA10000000000000000E0C /* ERDExportSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
