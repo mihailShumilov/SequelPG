@@ -12,7 +12,6 @@ struct DiagramTabView: View {
         VStack(spacing: 0) {
             toolbar
             Rectangle().fill(Theme.line).frame(height: 1)
-            debugBanner
             content
         }
         .task { await initialLoad() }
@@ -20,28 +19,6 @@ struct DiagramTabView: View {
             ERDExportSheet()
                 .environment(erdVM)
         }
-    }
-
-    // TEMP DEBUG — remove once the blank-canvas issue is resolved.
-    private var debugBanner: some View {
-        let d = erdVM.diagram
-        let text = "DBG schema=\(erdVM.selectedSchema ?? "nil") "
-            + "loading=\(erdVM.isLoading ? "Y" : "N") "
-            + "err=\(erdVM.errorMessage ?? "-") "
-            + "nodes=\(d?.nodes.count ?? -1) edges=\(d?.edges.count ?? -1) "
-            + "vis=\(erdVM.visibleNodes.count)/\(erdVM.visibleEdges.count) "
-            + "routes=\(erdVM.routes.count) "
-            + "scale=\(String(format: "%.2f", erdVM.scale)) "
-            + "off=(\(Int(erdVM.offset.x)),\(Int(erdVM.offset.y))) "
-            + "vp=(\(Int(erdVM.viewportSize.width))x\(Int(erdVM.viewportSize.height)))"
-        return Text(text)
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.yellow)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.black)
     }
 
     // MARK: - Toolbar

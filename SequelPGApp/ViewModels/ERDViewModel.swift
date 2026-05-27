@@ -186,8 +186,9 @@ import Foundation
             diagram!.nodes[index].isCollapsed = layout.collapsed.contains(id)
             diagram!.nodes[index].isHidden = layout.hidden.contains(id)
         }
-        scale = min(max(layout.scale, Self.minScale), Self.maxScale)
-        offset = layout.offset
+        // Intentionally does NOT restore scale/offset: the viewport is reframed
+        // (fit-to-window) on every open, so a stale saved pan/zoom can't push the
+        // diagram off-screen. Only the node arrangement is persisted/restored.
         recomputeRoutes()
     }
 }

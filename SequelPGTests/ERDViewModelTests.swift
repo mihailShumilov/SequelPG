@@ -132,11 +132,14 @@ final class ERDViewModelTests: XCTestCase {
         restored.setDiagram(sampleDiagram())
         restored.apply(layout: layout)
 
+        // The node arrangement is restored…
         XCTAssertEqual(restored.diagram?.node(id: "public.users")?.position, CGPoint(x: 50, y: 60))
         XCTAssertEqual(restored.diagram?.node(id: "public.orders")?.isCollapsed, true)
         XCTAssertEqual(restored.diagram?.node(id: "public.users")?.isHidden, true)
-        XCTAssertEqual(restored.scale, 1.25)
-        XCTAssertEqual(restored.offset, CGPoint(x: 7, y: 8))
+        // …but the viewport is intentionally NOT restored (it's reframed on open),
+        // so it stays at the default that setDiagram reset it to.
+        XCTAssertEqual(restored.scale, 1)
+        XCTAssertEqual(restored.offset, .zero)
     }
 
     func testClearResetsState() {
