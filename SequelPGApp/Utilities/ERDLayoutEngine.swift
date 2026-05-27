@@ -58,6 +58,19 @@ enum ERDLayoutEngine {
             .map { ($0.sourceNodeID, $0.targetNodeID) }
             .filter { positions[$0.0] != nil && positions[$0.1] != nil }
 
+        // Bound the drawing area (classic FR frame) so disconnected nodes, which
+        // feel only repulsion, can't drift to infinity. Centered on the seed
+        // centroid; sized to comfortably hold the node count.
+        var boxCenterX: CGFloat = 0
+        var boxCenterY: CGFloat = 0
+        for id in ids {
+            boxCenterX += positions[id]!.x
+            boxCenterY += positions[id]!.y
+        }
+        boxCenterX /= CGFloat(nodes.count)
+        boxCenterY /= CGFloat(nodes.count)
+        let halfExtent = max(900, CGFloat(Double(nodes.count).squareRoot()) * k)
+
         for _ in 0 ..< iterations {
             var displacement = Dictionary(uniqueKeysWithValues: ids.map { ($0, CGVector.zero) })
 
@@ -113,13 +126,17 @@ enum ERDLayoutEngine {
                 displacement[id]!.dy += (centerY - positions[id]!.y) * gravity
             }
 
-            // Move each node, capped by the cooling temperature.
+            // Move each node, capped by the cooling temperature, then confine it
+            // to the drawing frame so nothing escapes the bounded area.
             for id in ids {
                 let vector = displacement[id]!
                 let length = max((vector.dx * vector.dx + vector.dy * vector.dy).squareRoot(), 0.01)
                 let step = min(length, temperature)
-                positions[id]!.x += vector.dx / length * step
-                positions[id]!.y += vector.dy / length * step
+                var x = positions[id]!.x + vector.dx / length * step
+                var y = positions[id]!.y + vector.dy / length * step
+                x = min(max(x, boxCenterX - halfExtent), boxCenterX + halfExtent)
+                y = min(max(y, boxCenterY - halfExtent), boxCenterY + halfExtent)
+                positions[id] = CGPoint(x: x, y: y)
             }
             temperature = max(temperature * 0.96, k * 0.05)
         }
