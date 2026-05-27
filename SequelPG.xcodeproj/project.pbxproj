@@ -101,6 +101,8 @@
 		AA10000000000000000E07 /* ERDViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E07; };
 		AA10000000000000000E0A /* ERDTableNodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0A; };
 		AA10000000000000000E0B /* ERDDiagramContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0B; };
+		AA10000000000000000E03 /* ERDLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E03; };
+		AA10000000000000000E09 /* ERDCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E09; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -208,6 +210,8 @@
 		AB10000000000000000E07 /* ERDViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDViewModel.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0A /* ERDTableNodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDTableNodeView.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0B /* ERDDiagramContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagramContentView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E03 /* ERDLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutStore.swift; sourceTree = "<group>"; };
+		AB10000000000000000E09 /* ERDCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDCanvasView.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -288,6 +292,7 @@
 				AB1000000000000000000A /* PostgresClient.swift */,
 				AB1000000000000000002A /* SSHTunnelService.swift */,
 				AB10000000000000000066 /* ThemePreference.swift */,
+				AB10000000000000000E03 /* ERDLayoutStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -343,6 +348,7 @@
 				AB10000000000000000078 /* TransferComponents.swift */,
 				AB10000000000000000E0A /* ERDTableNodeView.swift */,
 				AB10000000000000000E0B /* ERDDiagramContentView.swift */,
+				AB10000000000000000E09 /* ERDCanvasView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -581,6 +587,8 @@
 				AA10000000000000000E07 /* ERDViewModel.swift in Sources */,
 				AA10000000000000000E0A /* ERDTableNodeView.swift in Sources */,
 				AA10000000000000000E0B /* ERDDiagramContentView.swift in Sources */,
+				AA10000000000000000E03 /* ERDLayoutStore.swift in Sources */,
+				AA10000000000000000E09 /* ERDCanvasView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

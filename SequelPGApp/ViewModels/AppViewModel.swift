@@ -254,6 +254,12 @@ struct CascadeDeleteBuilder {
 
             erdVM.setDiagram(diagram)
             erdVM.selectedSchema = schema
+            // Restore the user's saved positions/collapse/hide/viewport on top of
+            // the fresh auto-layout, if a layout was persisted for this schema.
+            if let profileID = connectedProfile?.id,
+               let saved = erdLayoutStore.load(profileID: profileID, schema: schema) {
+                erdVM.apply(layout: saved)
+            }
             erdVM.errorMessage = nil
             Log.ui.info("UI: loaded ERD for schema \(schema, privacy: .public) (\(diagram.nodes.count) tables)")
         } catch {
@@ -261,6 +267,19 @@ struct CascadeDeleteBuilder {
             Log.ui.error("UI: ERD load failed - \(error.localizedDescription)")
         }
         erdVM.isLoading = false
+    }
+
+    /// Persists the current diagram view state for the active profile + schema.
+    /// Called by the canvas after the user moves/collapses/hides a table or
+    /// changes the viewport. A no-op when nothing is loaded.
+    func saveDiagramLayout() {
+        guard let profileID = connectedProfile?.id,
+              let schema = erdVM.selectedSchema,
+              erdVM.diagram != nil
+        else {
+            return
+        }
+        erdLayoutStore.save(erdVM.currentLayout(), profileID: profileID, schema: schema)
     }
 
     /// Resolves the live connection into the parameters a PostgreSQL client tool
@@ -298,6 +317,10 @@ struct CascadeDeleteBuilder {
     @ObservationIgnored private var connectedProfile: ConnectionProfile?
     @ObservationIgnored private var connectedPassword: String?
     @ObservationIgnored private var connectedSSHPassword: String?
+
+    /// Persists per-schema ERD layouts to disk. Owned here so Views never touch
+    /// storage directly, matching the rule that AppViewModel coordinates I/O.
+    @ObservationIgnored private let erdLayoutStore = ERDLayoutStore()
 
     // While a database switch is in flight the connection pool is torn down
     // and rebuilt; concurrent callers that try to reuse `dbClient` during that

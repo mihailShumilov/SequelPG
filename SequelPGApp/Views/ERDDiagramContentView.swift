@@ -20,7 +20,7 @@ struct ERDDiagramContentView: View {
         ZStack(alignment: .topLeading) {
             background
 
-            edgeLayer
+            ERDEdgesCanvas(nodes: nodes, edges: edges)
 
             ForEach(nodes) { node in
                 ERDTableNodeView(node: node, isSelected: node.id == selectedNodeID)
@@ -29,24 +29,34 @@ struct ERDDiagramContentView: View {
         }
         .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
     }
+}
 
-    private var edgeLayer: some View {
+/// The FK relationship layer: straight connectors between table cards with an
+/// arrowhead at the parent (target) end, a dot at the child (source) end, and a
+/// perpendicular tick marking one-to-one relationships. Shared by the static
+/// content view and the interactive canvas so geometry is identical everywhere.
+struct ERDEdgesCanvas: View {
+    let nodes: [ERDNode]
+    let edges: [ERDEdge]
+
+    private var contentSize: CGSize {
+        ERDGeometry.contentBounds(of: nodes)
+    }
+
+    var body: some View {
         Canvas { context, _ in
             let frames = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, ERDGeometry.frame(for: $0)) })
             for edge in edges {
                 guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { continue }
                 let ends = ERDGeometry.connection(from: source, to: target)
-                drawEdge(context: context, from: ends.from, to: ends.to, cardinality: edge.cardinality)
+                draw(context: context, from: ends.from, to: ends.to, cardinality: edge.cardinality)
             }
         }
         .frame(width: contentSize.width, height: contentSize.height)
         .allowsHitTesting(false)
     }
 
-    /// Draws the connector line plus an arrowhead at the parent (target) end and
-    /// a small dot at the child (source) end. A doubled tick near the parent
-    /// marks a one-to-one relationship.
-    private func drawEdge(context: GraphicsContext, from: CGPoint, to: CGPoint, cardinality: ERDCardinality) {
+    private func draw(context: GraphicsContext, from: CGPoint, to: CGPoint, cardinality: ERDCardinality) {
         var line = Path()
         line.move(to: from)
         line.addLine(to: to)
@@ -66,14 +76,8 @@ struct ERDDiagramContentView: View {
     private func arrowhead(at tip: CGPoint, angle: CGFloat, length: CGFloat, spread: CGFloat) -> Path {
         var path = Path()
         path.move(to: tip)
-        path.addLine(to: CGPoint(
-            x: tip.x - length * cos(angle - spread),
-            y: tip.y - length * sin(angle - spread)
-        ))
-        path.addLine(to: CGPoint(
-            x: tip.x - length * cos(angle + spread),
-            y: tip.y - length * sin(angle + spread)
-        ))
+        path.addLine(to: CGPoint(x: tip.x - length * cos(angle - spread), y: tip.y - length * sin(angle - spread)))
+        path.addLine(to: CGPoint(x: tip.x - length * cos(angle + spread), y: tip.y - length * sin(angle + spread)))
         path.closeSubpath()
         return path
     }
