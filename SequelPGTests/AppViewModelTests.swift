@@ -1265,7 +1265,8 @@ final class AppViewModelTests: AppViewModelTestCase {
     }
 
     func testMainTabAllCases() {
-        XCTAssertEqual(AppViewModel.MainTab.allCases.count, 4)
+        XCTAssertEqual(AppViewModel.MainTab.allCases.count, 5)
+        XCTAssertTrue(AppViewModel.MainTab.allCases.contains(.diagram))
     }
 
     // MARK: - Integration-style scenarios

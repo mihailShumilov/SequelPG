@@ -107,6 +107,10 @@
 		AA10000000000000000E06 /* ERDImageExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E06; };
 		AA10000000000000000E0C /* ERDExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0C; };
 		AA10000000000000000E08 /* DiagramTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E08; };
+		AA10000000000000000E0D /* ERDViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0D; };
+		AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0E; };
+		AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0F; };
+		AA10000000000000000E10 /* ERDModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E10; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -220,6 +224,10 @@
 		AB10000000000000000E06 /* ERDImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDImageExporter.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0C /* ERDExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDExportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000E08 /* DiagramTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagramTabView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0D /* ERDViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0E /* ERDLayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutEngineTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0F /* ERDSVGRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDSVGRendererTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E10 /* ERDModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -410,6 +418,10 @@
 				AB10000000000000000024A /* InsertDeleteTests.swift */,
 				AB10000000000000000025A /* CascadeDeleteTests.swift */,
 				AB10000000000000000065 /* SQLCompletionProviderTests.swift */,
+				AB10000000000000000E10 /* ERDModelTests.swift */,
+				AB10000000000000000E0D /* ERDViewModelTests.swift */,
+				AB10000000000000000E0E /* ERDLayoutEngineTests.swift */,
+				AB10000000000000000E0F /* ERDSVGRendererTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -625,6 +637,10 @@
 				AA10000000000000000024A /* InsertDeleteTests.swift in Sources */,
 				AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */,
 				AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */,
+				AA10000000000000000E10 /* ERDModelTests.swift in Sources */,
+				AA10000000000000000E0D /* ERDViewModelTests.swift in Sources */,
+				AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */,
+				AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

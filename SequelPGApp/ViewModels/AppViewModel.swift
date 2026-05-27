@@ -264,7 +264,7 @@ struct CascadeDeleteBuilder {
             Log.ui.info("UI: loaded ERD for schema \(schema, privacy: .public) (\(diagram.nodes.count) tables)")
         } catch {
             erdVM.errorMessage = error.localizedDescription
-            Log.ui.error("UI: ERD load failed - \(error.localizedDescription)")
+            Log.ui.error("UI: ERD load failed - \(error.localizedDescription, privacy: .public)")
         }
         erdVM.isLoading = false
     }
