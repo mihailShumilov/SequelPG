@@ -163,7 +163,9 @@ struct DiagramTabView: View {
 
     private func initialLoad() async {
         await appVM.refreshDiagramSchemas()
-        if erdVM.diagram == nil, let schema = erdVM.selectedSchema {
+        // Load when nothing is shown yet, or when the loaded diagram is for a
+        // different schema than the one now selected (e.g. after reconnecting).
+        if let schema = erdVM.selectedSchema, erdVM.diagram?.schema != schema {
             await appVM.loadDiagram(schema: schema)
         }
     }

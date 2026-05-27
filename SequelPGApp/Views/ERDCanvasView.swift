@@ -27,14 +27,19 @@ struct ERDCanvasView: View {
     }
 
     var body: some View {
-        // The background is greedy and fixes the view's size to the available
-        // area; the (potentially huge) diagram is an overlay so it never inflates
-        // the layout and push the toolbar/tab bar off-screen. Overflow is clipped.
-        Theme.bg
-            .contentShape(Rectangle())
-            .onTapGesture { erdVM.selectedNodeID = nil }
-            .gesture(panGesture)
-            .overlay(alignment: .topLeading) { scaledContent }
+        // GeometryReader pins the canvas to exactly the available area; the
+        // (potentially huge) diagram is drawn inside and clipped, so it never
+        // inflates the layout or pushes the toolbar/tab bar off-screen.
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                Theme.bg
+                    .contentShape(Rectangle())
+                    .onTapGesture { erdVM.selectedNodeID = nil }
+                    .gesture(panGesture)
+
+                scaledContent
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             .clipped()
             .coordinateSpace(name: Self.space)
             .simultaneousGesture(magnifyGesture)
@@ -52,14 +57,23 @@ struct ERDCanvasView: View {
                     hoveredEdgeID = nil
                 }
             }
-            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
-                erdVM.viewportSize = size
-                // Fit once on open (when the viewport is still at its default),
-                // so switching to the tab frames the whole diagram.
-                if erdVM.scale == 1, erdVM.offset == .zero, !erdVM.visibleNodes.isEmpty, size.width > 1 {
-                    erdVM.fitToViewport()
-                }
+            .onAppear {
+                erdVM.viewportSize = geo.size
+                autoFitIfDefault()
             }
+            .onChange(of: geo.size) { _, newSize in
+                erdVM.viewportSize = newSize
+                autoFitIfDefault()
+            }
+        }
+    }
+
+    /// Fits the diagram to the viewport only when the viewport is still at its
+    /// default (i.e. no saved or user-set pan/zoom), so opening the tab frames
+    /// the whole diagram without overriding a deliberate zoom.
+    private func autoFitIfDefault() {
+        guard erdVM.scale == 1, erdVM.offset == .zero, !erdVM.visibleNodes.isEmpty else { return }
+        erdVM.fitToViewport()
     }
 
     private var scaledContent: some View {

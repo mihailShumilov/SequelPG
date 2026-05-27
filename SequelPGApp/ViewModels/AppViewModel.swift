@@ -365,6 +365,7 @@ struct CascadeDeleteBuilder {
             connectedSSHPassword = sshPassword
             connectedProfileName = profile.name
             selectedTab = .query
+            erdVM.clear() // drop any diagram from a previous connection
 
             // Detect server version
             let versionResult = try await dbClient.runQuery("SHOW server_version_num", maxRows: 1, timeout: 5.0)
@@ -400,6 +401,7 @@ struct CascadeDeleteBuilder {
         connectedSSHPassword = nil
         connectedProfileName = nil
         navigatorVM.clear()
+        erdVM.clear()
         closeAllTabs()
         selectedTab = .query
         Log.ui.info("UI: disconnected")
