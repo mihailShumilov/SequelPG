@@ -256,9 +256,16 @@ struct CascadeDeleteBuilder {
             erdVM.selectedSchema = schema
             // Restore the user's saved positions/collapse/hide/viewport on top of
             // the fresh auto-layout, if a layout was persisted for this schema.
+            var appliedSavedLayout = false
             if let profileID = connectedProfile?.id,
                let saved = erdLayoutStore.load(profileID: profileID, schema: schema) {
                 erdVM.apply(layout: saved)
+                appliedSavedLayout = true
+            }
+            // With no saved viewport, frame the whole diagram (no-op until the
+            // canvas reports its size, after which onGeometryChange fits it).
+            if !appliedSavedLayout {
+                erdVM.fitToViewport()
             }
             erdVM.errorMessage = nil
             Log.ui.info("UI: loaded ERD for schema \(schema, privacy: .public) (\(diagram.nodes.count) tables)")

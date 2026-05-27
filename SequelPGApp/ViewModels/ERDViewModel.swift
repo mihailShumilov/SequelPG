@@ -57,6 +57,10 @@ import Foundation
     func setDiagram(_ diagram: ERDDiagram) {
         self.diagram = diagram
         selectedNodeID = nil
+        // Reset the viewport so a newly loaded schema doesn't inherit a stale
+        // pan/zoom from the previously viewed one (which can push it off-screen).
+        scale = 1
+        offset = .zero
         recomputeRoutes()
     }
 
