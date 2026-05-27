@@ -47,6 +47,26 @@ type: project
 - `QuoteLiteral.quoteLiteralTyped()` explains why no cast for NULL but doesn't explain the `textLikeTypes` rationale (why those and not others).
 - `SQLFormatter.reconstruct()` is the most complex function in the codebase with no inline comments explaining the `isMultiWordSecond` detection logic.
 
+## New Findings (2026-05-26 review — export/import feature)
+
+### New Warnings
+- **ExportViewModel / ImportViewModel: duplicated appendProgress + maxProgressLines** — Exact same 5-line method and constant in both VMs. Extract to a shared `TransferProgressBuffer` helper or a protocol mixin once a third consumer appears; acceptable for two callers.
+- **ExportViewModel / ImportViewModel: duplicated locateTool() pattern** — Both follow the identical 6-line locate-then-detach-version pattern. Differs only in which `PGTool` enum case is passed. Could be a shared `func locateTool(_ tool: PGTool)` but divergence is minimal; borderline.
+- **ExportViewModel / ImportViewModel: duplicated cancel() pattern** — Both cancel() methods are identical 4-line blocks. Same verdict as above.
+- **ExportSheet / ImportSheet: transferLog computed property is copy-pasted verbatim** — Both sheets have the same `transferLog` var (a `ScrollViewReader` wrapping a `LazyVStack` of mono-font lines that auto-scrolls). Should be extracted to a `TransferLogView` (or private file-scope View) in a future pass.
+- **ExportSheet / ImportSheet: connectionSummary is copy-pasted verbatim** — Same 10-line `@ViewBuilder` block in both sheets. Extract to a fileprivate `ConnectionSummaryView`.
+- **ExportSheet / ImportSheet: toolMissingView has near-identical structure** — Both are 10-line VStack with same icon/layout, differing only in the tool name string. Could be a shared `ToolMissingView(toolName:)`.
+- **ExportSheet / ImportSheet: progressView status header is structural duplicate** — The if/else-if chain that shows spinner/error-icon/checkmark differs only in label strings. Borderline given the file-path-display row that only ExportSheet has.
+- **PGConnectionEndpoint is unused** — `PGConnectionEndpoint` is declared in `DatabaseTransfer.swift` but nothing in the reviewed surface area (ViewModels, Service, Tests) ever constructs or references it. Possibly dead code or a placeholder for future SSH-tunnel endpoint abstraction that was superseded by `PGToolConnection`.
+- **ExportOptions.arguments uses `--name=value` injection without sanitization** — Schema/table names from user-selected DB values are interpolated into arg strings (e.g. `--schema=\(schema)`) using `=` form which guards against getopt re-parsing, but a schema name containing whitespace would still silently corrupt the argument. The test covers the `-` prefix case; a whitespace case is untested.
+- **PGToolchain.configuredDirectory directly touches UserDefaults.standard** — This is inconsistent with the project convention where only `ConnectionStore` is supposed to access `UserDefaults`. Low severity given it's settings, not connection data.
+
+### New Suggestions
+- **DatabaseTransfer.swift: `ExportOptions` has 15 stored properties** — It is a wide struct but deliberately models all pg_dump knobs. Not a smell at this scale; the value comes from centralized testable argument construction.
+- **OutputCollector.maxTailLines is a magic number** — 40 lines retained for error summary is reasonable but undocumented. Trivial to name as a constant.
+- **`PGTool.displayName` is always identical to `rawValue`** — The enum has `.pgDump = "pg_dump"` and `.psql` with `displayName` returning the same strings. The computed property adds no value; callers could use `.rawValue` directly.
+- **DatabaseTransferTests: `testLocateReturnsNilForMissingToolInEmptyDirectory` has a weak assertion** — The test body is `_ = PGToolchain.locate(.pgDump)` with no assertion about the return value. It only tests that the call doesn't crash. Rename to reflect this (e.g. `testLocateDoesNotCrashWithInvalidDirectory`), or add `XCTAssertNil` for the specific path override.
+
 ## New Findings (2026-04-11 review of recently modified files)
 
 ### New Critical
