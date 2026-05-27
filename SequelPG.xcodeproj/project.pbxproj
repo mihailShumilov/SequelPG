@@ -95,6 +95,8 @@
 		AA10000000000000000076 /* ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000076; };
 		AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000077; };
 		AA10000000000000000078 /* TransferComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000078; };
+		AA10000000000000000E01 /* ERDDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E01; };
+		AA10000000000000000E02 /* ERDLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E02; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -196,6 +198,8 @@
 		AB10000000000000000076 /* ImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000077 /* DatabaseTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000078 /* TransferComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferComponents.swift; sourceTree = "<group>"; };
+		AB10000000000000000E01 /* ERDDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagram.swift; sourceTree = "<group>"; };
+		AB10000000000000000E02 /* ERDLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayout.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -260,6 +264,8 @@
 				AB10000000000000000005 /* QueryResult.swift */,
 				AB10000000000000000054 /* RoleInfo.swift */,
 				AB10000000000000000052 /* TriggerInfo.swift */,
+				AB10000000000000000E01 /* ERDDiagram.swift */,
+				AB10000000000000000E02 /* ERDLayout.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -557,6 +563,8 @@
 				AA10000000000000000075 /* ExportSheet.swift in Sources */,
 				AA10000000000000000076 /* ImportSheet.swift in Sources */,
 				AA10000000000000000078 /* TransferComponents.swift in Sources */,
+				AA10000000000000000E01 /* ERDDiagram.swift in Sources */,
+				AA10000000000000000E02 /* ERDLayout.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
