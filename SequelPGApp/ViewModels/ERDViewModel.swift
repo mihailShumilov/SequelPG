@@ -31,7 +31,7 @@ import Foundation
     /// hover, selection, or viewport changes — so those stay cheap.
     private(set) var routes: [String: ERDGeometry.Route] = [:]
 
-    static let minScale: CGFloat = 0.25
+    static let minScale: CGFloat = 0.1
     static let maxScale: CGFloat = 2.5
 
     /// Nodes the user has not hidden, in stable id order.

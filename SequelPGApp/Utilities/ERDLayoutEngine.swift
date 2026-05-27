@@ -95,6 +95,24 @@ enum ERDLayoutEngine {
                 displacement[target]!.dy += dy / distance * force
             }
 
+            // Gravity toward the centroid. Without it, tables with no foreign
+            // keys feel only repulsion and drift off to infinity, blowing up the
+            // bounding box (ForceAtlas2's fix). A linear spring keeps every node —
+            // connected or not — within a bounded region.
+            var centerX: CGFloat = 0
+            var centerY: CGFloat = 0
+            for id in ids {
+                centerX += positions[id]!.x
+                centerY += positions[id]!.y
+            }
+            centerX /= CGFloat(nodes.count)
+            centerY /= CGFloat(nodes.count)
+            let gravity: CGFloat = 0.3
+            for id in ids {
+                displacement[id]!.dx += (centerX - positions[id]!.x) * gravity
+                displacement[id]!.dy += (centerY - positions[id]!.y) * gravity
+            }
+
             // Move each node, capped by the cooling temperature.
             for id in ids {
                 let vector = displacement[id]!
