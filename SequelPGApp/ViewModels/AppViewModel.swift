@@ -142,6 +142,7 @@ struct CascadeDeleteBuilder {
     let tableVM: TableViewModel
     let queryVM: QueryViewModel
     let queryHistoryVM: QueryHistoryViewModel
+    let erdVM: ERDViewModel
 
     var selectedTab: MainTab = .query
     var showInspector = true
@@ -198,6 +199,68 @@ struct CascadeDeleteBuilder {
     /// Returns an empty list on error — the picker simply shows nothing.
     func schemasForExport() async -> [String] {
         (try? await dbClient.listSchemas()) ?? []
+    }
+
+    // MARK: - ERD diagram
+
+    /// Populates the diagram's schema picker from the connected database, and
+    /// chooses a sensible default schema (the selected object's schema, else the
+    /// first available). Cheap and idempotent — safe to call when the tab opens.
+    func refreshDiagramSchemas() async {
+        let schemas = (try? await dbClient.listSchemas()) ?? []
+        erdVM.availableSchemas = schemas
+        if erdVM.selectedSchema == nil || !(schemas.contains(erdVM.selectedSchema ?? "")) {
+            erdVM.selectedSchema = navigatorVM.selectedObject?.schema ?? schemas.first
+        }
+    }
+
+    /// Loads tables, columns, and foreign keys for `schema`, builds the diagram,
+    /// applies auto-layout, and pushes it into `erdVM`. Sole `dbClient` caller for
+    /// the ERD, mirroring how `selectObject` drives `tableVM`.
+    func loadDiagram(schema: String) async {
+        guard isConnected else { return }
+        erdVM.isLoading = true
+        erdVM.errorMessage = nil
+        do {
+            let tables = try await dbClient.listTables(schema: schema)
+            let foreignKeys = try await dbClient.listForeignKeys(schema: schema)
+
+            // Columns per table, fetched concurrently; the actor's column cache
+            // keeps this cheap on revisits.
+            var columnsByTable: [String: [ColumnInfo]] = [:]
+            try await withThrowingTaskGroup(of: (String, [ColumnInfo]).self) { group in
+                for table in tables {
+                    group.addTask { [dbClient] in
+                        (table.name, try await dbClient.getColumns(schema: schema, table: table.name))
+                    }
+                }
+                for try await (name, columns) in group {
+                    columnsByTable[name] = columns
+                }
+            }
+
+            var diagram = ERDDiagram.build(
+                schema: schema,
+                tables: tables,
+                columnsByTable: columnsByTable,
+                foreignKeys: foreignKeys
+            )
+            let positions = ERDLayoutEngine.gridLayout(nodes: diagram.nodes, edges: diagram.edges)
+            diagram.nodes = diagram.nodes.map { node in
+                var node = node
+                node.position = positions[node.id] ?? node.position
+                return node
+            }
+
+            erdVM.setDiagram(diagram)
+            erdVM.selectedSchema = schema
+            erdVM.errorMessage = nil
+            Log.ui.info("UI: loaded ERD for schema \(schema, privacy: .public) (\(diagram.nodes.count) tables)")
+        } catch {
+            erdVM.errorMessage = error.localizedDescription
+            Log.ui.error("UI: ERD load failed - \(error.localizedDescription)")
+        }
+        erdVM.isLoading = false
     }
 
     /// Resolves the live connection into the parameters a PostgreSQL client tool
@@ -258,6 +321,7 @@ struct CascadeDeleteBuilder {
         self.tableVM = TableViewModel()
         self.queryVM = QueryViewModel()
         self.queryHistoryVM = QueryHistoryViewModel()
+        self.erdVM = ERDViewModel()
     }
 
     /// Connects to a database using the given profile and credentials.
