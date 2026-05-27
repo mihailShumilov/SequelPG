@@ -106,6 +106,7 @@
 		AA10000000000000000E05 /* ERDSVGRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E05; };
 		AA10000000000000000E06 /* ERDImageExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E06; };
 		AA10000000000000000E0C /* ERDExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0C; };
+		AA10000000000000000E08 /* DiagramTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E08; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -218,6 +219,7 @@
 		AB10000000000000000E05 /* ERDSVGRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDSVGRenderer.swift; sourceTree = "<group>"; };
 		AB10000000000000000E06 /* ERDImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDImageExporter.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0C /* ERDExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDExportSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000E08 /* DiagramTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagramTabView.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -356,6 +358,7 @@
 				AB10000000000000000E0B /* ERDDiagramContentView.swift */,
 				AB10000000000000000E09 /* ERDCanvasView.swift */,
 				AB10000000000000000E0C /* ERDExportSheet.swift */,
+				AB10000000000000000E08 /* DiagramTabView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -601,6 +604,7 @@
 				AA10000000000000000E05 /* ERDSVGRenderer.swift in Sources */,
 				AA10000000000000000E06 /* ERDImageExporter.swift in Sources */,
 				AA10000000000000000E0C /* ERDExportSheet.swift in Sources */,
+				AA10000000000000000E08 /* DiagramTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

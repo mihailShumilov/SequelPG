@@ -333,6 +333,7 @@ struct CascadeDeleteBuilder {
         case content = "Content"
         case definition = "Definition"
         case query = "Query"
+        case diagram = "Diagram"
     }
 
     init(

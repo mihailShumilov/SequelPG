@@ -132,6 +132,7 @@ struct TabRootView: View {
         .environment(tab.appVM.tableVM)
         .environment(tab.appVM.queryVM)
         .environment(tab.appVM.queryHistoryVM)
+        .environment(tab.appVM.erdVM)
         .environment(connectionListVM)
     }
 
