@@ -50,10 +50,11 @@ enum ERDSVGRenderer {
 
     private static func edgeMarkup(nodes: [ERDNode], edges: [ERDEdge]) -> String {
         let frames = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, ERDGeometry.frame(for: $0)) })
+        let routes = ERDRouter.routes(nodeFrames: frames, edges: edges)
         var out = ""
         for edge in edges {
             guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { continue }
-            let route = ERDGeometry.route(from: source, to: target)
+            let route = routes[edge.id] ?? ERDGeometry.route(from: source, to: target)
             guard let from = route.points.first, let to = route.points.last, route.points.count >= 2 else { continue }
 
             out += "<path d=\"\(svgPathData(from: route.path))\" fill=\"none\" "

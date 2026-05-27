@@ -111,6 +111,7 @@
 		AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0E; };
 		AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0F; };
 		AA10000000000000000E10 /* ERDModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E10; };
+		AA10000000000000000E11 /* ERDRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E11; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -224,6 +225,7 @@
 		AB10000000000000000E06 /* ERDImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDImageExporter.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0C /* ERDExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDExportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000E08 /* DiagramTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagramTabView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E11 /* ERDRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDRouter.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0D /* ERDViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0E /* ERDLayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutEngineTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E0F /* ERDSVGRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDSVGRendererTests.swift; sourceTree = "<group>"; };
@@ -388,6 +390,7 @@
 				AB10000000000000000E04 /* ERDLayoutEngine.swift */,
 				AB10000000000000000E05 /* ERDSVGRenderer.swift */,
 				AB10000000000000000E06 /* ERDImageExporter.swift */,
+				AB10000000000000000E11 /* ERDRouter.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -617,6 +620,7 @@
 				AA10000000000000000E06 /* ERDImageExporter.swift in Sources */,
 				AA10000000000000000E0C /* ERDExportSheet.swift in Sources */,
 				AA10000000000000000E08 /* DiagramTabView.swift in Sources */,
+				AA10000000000000000E11 /* ERDRouter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

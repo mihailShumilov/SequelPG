@@ -38,6 +38,9 @@ struct ERDDiagramContentView: View {
 struct ERDEdgesCanvas: View {
     let nodes: [ERDNode]
     let edges: [ERDEdge]
+    /// When true, route around cards with the A* obstacle router. Set false for
+    /// cheap direct routing while the user is actively dragging a node.
+    var obstacleAvoiding: Bool = true
 
     private var contentSize: CGSize {
         ERDGeometry.contentBounds(of: nodes)
@@ -46,9 +49,11 @@ struct ERDEdgesCanvas: View {
     var body: some View {
         Canvas { context, _ in
             let frames = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, ERDGeometry.frame(for: $0)) })
+            let routes = obstacleAvoiding ? ERDRouter.routes(nodeFrames: frames, edges: edges) : [:]
             for edge in edges {
                 guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { continue }
-                draw(context: context, route: ERDGeometry.route(from: source, to: target), cardinality: edge.cardinality)
+                let route = routes[edge.id] ?? ERDGeometry.route(from: source, to: target)
+                draw(context: context, route: route, cardinality: edge.cardinality)
             }
         }
         .frame(width: contentSize.width, height: contentSize.height)

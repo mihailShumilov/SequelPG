@@ -16,6 +16,9 @@ struct ERDCanvasView: View {
     @State private var panStart: CGPoint?
     @State private var magnifyStart: CGFloat?
     @State private var nodeDragStart: [String: CGPoint] = [:]
+    /// While a node is being dragged we use cheap direct edge routing; the full
+    /// obstacle-avoiding router runs once the drag ends.
+    @State private var isDraggingNode = false
 
     private var contentSize: CGSize {
         ERDGeometry.contentBounds(of: erdVM.visibleNodes)
@@ -37,7 +40,7 @@ struct ERDCanvasView: View {
 
     private var scaledContent: some View {
         ZStack(alignment: .topLeading) {
-            ERDEdgesCanvas(nodes: erdVM.visibleNodes, edges: erdVM.visibleEdges)
+            ERDEdgesCanvas(nodes: erdVM.visibleNodes, edges: erdVM.visibleEdges, obstacleAvoiding: !isDraggingNode)
 
             ForEach(erdVM.visibleNodes) { node in
                 interactiveNode(node)
@@ -75,6 +78,7 @@ struct ERDCanvasView: View {
     private func nodeDrag(_ node: ERDNode) -> some Gesture {
         DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
             .onChanged { value in
+                isDraggingNode = true
                 let start = nodeDragStart[node.id] ?? node.position
                 if nodeDragStart[node.id] == nil { nodeDragStart[node.id] = start }
                 // Translation is in screen points; divide by scale to convert to
@@ -88,6 +92,7 @@ struct ERDCanvasView: View {
             }
             .onEnded { _ in
                 nodeDragStart[node.id] = nil
+                isDraggingNode = false
                 appVM.saveDiagramLayout()
             }
     }

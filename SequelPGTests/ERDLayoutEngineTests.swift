@@ -96,6 +96,55 @@ final class ERDLayoutEngineTests: XCTestCase {
         XCTAssertEqual(last.y, target.minY, accuracy: 0.001)
     }
 
+    // MARK: - ERDRouter (obstacle avoidance)
+
+    func testRouterRoutesAroundBlockingTable() {
+        // Two cards on the same row with a third card directly between them; the
+        // route from left to right must not pass through the middle card.
+        let left = ERDNode(schema: "public", name: "left", columns: [], position: CGPoint(x: 0, y: 200))
+        let middle = ERDNode(schema: "public", name: "middle", columns: [], position: CGPoint(x: 400, y: 200))
+        let right = ERDNode(schema: "public", name: "right", columns: [], position: CGPoint(x: 800, y: 200))
+        let frames = Dictionary(uniqueKeysWithValues: [left, middle, right].map { ($0.id, ERDGeometry.frame(for: $0)) })
+        let edge = ERDEdge(
+            id: "e", constraintName: "fk",
+            sourceNodeID: left.id, sourceColumns: ["x"],
+            targetNodeID: right.id, targetColumns: ["id"],
+            cardinality: .manyToOne
+        )
+
+        let routes = ERDRouter.routes(nodeFrames: frames, edges: [edge])
+        let route = routes["e"]
+        XCTAssertNotNil(route)
+
+        // No segment of the polyline should pass through the middle card.
+        let blocker = frames[middle.id]!.insetBy(dx: -1, dy: -1)
+        let points = route!.points
+        for i in 0 ..< points.count - 1 {
+            let a = points[i]
+            let b = points[i + 1]
+            let segMinX = min(a.x, b.x), segMaxX = max(a.x, b.x)
+            let segMinY = min(a.y, b.y), segMaxY = max(a.y, b.y)
+            let intersects = segMaxX > blocker.minX && segMinX < blocker.maxX
+                && segMaxY > blocker.minY && segMinY < blocker.maxY
+            XCTAssertFalse(intersects, "Segment \(i) passes through the blocking card")
+        }
+    }
+
+    func testRouterIsDeterministic() {
+        let a = ERDNode(schema: "public", name: "a", columns: [], position: CGPoint(x: 0, y: 0))
+        let b = ERDNode(schema: "public", name: "b", columns: [], position: CGPoint(x: 500, y: 300))
+        let frames = Dictionary(uniqueKeysWithValues: [a, b].map { ($0.id, ERDGeometry.frame(for: $0)) })
+        let edge = ERDEdge(
+            id: "e", constraintName: "fk",
+            sourceNodeID: a.id, sourceColumns: ["x"],
+            targetNodeID: b.id, targetColumns: ["id"],
+            cardinality: .manyToOne
+        )
+        let first = ERDRouter.routes(nodeFrames: frames, edges: [edge])["e"]?.points
+        let second = ERDRouter.routes(nodeFrames: frames, edges: [edge])["e"]?.points
+        XCTAssertEqual(first, second)
+    }
+
     func testContentBoundsIncludesNodeAndMargin() {
         let single = node("a")
         let size = ERDGeometry.contentBounds(of: [single])
