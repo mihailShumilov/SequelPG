@@ -44,4 +44,18 @@ struct ERDLayout: Codable, Equatable {
     var isReadable: Bool {
         schemaVersion <= ERDLayout.currentVersion
     }
+
+    /// Whether the saved node positions are within a sane range. Guards against
+    /// corrupt or legacy layouts (e.g. saved before the layout was frame-bounded)
+    /// that place tables tens of thousands of points apart and off-screen — in
+    /// which case the caller should fall back to a fresh auto-layout.
+    var positionsAreReasonable: Bool {
+        guard !positions.isEmpty else { return true }
+        let xs = positions.values.map(\.x)
+        let ys = positions.values.map(\.y)
+        guard xs.allSatisfy(\.isFinite), ys.allSatisfy(\.isFinite) else { return false }
+        let spanX = (xs.max() ?? 0) - (xs.min() ?? 0)
+        let spanY = (ys.max() ?? 0) - (ys.min() ?? 0)
+        return spanX < 25000 && spanY < 25000
+    }
 }

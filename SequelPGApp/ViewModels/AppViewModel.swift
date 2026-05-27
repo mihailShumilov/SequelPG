@@ -255,9 +255,12 @@ struct CascadeDeleteBuilder {
             erdVM.setDiagram(diagram)
             erdVM.selectedSchema = schema
             // Restore the user's saved node arrangement (positions/collapse/hide)
-            // if present — but not the viewport, which is always reframed below.
+            // if present and sane — but not the viewport, which is always reframed
+            // below. A legacy/corrupt layout with off-screen positions is ignored
+            // so the fresh bounded auto-layout is shown instead.
             if let profileID = connectedProfile?.id,
-               let saved = erdLayoutStore.load(profileID: profileID, schema: schema) {
+               let saved = erdLayoutStore.load(profileID: profileID, schema: schema),
+               saved.positionsAreReasonable {
                 erdVM.apply(layout: saved)
             }
             // Always frame the whole diagram (no-op until the canvas reports its

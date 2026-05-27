@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The interactive diagram workspace. Wraps the shared edge layer and table
@@ -21,6 +22,8 @@ struct ERDCanvasView: View {
     @State private var isDraggingNode = false
     /// Relationship line currently under the cursor.
     @State private var hoveredEdgeID: String?
+    /// Local monitor for ⌘+scroll-wheel zoom, active only while the canvas shows.
+    @State private var scrollMonitor: Any?
 
     private var contentSize: CGSize {
         ERDGeometry.contentBounds(of: erdVM.visibleNodes)
@@ -60,12 +63,38 @@ struct ERDCanvasView: View {
             .onAppear {
                 erdVM.viewportSize = geo.size
                 autoFitIfDefault()
+                installScrollMonitor()
             }
             .onChange(of: geo.size) { _, newSize in
                 erdVM.viewportSize = newSize
                 autoFitIfDefault()
             }
+            .onDisappear { removeScrollMonitor() }
         }
+    }
+
+    /// ⌘+scroll (trackpad or mouse wheel) zooms the canvas — the trackpad pinch
+    /// is already handled by `magnifyGesture`. The monitor is installed only
+    /// while the canvas is visible and consumes the event when ⌘ is held.
+    private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        let vm = erdVM
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard event.modifierFlags.contains(.command) else { return event }
+            let deltaY = event.scrollingDeltaY
+            MainActor.assumeIsolated {
+                vm.zoom(to: vm.scale * (1 - deltaY * 0.004))
+            }
+            return nil
+        }
+    }
+
+    private func removeScrollMonitor() {
+        if let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+        }
+        appVM.saveDiagramLayout()
     }
 
     /// Fits the diagram to the viewport only when the viewport is still at its

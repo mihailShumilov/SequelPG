@@ -12,7 +12,6 @@ struct DiagramTabView: View {
         VStack(spacing: 0) {
             toolbar
             Rectangle().fill(Theme.line).frame(height: 1)
-            debugBanner
             content
         }
         .task { await initialLoad() }
@@ -20,33 +19,6 @@ struct DiagramTabView: View {
             ERDExportSheet()
                 .environment(erdVM)
         }
-    }
-
-    // TEMP DEBUG — remove once the blank-canvas issue is resolved.
-    private var debugBanner: some View {
-        Text(debugInfo())
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.yellow)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.black)
-    }
-
-    private func debugInfo() -> String {
-        let nodes = erdVM.visibleNodes
-        let content = ERDGeometry.contentBounds(of: nodes)
-        let xs = nodes.map(\.position.x)
-        let ys = nodes.map(\.position.y)
-        let minX = Int(xs.min() ?? 0), maxX = Int(xs.max() ?? 0)
-        let minY = Int(ys.min() ?? 0), maxY = Int(ys.max() ?? 0)
-        let scale = String(format: "%.3f", erdVM.scale)
-        let off = "(\(Int(erdVM.offset.x)),\(Int(erdVM.offset.y)))"
-        let vp = "(\(Int(erdVM.viewportSize.width))x\(Int(erdVM.viewportSize.height)))"
-        let cont = "(\(Int(content.width))x\(Int(content.height)))"
-        return "n=\(nodes.count) scale=\(scale) off=\(off) vp=\(vp) content=\(cont) "
-            + "posX=[\(minX)..\(maxX)] posY=[\(minY)..\(maxY)] err=\(erdVM.errorMessage ?? "-")"
     }
 
     // MARK: - Toolbar
@@ -205,6 +177,7 @@ struct DiagramTabView: View {
 
     private func applyAutoLayout() {
         erdVM.applyAutoLayout()
+        erdVM.fitToViewport()
         appVM.saveDiagramLayout()
     }
 
