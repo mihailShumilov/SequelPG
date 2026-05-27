@@ -1,0 +1,214 @@
+import AppKit
+import SwiftUI
+
+/// The interactive diagram workspace. Wraps the shared edge layer and table
+/// cards in a zoom/pan viewport and adds per-node dragging, selection, collapse,
+/// and hide. View state lives on `ERDViewModel`; persistence is delegated to
+/// `AppViewModel.saveDiagramLayout()` after each gesture or edit so Views never
+/// touch storage directly.
+struct ERDCanvasView: View {
+    @Environment(AppViewModel.self) private var appVM
+    @Environment(ERDViewModel.self) private var erdVM
+
+    private static let space = "erdCanvas"
+
+    // Gesture anchors captured on first change, mirroring the SidebarResizeHandle
+    // pattern (start value + delta) used elsewhere in the app.
+    @State private var panStart: CGPoint?
+    @State private var magnifyStart: CGFloat?
+    @State private var nodeDragStart: [String: CGPoint] = [:]
+    /// While a node is being dragged we use cheap direct edge routing; the full
+    /// obstacle-avoiding router runs once the drag ends.
+    @State private var isDraggingNode = false
+    /// Relationship line currently under the cursor.
+    @State private var hoveredEdgeID: String?
+    /// Local monitor for ⌘+scroll-wheel zoom, active only while the canvas shows.
+    @State private var scrollMonitor: Any?
+
+    private var contentSize: CGSize {
+        ERDGeometry.contentBounds(of: erdVM.visibleNodes)
+    }
+
+    var body: some View {
+        // GeometryReader pins the canvas to exactly the available area; the
+        // (potentially huge) diagram is drawn inside and clipped, so it never
+        // inflates the layout or pushes the toolbar/tab bar off-screen.
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                Theme.bg
+                    .contentShape(Rectangle())
+                    .onTapGesture { erdVM.selectedNodeID = nil }
+                    .gesture(panGesture)
+
+                scaledContent
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .clipped()
+            .coordinateSpace(name: Self.space)
+            .simultaneousGesture(magnifyGesture)
+            .onContinuousHover(coordinateSpace: .named(Self.space)) { phase in
+                switch phase {
+                case let .active(location):
+                    // Convert the cursor to diagram coordinates (scale/offset use
+                    // a top-leading anchor, so this inverse is exact).
+                    let point = CGPoint(
+                        x: (location.x - erdVM.offset.x) / erdVM.scale,
+                        y: (location.y - erdVM.offset.y) / erdVM.scale
+                    )
+                    hoveredEdgeID = edge(at: point)
+                case .ended:
+                    hoveredEdgeID = nil
+                }
+            }
+            .onAppear {
+                erdVM.viewportSize = geo.size
+                autoFitIfDefault()
+                installScrollMonitor()
+            }
+            .onChange(of: geo.size) { _, newSize in
+                erdVM.viewportSize = newSize
+                autoFitIfDefault()
+            }
+            .onDisappear { removeScrollMonitor() }
+        }
+    }
+
+    /// ⌘+scroll (trackpad or mouse wheel) zooms the canvas — the trackpad pinch
+    /// is already handled by `magnifyGesture`. The monitor is installed only
+    /// while the canvas is visible and consumes the event when ⌘ is held.
+    private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        let vm = erdVM
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard event.modifierFlags.contains(.command) else { return event }
+            let deltaY = event.scrollingDeltaY
+            MainActor.assumeIsolated {
+                vm.zoom(to: vm.scale * (1 - deltaY * 0.004))
+            }
+            return nil
+        }
+    }
+
+    private func removeScrollMonitor() {
+        if let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+        }
+        appVM.saveDiagramLayout()
+    }
+
+    /// Fits the diagram to the viewport only when the viewport is still at its
+    /// default (i.e. no saved or user-set pan/zoom), so opening the tab frames
+    /// the whole diagram without overriding a deliberate zoom.
+    private func autoFitIfDefault() {
+        guard erdVM.scale == 1, erdVM.offset == .zero, !erdVM.visibleNodes.isEmpty else { return }
+        erdVM.fitToViewport()
+    }
+
+    private var scaledContent: some View {
+        ZStack(alignment: .topLeading) {
+            ERDEdgesCanvas(
+                nodes: erdVM.visibleNodes,
+                edges: erdVM.visibleEdges,
+                routes: isDraggingNode ? [:] : erdVM.routes,
+                highlightedEdgeID: hoveredEdgeID
+            )
+
+            ForEach(erdVM.visibleNodes) { node in
+                interactiveNode(node)
+            }
+        }
+        .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
+        .scaleEffect(erdVM.scale, anchor: .topLeading)
+        .offset(x: erdVM.offset.x, y: erdVM.offset.y)
+    }
+
+    private func interactiveNode(_ node: ERDNode) -> some View {
+        ERDTableNodeView(node: node, isSelected: node.id == erdVM.selectedNodeID)
+            .offset(x: node.position.x, y: node.position.y)
+            .gesture(nodeDrag(node))
+            .onTapGesture(count: 2) { toggleCollapse(node) }
+            .onTapGesture { erdVM.selectedNodeID = node.id }
+            .contextMenu {
+                Button(node.isCollapsed ? "Expand" : "Collapse") { toggleCollapse(node) }
+                Button("Hide Table") {
+                    erdVM.hideNode(id: node.id)
+                    appVM.saveDiagramLayout()
+                }
+            }
+    }
+
+    // MARK: - Edits
+
+    private func toggleCollapse(_ node: ERDNode) {
+        erdVM.toggleCollapse(id: node.id)
+        appVM.saveDiagramLayout()
+    }
+
+    // MARK: - Gestures
+
+    private func nodeDrag(_ node: ERDNode) -> some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                isDraggingNode = true
+                let start = nodeDragStart[node.id] ?? node.position
+                if nodeDragStart[node.id] == nil { nodeDragStart[node.id] = start }
+                // Translation is in screen points; divide by scale to convert to
+                // diagram coordinates. Clamp to the positive quadrant so the
+                // content bounds (and exports) stay anchored at the origin.
+                let moved = CGPoint(
+                    x: max(0, start.x + value.translation.width / erdVM.scale),
+                    y: max(0, start.y + value.translation.height / erdVM.scale)
+                )
+                erdVM.moveNode(id: node.id, to: moved)
+            }
+            .onEnded { _ in
+                nodeDragStart[node.id] = nil
+                isDraggingNode = false
+                erdVM.recomputeRoutes() // re-run obstacle routing for the settled layout
+                appVM.saveDiagramLayout()
+            }
+    }
+
+    /// The relationship line nearest the given diagram-space point, within a
+    /// small (zoom-independent) tolerance, or nil.
+    private func edge(at point: CGPoint) -> String? {
+        let tolerance = 8 / max(erdVM.scale, 0.1)
+        var bestID: String?
+        var bestDistance = CGFloat.greatestFiniteMagnitude
+        for (id, route) in erdVM.routes {
+            let distance = ERDGeometry.distance(from: point, toPolyline: route.points)
+            if distance < tolerance, distance < bestDistance {
+                bestDistance = distance
+                bestID = id
+            }
+        }
+        return bestID
+    }
+
+    private var panGesture: some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                let start = panStart ?? erdVM.offset
+                if panStart == nil { panStart = start }
+                erdVM.offset = CGPoint(x: start.x + value.translation.width, y: start.y + value.translation.height)
+            }
+            .onEnded { _ in
+                panStart = nil
+                appVM.saveDiagramLayout()
+            }
+    }
+
+    private var magnifyGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let start = magnifyStart ?? erdVM.scale
+                if magnifyStart == nil { magnifyStart = start }
+                erdVM.zoom(to: start * value.magnification)
+            }
+            .onEnded { _ in
+                magnifyStart = nil
+                appVM.saveDiagramLayout()
+            }
+    }
+}

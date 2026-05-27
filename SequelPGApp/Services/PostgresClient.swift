@@ -34,6 +34,9 @@ protocol PostgresClientProtocol: Sendable {
     func listConstraints(schema: String, table: String) async throws -> [ConstraintInfo]
     func listTriggers(schema: String, table: String) async throws -> [TriggerInfo]
     func listPartitions(schema: String, table: String) async throws -> [DBObject]
+    /// Every foreign-key constraint in a schema, in one query. Used to draw ERD
+    /// relationships without N per-table `listConstraints` round trips.
+    func listForeignKeys(schema: String) async throws -> [ConstraintInfo]
     // Database-wide metadata
     func listExtensions() async throws -> [ExtensionInfo]
     func listAvailableExtensions() async throws -> [ExtensionInfo]
@@ -1992,6 +1995,53 @@ actor DatabaseClient: PostgresClientProtocol {
             let refCols = (try? ra["ref_cols"].decode([String]?.self) ?? nil) ?? []
             result.append(ConstraintInfo(
                 schema: schema, table: table, name: name, kind: kind,
+                definition: defn, columns: cols,
+                referencedTable: refTable.flatMap { t in refSchema.map { "\($0).\(t)" } ?? t },
+                referencedColumns: refCols
+            ))
+        }
+        return result
+    }
+
+    func listForeignKeys(schema: String) async throws -> [ConstraintInfo] {
+        guard let client else { throw AppError.notConnected }
+        // Schema-wide variant of `listConstraints`, restricted to FOREIGN KEY
+        // (`contype = 'f'`). One round trip yields every relationship for the ERD.
+        let query: PostgresQuery = """
+            SELECT t.relname AS tbl,
+                   c.conname AS name,
+                   pg_get_constraintdef(c.oid) AS defn,
+                   (SELECT ARRAY_AGG(a.attname ORDER BY k.ord)
+                      FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+                      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+                   ) AS cols,
+                   rn.nspname AS ref_schema,
+                   rc.relname AS ref_table,
+                   (SELECT ARRAY_AGG(a.attname ORDER BY k.ord)
+                      FROM unnest(COALESCE(c.confkey, '{}'::smallint[])) WITH ORDINALITY AS k(attnum, ord)
+                      JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.attnum
+                   ) AS ref_cols
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            LEFT JOIN pg_class rc ON rc.oid = c.confrelid
+            LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+            WHERE c.contype = 'f' AND n.nspname = \(schema)
+            ORDER BY t.relname, c.conname
+            """
+        var result: [ConstraintInfo] = []
+        let rows = try await client.query(query)
+        for try await row in rows {
+            let ra = PostgresRandomAccessRow(row)
+            let table = try ra["tbl"].decode(String.self)
+            let name = try ra["name"].decode(String.self)
+            let defn = try ra["defn"].decode(String.self)
+            let cols = (try? ra["cols"].decode([String].self)) ?? []
+            let refTable: String? = try? ra["ref_table"].decode(String?.self) ?? nil
+            let refSchema: String? = try? ra["ref_schema"].decode(String?.self) ?? nil
+            let refCols = (try? ra["ref_cols"].decode([String]?.self) ?? nil) ?? []
+            result.append(ConstraintInfo(
+                schema: schema, table: table, name: name, kind: .foreignKey,
                 definition: defn, columns: cols,
                 referencedTable: refTable.flatMap { t in refSchema.map { "\($0).\(t)" } ?? t },
                 referencedColumns: refCols

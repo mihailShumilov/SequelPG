@@ -236,6 +236,7 @@ actor MockDatabaseClient: PostgresClientProtocol {
 
     var stubbedIndexes: [IndexInfo] = []
     var stubbedConstraints: [ConstraintInfo] = []
+    var stubbedForeignKeys: [ConstraintInfo] = []
     var stubbedTriggers: [TriggerInfo] = []
     var stubbedPartitions: [DBObject] = []
     var stubbedExtensions: [ExtensionInfo] = []
@@ -244,6 +245,7 @@ actor MockDatabaseClient: PostgresClientProtocol {
 
     func listIndexes(schema: String, table: String) async throws -> [IndexInfo] { stubbedIndexes }
     func listConstraints(schema: String, table: String) async throws -> [ConstraintInfo] { stubbedConstraints }
+    func listForeignKeys(schema: String) async throws -> [ConstraintInfo] { stubbedForeignKeys }
     func listTriggers(schema: String, table: String) async throws -> [TriggerInfo] { stubbedTriggers }
     func listPartitions(schema: String, table: String) async throws -> [DBObject] { stubbedPartitions }
     func listExtensions() async throws -> [ExtensionInfo] { stubbedExtensions }
@@ -1263,7 +1265,8 @@ final class AppViewModelTests: AppViewModelTestCase {
     }
 
     func testMainTabAllCases() {
-        XCTAssertEqual(AppViewModel.MainTab.allCases.count, 4)
+        XCTAssertEqual(AppViewModel.MainTab.allCases.count, 5)
+        XCTAssertTrue(AppViewModel.MainTab.allCases.contains(.diagram))
     }
 
     // MARK: - Integration-style scenarios

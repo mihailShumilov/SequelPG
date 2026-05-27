@@ -62,3 +62,63 @@ SequelPG is a native macOS PostgreSQL client (SwiftUI, PostgresNIO, macOS 14+). 
 **Why this matters:**
 - This is a desktop DB admin tool. The primary threat is a malicious database (or schema/table names crafted by a DBA on a shared server) injecting SQL via schema/table/column names returned from pg_catalog and used unescaped in DDL.
 - The secondary threat is a user connecting to an untrusted database and having the DB return crafted column type names / operator names that escape into DDL statements.
+
+---
+
+## ERD Feature — Security Audit (2026-05-27)
+
+### SQL Injection (listForeignKeys)
+- Uses `let query: PostgresQuery = """...\(schema)..."""` string interpolation on a `PostgresQuery` typed literal — this IS PostgresNIO's parameterized query mechanism (bound parameter, not string concatenation). Identical pattern to `listConstraints`. No SQL injection risk.
+
+### File Path (ERDLayoutStore)
+- Schema encoded with `.addingPercentEncoding(withAllowedCharacters: .alphanumerics)` — encodes `.` `..` `/` `\` `:` `?` `*` `<` `>` `|` space and all non-alphanumeric chars. Path traversal not possible.
+- Profile key is `UUID.uuidString` — only hexadecimal + hyphens, never contains path separators.
+- Fallback to "schema" literal if encoding returns nil — correctly bounded.
+- ERDLayout fields: schemaVersion (Int), positions ([String:CGPoint]), collapsed (Set<String>), hidden (Set<String>), scale (CGFloat), offset (CGPoint). No credentials or sensitive data.
+
+### OSLog Privacy Gap (unresolved)
+- `AppViewModel.swift:267`: `Log.ui.error("UI: ERD load failed - \(error.localizedDescription)")` — missing `privacy: .public` annotation. OSLog default for non-annotated String interpolations is `.private` (redacted in Console on device), so this is NOT a disclosure risk in practice, but is inconsistent with `ERDLayoutStore.swift:49` which explicitly annotates.
+
+### SVG XML Injection
+- `escape()` covers all 5 required XML entities: `&` `<` `>` `"` `'`. Applied to all DB-sourced strings (node.name, column.name, column.type) via the `text()` helper. All SVG attribute values (colors, weight, anchor, dimensions) are hardcoded constants or CGFloat integers — no user-controlled data in attributes. No injection path.
+
+### Export Path Safety
+- NSSavePanel provides the URL; user chooses location interactively — correct pattern.
+- `allowedContentTypes` set conditionally (only when `UTType(filenameExtension:)` succeeds). UTType lookup for "png", "svg", "pdf" will succeed on any macOS 14+ system; this is a defense-in-depth note, not a real gap.
+- App is NOT sandboxed; write is unrestricted at OS level once user selects path. This is pre-existing architecture, not introduced by ERD feature.
+- Export error `localizedDescription` shown in UI — `NSCocoaError` from `data.write(to:)` may include the user-chosen path in the message. This is expected behavior for a desktop tool (the user chose the path); not a security concern.
+
+### No Credentials in SVG/PNG/PDF
+- SVG contains only: table names, column names, column types, cardinality glyphs — all schema metadata. No connection strings, passwords, hostnames, or usernames present in any export format.
+
+---
+
+## Export/Import Feature — Security Audit (2026-05-26)
+
+### Credential Handling
+- `PGPASSWORD` env var injection: correct approach; password never on argv (visible in `ps`)
+- Password stored as cleartext `String?` in `AppViewModel.connectedPassword` for session duration — by design for desktop app
+- `LiveConnection` Sendable struct holds password transiently while constructing `PGToolConnection`
+- No credential leakage into OSLog confirmed (Log lines use `privacy: .public` only for label, PID, and paths)
+
+### Argument Injection
+- All pg_dump/psql args passed via `Process.arguments` array — no shell, no string concatenation, no globbing
+- Schema/table names passed as argv elements (e.g. `-n schema_name`): correctly separated, no shell interpretation possible
+- Encoding field exists in `ExportOptions.encoding` but is NOT surfaced in the ExportSheet UI — dead code path currently; if later exposed as a text field, validation needed
+- Compression level 0-9 bounded by picker in ExportSheet — correctly constrained
+
+### Binary Discovery / PATH Trust
+- Search priority: UserDefaults-configured dir > Homebrew > Postgres.app > EDB > inherited $PATH
+- UserDefaults key `com.sequelpg.pgToolsDirectory` — any process with same bundle ID can write this (user-space, non-sandboxed); but this is within the threat model for a desktop tool
+- TOCTOU: `isExecutableFile` check at `locateTool()` (sheet open), path cached in `toolPath`, executed at export/import button press — attacker with filesystem access could swap the binary in the window
+
+### Process Lifecycle Issues
+- `cancel()` calls `process.terminate()` (SIGTERM) but does NOT call `waitUntilExit()` — unlike SSHTunnelService which does
+- "Done" (header) button always enabled even during active transfer — can dismiss sheet without cancelling process (ORPHAN RISK)
+- No `onDisappear` cleanup in ExportSheet or ImportSheet
+- No cleanup of partial output files on failure or cancel
+
+### Concurrency / OutputCollector
+- `continuation.yield()` called while holding `NSLock` — if consumer is slow (back-pressure), yield could block, causing one pipe's `readabilityHandler` to hold the lock and stall the other
+- Double-delivery risk: `terminationHandler` sets `readabilityHandler=nil`, then calls `readDataToEndOfFile()` — Apple's `readabilityHandler` nil-assignment may not prevent an already-queued callback from firing on that same data before the `readDataToEndOfFile()` call
+- `AsyncThrowingStream.Continuation.yield()` is documented as thread-safe; `@unchecked Sendable` is appropriately scoped and the NSLock usage is correct for this pattern

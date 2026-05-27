@@ -95,6 +95,23 @@
 		AA10000000000000000076 /* ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000076; };
 		AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000077; };
 		AA10000000000000000078 /* TransferComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000078; };
+		AA10000000000000000E01 /* ERDDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E01; };
+		AA10000000000000000E02 /* ERDLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E02; };
+		AA10000000000000000E04 /* ERDLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E04; };
+		AA10000000000000000E07 /* ERDViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E07; };
+		AA10000000000000000E0A /* ERDTableNodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0A; };
+		AA10000000000000000E0B /* ERDDiagramContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0B; };
+		AA10000000000000000E03 /* ERDLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E03; };
+		AA10000000000000000E09 /* ERDCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E09; };
+		AA10000000000000000E05 /* ERDSVGRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E05; };
+		AA10000000000000000E06 /* ERDImageExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E06; };
+		AA10000000000000000E0C /* ERDExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0C; };
+		AA10000000000000000E08 /* DiagramTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E08; };
+		AA10000000000000000E0D /* ERDViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0D; };
+		AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0E; };
+		AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0F; };
+		AA10000000000000000E10 /* ERDModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E10; };
+		AA10000000000000000E11 /* ERDRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E11; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -196,6 +213,23 @@
 		AB10000000000000000076 /* ImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000077 /* DatabaseTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000078 /* TransferComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferComponents.swift; sourceTree = "<group>"; };
+		AB10000000000000000E01 /* ERDDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagram.swift; sourceTree = "<group>"; };
+		AB10000000000000000E02 /* ERDLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayout.swift; sourceTree = "<group>"; };
+		AB10000000000000000E04 /* ERDLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutEngine.swift; sourceTree = "<group>"; };
+		AB10000000000000000E07 /* ERDViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDViewModel.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0A /* ERDTableNodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDTableNodeView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0B /* ERDDiagramContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagramContentView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E03 /* ERDLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutStore.swift; sourceTree = "<group>"; };
+		AB10000000000000000E09 /* ERDCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDCanvasView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E05 /* ERDSVGRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDSVGRenderer.swift; sourceTree = "<group>"; };
+		AB10000000000000000E06 /* ERDImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDImageExporter.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0C /* ERDExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDExportSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000E08 /* DiagramTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagramTabView.swift; sourceTree = "<group>"; };
+		AB10000000000000000E11 /* ERDRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDRouter.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0D /* ERDViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDViewModelTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0E /* ERDLayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayoutEngineTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E0F /* ERDSVGRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDSVGRendererTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E10 /* ERDModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -260,6 +294,8 @@
 				AB10000000000000000005 /* QueryResult.swift */,
 				AB10000000000000000054 /* RoleInfo.swift */,
 				AB10000000000000000052 /* TriggerInfo.swift */,
+				AB10000000000000000E01 /* ERDDiagram.swift */,
+				AB10000000000000000E02 /* ERDLayout.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -274,6 +310,7 @@
 				AB1000000000000000000A /* PostgresClient.swift */,
 				AB1000000000000000002A /* SSHTunnelService.swift */,
 				AB10000000000000000066 /* ThemePreference.swift */,
+				AB10000000000000000E03 /* ERDLayoutStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -290,6 +327,7 @@
 				AB1000000000000000000F /* QueryViewModel.swift */,
 				AB10000000000000000037 /* QueryHistoryViewModel.swift */,
 				AB1000000000000000000E /* TableViewModel.swift */,
+				AB10000000000000000E07 /* ERDViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -326,6 +364,11 @@
 				AB10000000000000000030 /* SSHTunnelFormSection.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
 				AB10000000000000000078 /* TransferComponents.swift */,
+				AB10000000000000000E0A /* ERDTableNodeView.swift */,
+				AB10000000000000000E0B /* ERDDiagramContentView.swift */,
+				AB10000000000000000E09 /* ERDCanvasView.swift */,
+				AB10000000000000000E0C /* ERDExportSheet.swift */,
+				AB10000000000000000E08 /* DiagramTabView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -344,6 +387,10 @@
 				AB1000000000000000002C /* SQLSyntaxColors.swift */,
 				AB1000000000000000002D /* SQLTextStorage.swift */,
 				AB1000000000000000002E /* SQLCompletionProvider.swift */,
+				AB10000000000000000E04 /* ERDLayoutEngine.swift */,
+				AB10000000000000000E05 /* ERDSVGRenderer.swift */,
+				AB10000000000000000E06 /* ERDImageExporter.swift */,
+				AB10000000000000000E11 /* ERDRouter.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -374,6 +421,10 @@
 				AB10000000000000000024A /* InsertDeleteTests.swift */,
 				AB10000000000000000025A /* CascadeDeleteTests.swift */,
 				AB10000000000000000065 /* SQLCompletionProviderTests.swift */,
+				AB10000000000000000E10 /* ERDModelTests.swift */,
+				AB10000000000000000E0D /* ERDViewModelTests.swift */,
+				AB10000000000000000E0E /* ERDLayoutEngineTests.swift */,
+				AB10000000000000000E0F /* ERDSVGRendererTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -557,6 +608,19 @@
 				AA10000000000000000075 /* ExportSheet.swift in Sources */,
 				AA10000000000000000076 /* ImportSheet.swift in Sources */,
 				AA10000000000000000078 /* TransferComponents.swift in Sources */,
+				AA10000000000000000E01 /* ERDDiagram.swift in Sources */,
+				AA10000000000000000E02 /* ERDLayout.swift in Sources */,
+				AA10000000000000000E04 /* ERDLayoutEngine.swift in Sources */,
+				AA10000000000000000E07 /* ERDViewModel.swift in Sources */,
+				AA10000000000000000E0A /* ERDTableNodeView.swift in Sources */,
+				AA10000000000000000E0B /* ERDDiagramContentView.swift in Sources */,
+				AA10000000000000000E03 /* ERDLayoutStore.swift in Sources */,
+				AA10000000000000000E09 /* ERDCanvasView.swift in Sources */,
+				AA10000000000000000E05 /* ERDSVGRenderer.swift in Sources */,
+				AA10000000000000000E06 /* ERDImageExporter.swift in Sources */,
+				AA10000000000000000E0C /* ERDExportSheet.swift in Sources */,
+				AA10000000000000000E08 /* DiagramTabView.swift in Sources */,
+				AA10000000000000000E11 /* ERDRouter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -577,6 +641,10 @@
 				AA10000000000000000024A /* InsertDeleteTests.swift in Sources */,
 				AA10000000000000000025A /* CascadeDeleteTests.swift in Sources */,
 				AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */,
+				AA10000000000000000E10 /* ERDModelTests.swift in Sources */,
+				AA10000000000000000E0D /* ERDViewModelTests.swift in Sources */,
+				AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */,
+				AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

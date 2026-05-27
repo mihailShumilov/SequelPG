@@ -88,5 +88,22 @@ All VMs injected via SwiftUI .environment() — no @StateObject, no @ObservableO
 16. DESIGN: CreateDatabaseSheet and CreateSchemaSheet are structurally identical — prime candidate for a parameterized shared component.
 17. DESIGN: QueryHistoryView entryRow uses `.cornerRadius(3)` — deprecated in favor of `.clipShape(.rect(cornerRadius: 3))` on macOS 14+.
 
+## ExportSheet / ImportSheet (new, reviewed 2026-05-26)
+- Both use Form/.formStyle(.grouped) + custom VStack header/footer — diverges from FunctionRunSheet which uses raw VStack layout. Visual gap vs app chrome.
+- transferLog: ForEach(Array(vm.progressLines.enumerated()), id: \.offset) with up to 500 lines in a LazyVStack + onChange(of: count) scroll on every append. Key issue: using \.offset as id means SwiftUI diffs by position, not content — any prefix removal (the capped-to-500 truncation) forces full re-render of all visible cells. Should use a stable IdentifiedLine struct or append-only ring buffer that never removes from front during operation.
+- The 500-line cap calls progressLines.removeFirst(progressLines.count - 500) — causes index churn on every line during a verbose dump, making the \.offset id strategy particularly harmful.
+- onChange fires a scrollTo on every single line append — synchronous scroll on main actor per line. Should debounce or use a sentinel/anchor view at bottom instead.
+- ExportSheet.optionsForm: @Bindable var vm = vm inside @ViewBuilder body — correct usage of @Observable extraction, no issues.
+- schemaChecklist (ExportSheet line 137): Binding(get/set) closures constructed per-row per render — fine for small schema lists (<50 schemas typical).
+- SettingsView "PostgreSQL Client Tools" section: Text("PostgreSQL Client Tools").font(.headline) used as section header — diverges from app's appSectionLabel() convention.
+- toolMissingView: uses backtick inline code in plain Text — not rendered as code; looks like prose with backticks. Should use Theme.mono() inline run or a separate Text with .appMono().
+- ImportSheet Safety section: single-transaction and stop-on-error toggles have no explicit section header in the Form (header is via trailing closure). Footer warning uses Theme.amber which is correct.
+- Import footer: no "Show in Finder" equivalent for the imported file (not needed — output is the DB itself, not a file). Correct omission.
+- ExportSheet footer: "Show in Finder" button appears only after didFinish — correct. But button has no .keyboardShortcut or .help().
+- Both sheets: header "Done" button mapped to .cancelAction — this is correct (Escape = dismiss) but the button label says "Done" while Escape semantically means "cancel if mid-operation" — fine given .onDisappear { vm.cancel() } handles that.
+- connectionSummary: identical implementation duplicated in both sheets — candidate for shared private helper or extracted component.
+- toolMissingView: identical implementation in both sheets (only tool name differs) — candidate for parameterized extraction.
+- progressView status header: identical pattern in both sheets — candidate for extraction.
+
 **Why:** This is load-bearing context for all future UI/perf work on this project.
 **How to apply:** Reference these findings before suggesting changes; verify file paths before citing them.

@@ -85,6 +85,8 @@ struct MainAreaView: View {
             ObjectDefinitionView()
         case .query:
             QueryTabView()
+        case .diagram:
+            DiagramTabView()
         }
     }
 
@@ -92,7 +94,7 @@ struct MainAreaView: View {
         switch tab {
         case .structure, .content, .definition:
             return navigatorVM.selectedObject != nil
-        case .query:
+        case .query, .diagram:
             return appVM.isConnected
         }
     }
@@ -105,6 +107,7 @@ struct MainAreaView: View {
         case 1: return "2"
         case 2: return "3"
         case 3: return "4"
+        case 4: return "5"
         default: return .return
         }
     }
