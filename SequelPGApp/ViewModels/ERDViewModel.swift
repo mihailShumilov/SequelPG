@@ -24,6 +24,11 @@ import Foundation
     // Selection.
     var selectedNodeID: String?
 
+    /// Cached obstacle-avoiding edge routes. Recomputed only when the diagram
+    /// geometry settles (load, auto-layout, collapse/hide, drag end) — never on
+    /// hover, selection, or viewport changes — so those stay cheap.
+    private(set) var routes: [String: ERDGeometry.Route] = [:]
+
     static let minScale: CGFloat = 0.25
     static let maxScale: CGFloat = 2.5
 
@@ -50,6 +55,7 @@ import Foundation
     func setDiagram(_ diagram: ERDDiagram) {
         self.diagram = diagram
         selectedNodeID = nil
+        recomputeRoutes()
     }
 
     func clear() {
@@ -59,6 +65,19 @@ import Foundation
         errorMessage = nil
         scale = 1
         offset = .zero
+        routes = [:]
+    }
+
+    /// Rebuilds the cached edge routes from the current visible geometry. Call
+    /// after the layout settles; cheap enough to run on each settle, too costly
+    /// to run on every drag frame (the canvas uses direct routing mid-drag).
+    func recomputeRoutes() {
+        guard diagram != nil else {
+            routes = [:]
+            return
+        }
+        let frames = Dictionary(uniqueKeysWithValues: visibleNodes.map { ($0.id, ERDGeometry.frame(for: $0)) })
+        routes = ERDRouter.routes(nodeFrames: frames, edges: visibleEdges)
     }
 
     // MARK: - Node mutation
@@ -71,12 +90,14 @@ import Foundation
     func toggleCollapse(id: String) {
         guard let index = diagram?.nodes.firstIndex(where: { $0.id == id }) else { return }
         diagram?.nodes[index].isCollapsed.toggle()
+        recomputeRoutes()
     }
 
     func hideNode(id: String) {
         guard let index = diagram?.nodes.firstIndex(where: { $0.id == id }) else { return }
         diagram?.nodes[index].isHidden = true
         if selectedNodeID == id { selectedNodeID = nil }
+        recomputeRoutes()
     }
 
     func showAllNodes() {
@@ -84,6 +105,7 @@ import Foundation
         for index in diagram!.nodes.indices {
             diagram!.nodes[index].isHidden = false
         }
+        recomputeRoutes()
     }
 
     // MARK: - Layout
@@ -97,6 +119,7 @@ import Foundation
                 diagram!.nodes[index].position = position
             }
         }
+        recomputeRoutes()
     }
 
     // MARK: - Viewport
@@ -139,5 +162,6 @@ import Foundation
         }
         scale = min(max(layout.scale, Self.minScale), Self.maxScale)
         offset = layout.offset
+        recomputeRoutes()
     }
 }

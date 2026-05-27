@@ -19,13 +19,15 @@ struct ERDCanvasView: View {
     /// While a node is being dragged we use cheap direct edge routing; the full
     /// obstacle-avoiding router runs once the drag ends.
     @State private var isDraggingNode = false
+    /// Relationship line currently under the cursor.
+    @State private var hoveredEdgeID: String?
 
     private var contentSize: CGSize {
         ERDGeometry.contentBounds(of: erdVM.visibleNodes)
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             Theme.bg
                 .contentShape(Rectangle())
                 .onTapGesture { erdVM.selectedNodeID = nil }
@@ -36,18 +38,37 @@ struct ERDCanvasView: View {
         .coordinateSpace(name: Self.space)
         .clipped()
         .simultaneousGesture(magnifyGesture)
+        .onContinuousHover(coordinateSpace: .named(Self.space)) { phase in
+            switch phase {
+            case let .active(location):
+                // Convert the cursor to diagram coordinates (scale/offset are
+                // applied with a top-leading anchor, so this inverse is exact).
+                let point = CGPoint(
+                    x: (location.x - erdVM.offset.x) / erdVM.scale,
+                    y: (location.y - erdVM.offset.y) / erdVM.scale
+                )
+                hoveredEdgeID = edge(at: point)
+            case .ended:
+                hoveredEdgeID = nil
+            }
+        }
     }
 
     private var scaledContent: some View {
         ZStack(alignment: .topLeading) {
-            ERDEdgesCanvas(nodes: erdVM.visibleNodes, edges: erdVM.visibleEdges, obstacleAvoiding: !isDraggingNode)
+            ERDEdgesCanvas(
+                nodes: erdVM.visibleNodes,
+                edges: erdVM.visibleEdges,
+                routes: isDraggingNode ? [:] : erdVM.routes,
+                highlightedEdgeID: hoveredEdgeID
+            )
 
             ForEach(erdVM.visibleNodes) { node in
                 interactiveNode(node)
             }
         }
         .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
-        .scaleEffect(erdVM.scale)
+        .scaleEffect(erdVM.scale, anchor: .topLeading)
         .offset(x: erdVM.offset.x, y: erdVM.offset.y)
     }
 
@@ -93,8 +114,25 @@ struct ERDCanvasView: View {
             .onEnded { _ in
                 nodeDragStart[node.id] = nil
                 isDraggingNode = false
+                erdVM.recomputeRoutes() // re-run obstacle routing for the settled layout
                 appVM.saveDiagramLayout()
             }
+    }
+
+    /// The relationship line nearest the given diagram-space point, within a
+    /// small (zoom-independent) tolerance, or nil.
+    private func edge(at point: CGPoint) -> String? {
+        let tolerance = 8 / max(erdVM.scale, 0.1)
+        var bestID: String?
+        var bestDistance = CGFloat.greatestFiniteMagnitude
+        for (id, route) in erdVM.routes {
+            let distance = ERDGeometry.distance(from: point, toPolyline: route.points)
+            if distance < tolerance, distance < bestDistance {
+                bestDistance = distance
+                bestID = id
+            }
+        }
+        return bestID
     }
 
     private var panGesture: some Gesture {

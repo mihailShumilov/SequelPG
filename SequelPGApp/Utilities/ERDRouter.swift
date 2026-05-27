@@ -16,6 +16,8 @@ enum ERDRouter {
     /// always exist.
     static let clearance: CGFloat = 16
     private static let turnPenalty: CGFloat = 60
+    /// Cost added per already-routed line a candidate segment would cross.
+    private static let crossingPenalty: CGFloat = 200
 
     enum Side: Hashable {
         case left, right, top, bottom
@@ -28,9 +30,16 @@ enum ERDRouter {
         let obstacles = Array(nodeFrames.values)
         guard !obstacles.isEmpty, !edges.isEmpty else { return [:] }
 
+        // Route shortest connections first so they claim direct paths and longer
+        // ones detour; ties broken by id for determinism.
         let routable = edges
             .filter { nodeFrames[$0.sourceNodeID] != nil && nodeFrames[$0.targetNodeID] != nil }
-            .sorted { $0.id < $1.id } // deterministic routing order
+            .sorted { lhs, rhs in
+                let dl = centerDistance(lhs, nodeFrames)
+                let dr = centerDistance(rhs, nodeFrames)
+                if dl != dr { return dl < dr }
+                return lhs.id < rhs.id
+            }
 
         // Resolve attach points (distributed along each card side) and stubs.
         let attachments = attachmentPoints(for: routable, nodeFrames: nodeFrames)
@@ -50,13 +59,18 @@ enum ERDRouter {
             xValues.insert(attachment.target.attach.x); xValues.insert(attachment.target.stub.x)
             yValues.insert(attachment.target.attach.y); yValues.insert(attachment.target.stub.y)
         }
-        let xs = xValues.sorted()
-        let ys = yValues.sorted()
+        // Add extra lanes inside wide gaps so parallel lines can spread out.
+        let xs = withLanes(xValues.sorted())
+        let ys = withLanes(yValues.sorted())
 
         var result: [String: ERDGeometry.Route] = [:]
+        var used: [(CGPoint, CGPoint)] = [] // segments already routed, for crossing penalty
         for edge in routable {
             guard let ends = attachments[edge.id] else { continue }
-            let interior = astar(from: ends.source.stub, to: ends.target.stub, xs: xs, ys: ys, obstacles: obstacles)
+            let interior = astar(
+                from: ends.source.stub, to: ends.target.stub,
+                xs: xs, ys: ys, obstacles: obstacles, used: used
+            )
             let points: [CGPoint]
             if let interior, interior.count >= 2 {
                 points = simplify([ends.source.attach] + interior + [ends.target.attach])
@@ -68,8 +82,35 @@ enum ERDRouter {
                 points: points,
                 path: ERDGeometry.roundedPath(points, radius: ERDMetrics.edgeCornerRadius)
             )
+            for index in 0 ..< points.count - 1 {
+                used.append((points[index], points[index + 1]))
+            }
         }
         return result
+    }
+
+    private static func centerDistance(_ edge: ERDEdge, _ frames: [String: CGRect]) -> CGFloat {
+        guard let s = frames[edge.sourceNodeID], let t = frames[edge.targetNodeID] else {
+            return .greatestFiniteMagnitude
+        }
+        return abs(s.midX - t.midX) + abs(s.midY - t.midY)
+    }
+
+    /// Inserts a lane line in the middle of every wide gap between adjacent grid
+    /// coordinates, giving the router parallel channels to spread lines across.
+    private static func withLanes(_ coords: [CGFloat]) -> [CGFloat] {
+        guard coords.count > 1 else { return coords }
+        var out: [CGFloat] = []
+        for index in 0 ..< coords.count {
+            out.append(coords[index])
+            if index < coords.count - 1 {
+                let gap = coords[index + 1] - coords[index]
+                if gap > 4 * clearance {
+                    out.append((coords[index] + coords[index + 1]) / 2)
+                }
+            }
+        }
+        return out
     }
 
     // MARK: - Attach points
@@ -177,7 +218,8 @@ enum ERDRouter {
         to goal: CGPoint,
         xs: [CGFloat],
         ys: [CGFloat],
-        obstacles: [CGRect]
+        obstacles: [CGRect],
+        used: [(CGPoint, CGPoint)]
     ) -> [CGPoint]? {
         guard
             let startI = index(of: start.x, in: xs), let startJ = index(of: start.y, in: ys),
@@ -222,7 +264,8 @@ enum ERDRouter {
                 if blocked(from, to, obstacles: obstacles) { continue }
                 let newDir = ni == current.i ? 2 : 1
                 let turn = current.dir != 0 && current.dir != newDir ? turnPenalty : 0
-                let tentative = current.g + distance(from, to) + turn
+                let cross = crossingPenalty * CGFloat(crossings(from, to, used: used))
+                let tentative = current.g + distance(from, to) + turn + cross
                 let neighborKey = key(ni, nj, newDir)
                 if let best = gScore[neighborKey], best <= tentative { continue }
                 gScore[neighborKey] = tentative
@@ -256,6 +299,32 @@ enum ERDRouter {
 
     private static func heuristic(_ i: Int, _ j: Int, _ gi: Int, _ gj: Int, _ xs: [CGFloat], _ ys: [CGFloat]) -> CGFloat {
         abs(xs[i] - xs[gi]) + abs(ys[j] - ys[gj])
+    }
+
+    /// Number of already-routed segments the axis-aligned segment a→b crosses
+    /// perpendicularly (interior intersections only). Parallel/collinear overlaps
+    /// are ignored — only true crossings are penalized.
+    private static func crossings(_ a: CGPoint, _ b: CGPoint, used: [(CGPoint, CGPoint)]) -> Int {
+        let horizontal = abs(a.y - b.y) < 0.5
+        var count = 0
+        for (c, d) in used {
+            let usedHorizontal = abs(c.y - d.y) < 0.5
+            if horizontal == usedHorizontal { continue } // parallel — not a crossing
+            if horizontal {
+                let y = a.y
+                let x0 = min(a.x, b.x), x1 = max(a.x, b.x)
+                let vx = c.x
+                let vy0 = min(c.y, d.y), vy1 = max(c.y, d.y)
+                if vx > x0, vx < x1, y > vy0, y < vy1 { count += 1 }
+            } else {
+                let x = a.x
+                let y0 = min(a.y, b.y), y1 = max(a.y, b.y)
+                let hy = c.y
+                let hx0 = min(c.x, d.x), hx1 = max(c.x, d.x)
+                if hy > y0, hy < y1, x > hx0, x < hx1 { count += 1 }
+            }
+        }
+        return count
     }
 
     /// True if the axis-aligned segment a→b passes through any card (inflated by

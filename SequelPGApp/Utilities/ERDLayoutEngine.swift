@@ -305,4 +305,28 @@ enum ERDGeometry {
     private static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)).squareRoot()
     }
+
+    /// Shortest distance from a point to a polyline — used to hit-test which
+    /// relationship line the cursor is hovering.
+    static func distance(from point: CGPoint, toPolyline points: [CGPoint]) -> CGFloat {
+        guard points.count > 1 else {
+            guard let only = points.first else { return .greatestFiniteMagnitude }
+            return hypot(point.x - only.x, point.y - only.y)
+        }
+        var best = CGFloat.greatestFiniteMagnitude
+        for index in 0 ..< points.count - 1 {
+            best = min(best, pointSegmentDistance(point, points[index], points[index + 1]))
+        }
+        return best
+    }
+
+    private static func pointSegmentDistance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lengthSquared = dx * dx + dy * dy
+        if lengthSquared < 0.0001 { return hypot(p.x - a.x, p.y - a.y) }
+        var t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared
+        t = max(0, min(1, t))
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
 }

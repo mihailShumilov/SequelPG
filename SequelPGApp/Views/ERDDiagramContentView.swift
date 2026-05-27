@@ -38,9 +38,12 @@ struct ERDDiagramContentView: View {
 struct ERDEdgesCanvas: View {
     let nodes: [ERDNode]
     let edges: [ERDEdge]
-    /// When true, route around cards with the A* obstacle router. Set false for
-    /// cheap direct routing while the user is actively dragging a node.
-    var obstacleAvoiding: Bool = true
+    /// Precomputed routes. When nil, routes are computed internally (one-shot —
+    /// used by export). An empty dictionary forces cheap direct routing, used
+    /// while a node is being dragged.
+    var routes: [String: ERDGeometry.Route]?
+    /// Edge currently hovered, drawn on top in the accent color.
+    var highlightedEdgeID: String?
 
     private var contentSize: CGSize {
         ERDGeometry.contentBounds(of: nodes)
@@ -49,32 +52,45 @@ struct ERDEdgesCanvas: View {
     var body: some View {
         Canvas { context, _ in
             let frames = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, ERDGeometry.frame(for: $0)) })
-            let routes = obstacleAvoiding ? ERDRouter.routes(nodeFrames: frames, edges: edges) : [:]
-            for edge in edges {
-                guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { continue }
-                let route = routes[edge.id] ?? ERDGeometry.route(from: source, to: target)
-                draw(context: context, route: route, cardinality: edge.cardinality)
+            let resolved = routes ?? ERDRouter.routes(nodeFrames: frames, edges: edges)
+            // Draw the non-highlighted edges first, then the hovered one on top.
+            for edge in edges where edge.id != highlightedEdgeID {
+                drawEdge(context: context, edge: edge, frames: frames, resolved: resolved, highlighted: false)
+            }
+            if let id = highlightedEdgeID, let edge = edges.first(where: { $0.id == id }) {
+                drawEdge(context: context, edge: edge, frames: frames, resolved: resolved, highlighted: true)
             }
         }
         .frame(width: contentSize.width, height: contentSize.height)
         .allowsHitTesting(false)
     }
 
-    private func draw(context: GraphicsContext, route: ERDGeometry.Route, cardinality: ERDCardinality) {
+    private func drawEdge(
+        context: GraphicsContext,
+        edge: ERDEdge,
+        frames: [String: CGRect],
+        resolved: [String: ERDGeometry.Route],
+        highlighted: Bool
+    ) {
+        guard let source = frames[edge.sourceNodeID], let target = frames[edge.targetNodeID] else { return }
+        let route = resolved[edge.id] ?? ERDGeometry.route(from: source, to: target)
         guard let from = route.points.first, let to = route.points.last, route.points.count >= 2 else { return }
 
-        context.stroke(Path(route.path), with: .color(Theme.line2), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+        let lineColor = highlighted ? Theme.accent : Theme.line2
+        let lineWidth: CGFloat = highlighted ? 2.5 : 1.5
+        context.stroke(Path(route.path), with: .color(lineColor), style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round))
 
         let childDot = Path(ellipseIn: CGRect(x: from.x - 3, y: from.y - 3, width: 6, height: 6))
-        context.fill(childDot, with: .color(Theme.blue))
+        context.fill(childDot, with: .color(highlighted ? Theme.accent : Theme.blue))
 
         // Arrowhead points along the final segment entering the parent.
         let incoming = route.points[route.points.count - 2]
         let angle = atan2(to.y - incoming.y, to.x - incoming.x)
-        context.fill(arrowhead(at: to, angle: angle, length: 9, spread: .pi / 7), with: .color(Theme.ink3))
+        let markerColor = highlighted ? Theme.accent : Theme.ink3
+        context.fill(arrowhead(at: to, angle: angle, length: 9, spread: .pi / 7), with: .color(markerColor))
 
-        if cardinality == .oneToOne {
-            context.stroke(tick(at: to, angle: angle, back: 11, half: 5), with: .color(Theme.ink3), lineWidth: 1.5)
+        if edge.cardinality == .oneToOne {
+            context.stroke(tick(at: to, angle: angle, back: 11, half: 5), with: .color(markerColor), lineWidth: lineWidth)
         }
     }
 
