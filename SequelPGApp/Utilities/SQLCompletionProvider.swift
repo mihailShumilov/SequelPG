@@ -156,10 +156,15 @@ enum SQLCompletionProvider {
         items.append(contentsOf: keywordItems())
 
         switch context.position {
-        case .fromList, .joinList, .updateTarget, .insertTarget, .truncateTarget:
-            // After FROM/JOIN/etc., tables and schemas are the primary
-            // candidates. Columns are not included — they're not valid here.
+        case .fromList, .joinList, .updateTarget, .insertTarget, .truncateTarget, .objectTarget:
+            // After FROM/JOIN/DROP TABLE/etc., tables and schemas are the
+            // primary candidates. Columns are not included — they're not valid
+            // here. Schemas stay in the pool for schema-qualified names like
+            // `myschema.mytable`.
             items.append(contentsOf: tableItems(metadata.tables))
+            items.append(contentsOf: schemaItems(metadata.schemas))
+        case .schemaTarget:
+            // `DROP SCHEMA` / `ALTER SCHEMA` — only schema names are valid here.
             items.append(contentsOf: schemaItems(metadata.schemas))
         case .selectList, .whereClause, .onClause, .groupByClause, .orderByClause,
              .setClause, .returningClause, .insertColumnsList:
@@ -245,6 +250,8 @@ struct CompletionContext {
         case insertTarget       // INSERT INTO _here_
         case insertColumnsList  // INSERT INTO tbl (_here_)
         case truncateTarget     // TRUNCATE _here_
+        case schemaTarget       // DROP / ALTER SCHEMA _here_ (or DATABASE)
+        case objectTarget       // DROP / ALTER TABLE | VIEW | INDEX … _here_
         case unknown
     }
 
@@ -420,6 +427,20 @@ struct CompletionContext {
                     markers.append(Marker(position: .orderByClause, order: i))
                 case "insert" where next == "into":
                     markers.append(Marker(position: .insertTarget, order: i))
+                // DDL object references: `DROP SCHEMA <name>`, `ALTER TABLE
+                // <name>`, etc. Without these the statement falls back to
+                // `.unknown`, where keywords outrank everything — so typing the
+                // name of an existing schema like `validate_…` got drowned out
+                // by `VACUUM` / `VALUES` (GH #5). We look at the object-type
+                // keyword right after DROP/ALTER to decide what to prioritise.
+                case "drop", "alter":
+                    switch next {
+                    case "schema", "database":
+                        markers.append(Marker(position: .schemaTarget, order: i))
+                    case "table", "view", "index", "materialized":
+                        markers.append(Marker(position: .objectTarget, order: i))
+                    default: break
+                    }
                 default: break
                 }
             }
@@ -503,10 +524,21 @@ struct CompletionItem: Identifiable, Hashable {
         /// position is "unknown" (start of statement), where they bubble up.
         func priority(in context: CompletionContext) -> Int {
             switch context.position {
-            case .fromList, .joinList, .updateTarget, .insertTarget, .truncateTarget:
+            case .fromList, .joinList, .updateTarget, .insertTarget, .truncateTarget, .objectTarget:
                 switch self {
                 case .table: return 0
                 case .schema: return 1
+                case .column: return 2
+                case .function: return 3
+                case .keyword: return 4
+                }
+            case .schemaTarget:
+                // Naming an existing schema — schema names win outright. This
+                // is what keeps `DROP SCHEMA val…` from preferring `VALUES`
+                // over the `validate_…` schema (GH #5).
+                switch self {
+                case .schema: return 0
+                case .table: return 1
                 case .column: return 2
                 case .function: return 3
                 case .keyword: return 4

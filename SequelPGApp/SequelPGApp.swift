@@ -12,6 +12,10 @@ struct SequelPGApp: App {
     /// windows and the Settings scene.
     @State private var themePreference = ThemePreference.shared
 
+    /// SQL-editor preferences (e.g. whether completion auto-pops while
+    /// typing). Shared across all windows and the Settings scene.
+    @State private var editorPreference = EditorPreference.shared
+
     init() {
         // Register bundled JetBrains Mono so Theme.display / Theme.mono pick
         // it up at runtime rather than falling back to the system monospace.
@@ -23,6 +27,7 @@ struct SequelPGApp: App {
             TabRootView()
                 .environment(connectionListVM)
                 .environment(themePreference)
+                .environment(editorPreference)
                 .preferredColorScheme(themePreference.colorScheme)
                 .tint(Theme.accent)
                 .background(Theme.bg)
@@ -81,6 +86,7 @@ struct SequelPGApp: App {
         Settings {
             SettingsView()
                 .environment(themePreference)
+                .environment(editorPreference)
                 .preferredColorScheme(themePreference.colorScheme)
                 .tint(Theme.accent)
         }

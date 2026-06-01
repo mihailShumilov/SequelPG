@@ -174,4 +174,117 @@ final class SQLCompletionProviderTests: XCTestCase {
         XCTAssertFalse(result.preselectTop,
                        "Fuzzy-only results must not pre-select — accidental Tab would commit a marginal match")
     }
+
+    // MARK: - DDL object targets (GH #5)
+
+    /// Reporter scenario: `DROP SCHEMA validate_… CASCADE;`. Typing `val`
+    /// surfaced the keyword `VALUES` (and `VACUUM` at two chars) above the
+    /// actual schema, because `DROP SCHEMA` wasn't recognised as a clause and
+    /// fell back to `.unknown` where keywords win. The schema must now rank
+    /// first and be pre-selectable so Tab/Return commits it.
+    func testDropSchemaPrefersSchemaNameOverKeyword() {
+        let metadata = SQLCompletionProvider.Metadata(
+            schemas: ["public", "validate_20260526071310"],
+            tables: [],
+            columns: []
+        )
+        let sql = "DROP SCHEMA val"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        XCTAssertEqual(context.position, .schemaTarget)
+
+        let result = SQLCompletionProvider.result(for: "val", metadata: metadata, context: context)
+        let labels = result.items.map(\.label)
+        XCTAssertEqual(result.items.first?.label, "validate_20260526071310",
+                       "The schema must be the top suggestion after DROP SCHEMA, not VALUES")
+        XCTAssertTrue(result.preselectTop,
+                      "Schema prefix match must pre-select so Tab/Return commits it")
+        if let schemaIdx = labels.firstIndex(of: "validate_20260526071310"),
+           let valuesIdx = labels.firstIndex(of: "VALUES")
+        {
+            XCTAssertLessThan(schemaIdx, valuesIdx, "Schema must outrank the VALUES keyword")
+        }
+    }
+
+    /// Same statement at two characters (`va`), where both VACUUM and VALUES
+    /// prefix-match — the schema still has to win.
+    func testDropSchemaPrefersSchemaNameAtTwoChars() {
+        let metadata = SQLCompletionProvider.Metadata(
+            schemas: ["validate_20260526071310"],
+            tables: [],
+            columns: []
+        )
+        let sql = "DROP SCHEMA va"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        let result = SQLCompletionProvider.result(for: "va", metadata: metadata, context: context)
+        XCTAssertEqual(result.items.first?.label, "validate_20260526071310")
+        let labels = result.items.map(\.label)
+        if let schemaIdx = labels.firstIndex(of: "validate_20260526071310"),
+           let vacuumIdx = labels.firstIndex(of: "VACUUM")
+        {
+            XCTAssertLessThan(schemaIdx, vacuumIdx, "Schema must outrank the VACUUM keyword")
+        }
+    }
+
+    func testDropTablePrefersTableNameOverKeyword() {
+        let metadata = SQLCompletionProvider.Metadata(
+            schemas: [],
+            tables: [DBObject(schema: "public", name: "tasks", type: .table)],
+            columns: []
+        )
+        let sql = "DROP TABLE ta"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        XCTAssertEqual(context.position, .objectTarget)
+
+        let result = SQLCompletionProvider.result(for: "ta", metadata: metadata, context: context)
+        let labels = result.items.map(\.label)
+        XCTAssertEqual(result.items.first?.label, "tasks",
+                       "The table must outrank the TABLE keyword after DROP TABLE")
+        if let tableIdx = labels.firstIndex(of: "tasks"),
+           let kwIdx = labels.firstIndex(of: "TABLE")
+        {
+            XCTAssertLessThan(tableIdx, kwIdx)
+        }
+    }
+
+    /// Keywords are still offered — just deprioritised. After the schema name
+    /// is typed, `CASCADE` must still complete (no schema matches "cas").
+    func testKeywordStillSuggestedAfterSchemaName() {
+        let metadata = SQLCompletionProvider.Metadata(
+            schemas: ["validate_20260526071310"],
+            tables: [],
+            columns: []
+        )
+        let sql = "DROP SCHEMA validate_20260526071310 cas"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        XCTAssertEqual(context.position, .schemaTarget)
+        let result = SQLCompletionProvider.result(for: "cas", metadata: metadata, context: context)
+        XCTAssertTrue(result.items.map(\.label).contains("CASCADE"),
+                      "CASCADE must still be offered after the schema name in schemaTarget position")
+    }
+
+    func testDetectPositionAfterDropSchema() {
+        let sql = "DROP SCHEMA val"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        XCTAssertEqual(context.position, .schemaTarget)
+    }
+
+    func testDetectPositionAfterDropSchemaIfExists() {
+        let sql = "DROP SCHEMA IF EXISTS val"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        XCTAssertEqual(context.position, .schemaTarget,
+                       "IF EXISTS between SCHEMA and the name must not change the detected position")
+    }
+
+    func testDetectPositionAfterAlterTable() {
+        let sql = "ALTER TABLE us"
+        let tokens = SQLFormatter.tokenize(sql)
+        let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: sql.utf16.count)
+        XCTAssertEqual(context.position, .objectTarget)
+    }
 }

@@ -229,12 +229,12 @@ struct NavigatorView: View {
                     ProgressView()
                         .controlSize(.small)
                     Text("Loading...")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.ink3)
                         .font(.caption)
                 }
             } else if schemas.isEmpty {
                 Text("No schemas")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.ink3)
                     .font(.caption)
             } else {
                 ForEach(schemas, id: \.self) { schema in
@@ -245,6 +245,7 @@ struct NavigatorView: View {
             Label {
                 Text(db)
                     .font(Theme.mono(size: 12.5, weight: isConnected ? .medium : .regular))
+                    .foregroundStyle(isConnected ? Theme.accent : Theme.ink)
             } icon: {
                 Image(systemName: "cylinder.split.1x2")
                     .foregroundStyle(isConnected ? Theme.accent : Theme.ink3)
@@ -359,6 +360,7 @@ struct NavigatorView: View {
                 Label {
                     Text(obj.name)
                         .font(Theme.mono(size: 12, weight: .regular))
+                        .foregroundStyle(Theme.ink)
                 } icon: {
                     Image(systemName: category.icon)
                         .foregroundStyle(Theme.ink3)
@@ -391,7 +393,7 @@ struct NavigatorView: View {
                     action()
                 } label: {
                     Label("New \(createLabel(for: category))...", systemImage: "plus")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.ink3)
                 }
                 .buttonStyle(.plain)
             }
@@ -399,6 +401,7 @@ struct NavigatorView: View {
             Label {
                 HStack {
                     Text(category.rawValue)
+                        .foregroundStyle(Theme.ink2)
                     Spacer(minLength: 4)
                     Text("\(objects.count)")
                         .font(Theme.mono(size: 10.5, weight: .regular))
