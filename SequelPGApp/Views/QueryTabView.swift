@@ -196,7 +196,12 @@ struct QueryTabView: View {
                 errorBanner(error)
             }
 
-            if queryVM.activeResultsTab == .explain {
+            if queryVM.isExecuting, queryVM.sortedResult == nil, queryVM.plan == nil {
+                // While a statement runs with no prior result to show, fill the
+                // pane with an explicit running state. Without this the whole
+                // results area is blank during execution — it reads as broken.
+                queryRunningState
+            } else if queryVM.activeResultsTab == .explain {
                 if let plan = queryVM.plan {
                     QueryPlanView(plan: plan)
                 } else if queryVM.errorMessage == nil {
@@ -253,7 +258,7 @@ struct QueryTabView: View {
                         .background(Theme.bg2)
                     }
                 }
-            } else if !queryVM.isExecuting {
+            } else {
                 VStack(spacing: 14) {
                     Text("v. — empty")
                         .appSectionLabel()
@@ -283,6 +288,26 @@ struct QueryTabView: View {
                 .background(Theme.bg)
             }
         }
+        .background(Theme.bg)
+    }
+
+    /// Shown in the results pane while a statement is executing and there's
+    /// nothing prior to display. Replaces the blank area that otherwise made
+    /// the app look stalled mid-query.
+    private var queryRunningState: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(Theme.accent)
+            VStack(spacing: 6) {
+                Text("Running query…")
+                    .appDisplay(24)
+                Text("Executing against \(appVM.connectedProfileName ?? "the database").")
+                    .appBody()
+                    .foregroundStyle(Theme.ink3)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg)
     }
 
