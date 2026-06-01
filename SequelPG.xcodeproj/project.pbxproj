@@ -96,6 +96,7 @@
 		AA10000000000000000076 /* ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000076; };
 		AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000077; };
 		AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E21; };
+		AA10000000000000000E22 /* CompletionTextViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E22; };
 		AA10000000000000000078 /* TransferComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000078; };
 		AA10000000000000000E01 /* ERDDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E01; };
 		AA10000000000000000E02 /* ERDLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E02; };
@@ -216,6 +217,7 @@
 		AB10000000000000000076 /* ImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000077 /* DatabaseTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E21 /* EditorPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreferenceTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E22 /* CompletionTextViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionTextViewTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000078 /* TransferComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferComponents.swift; sourceTree = "<group>"; };
 		AB10000000000000000E01 /* ERDDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagram.swift; sourceTree = "<group>"; };
 		AB10000000000000000E02 /* ERDLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayout.swift; sourceTree = "<group>"; };
@@ -416,6 +418,7 @@
 				AB1000000000000000001E /* ConnectionStoreTests.swift */,
 				AB10000000000000000077 /* DatabaseTransferTests.swift */,
 				AB10000000000000000E21 /* EditorPreferenceTests.swift */,
+				AB10000000000000000E22 /* CompletionTextViewTests.swift */,
 				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
 				AB10000000000000000023 /* TableViewModelTests.swift */,
@@ -639,6 +642,7 @@
 				AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */,
 				AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */,
 				AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */,
+				AA10000000000000000E22 /* CompletionTextViewTests.swift in Sources */,
 				AA10000000000000000020 /* ModelTests.swift in Sources */,
 				AA10000000000000000023 /* TableViewModelTests.swift in Sources */,
 				AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */,

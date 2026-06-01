@@ -301,4 +301,30 @@ final class CompletionTextView: NSTextView {
 
         return NSRange(startIdx ..< cursorIdx, in: string)
     }
+
+    /// Accept a completion JetBrains-style. When the user commits a suggestion
+    /// (Tab / Return / Enter, or by typing a delimiter), NSTextView's default
+    /// can leave the auto-added suffix — the part of the word the user didn't
+    /// type — *selected*. The next keystroke then replaces the word that was
+    /// just accepted, which is the "it overrides what I completed" behaviour
+    /// reported on the editor.
+    ///
+    /// We let the superclass perform the insertion, then on a final commit
+    /// collapse the selection to a zero-length caret at the END of the inserted
+    /// word. The caret sits right after the completion so the user can keep
+    /// typing the next token (a space, `CASCADE`, `.column`, …) without
+    /// destroying what they just confirmed. While the popup is still open and
+    /// the user is navigating it (`isFinal == false`), we leave NSTextView's
+    /// preview/selection untouched so list navigation keeps working.
+    override func insertCompletion(
+        _ word: String,
+        forPartialWordRange charRange: NSRange,
+        movement: Int,
+        isFinal flag: Bool
+    ) {
+        super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: flag)
+        guard flag else { return }
+        let caret = min(charRange.location + (word as NSString).length, (string as NSString).length)
+        setSelectedRange(NSRange(location: caret, length: 0))
+    }
 }
