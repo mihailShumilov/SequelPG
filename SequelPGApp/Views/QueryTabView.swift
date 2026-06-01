@@ -6,6 +6,7 @@ struct QueryTabView: View {
     @Environment(QueryViewModel.self) var queryVM
     @Environment(NavigatorViewModel.self) var navigatorVM
     @Environment(TableViewModel.self) var tableVM
+    @Environment(EditorPreference.self) var editorPreference
 
     var body: some View {
         @Bindable var queryVM = queryVM
@@ -152,7 +153,8 @@ struct QueryTabView: View {
                     schemas: navigatorVM.schemas(for: navigatorVM.connectedDatabase),
                     tables: navigatorVM.allLoadedTables,
                     columns: tableVM.columns
-                )
+                ),
+                autocompleteWhileTyping: editorPreference.autocompleteWhileTyping
             )
         }
     }

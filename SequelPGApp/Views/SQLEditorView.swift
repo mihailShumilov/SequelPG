@@ -16,6 +16,10 @@ import SwiftUI
 struct SQLEditorView: NSViewRepresentable {
     @Binding var text: String
     var completionMetadata: SQLCompletionProvider.Metadata
+    /// When false, the completion popup is never triggered automatically while
+    /// typing (GH #4). On-demand completion via Escape still works. Defaults to
+    /// true so callers that don't care keep the original behaviour.
+    var autocompleteWhileTyping: Bool = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -61,6 +65,8 @@ struct SQLEditorView: NSViewRepresentable {
         }
         context.coordinator.resetGrowthBaseline(to: (text as NSString).length)
 
+        context.coordinator.autocompleteWhileTyping = autocompleteWhileTyping
+
         textStorage.onChange = { [weak coordinator = context.coordinator] newText in
             coordinator?.storageDidChange(newText)
         }
@@ -81,6 +87,11 @@ struct SQLEditorView: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView,
               let storage = textView.textStorage as? SQLTextStorage
         else { return }
+
+        // Sync the auto-trigger preference unconditionally — it can change
+        // independently of the metadata, and the metadata guard below returns
+        // early when only the text (not the metadata) differs.
+        context.coordinator.autocompleteWhileTyping = autocompleteWhileTyping
 
         guard context.coordinator.metadata != completionMetadata else {
             // Still check text sync even if metadata hasn't changed
@@ -122,6 +133,10 @@ struct SQLEditorView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         var metadata = SQLCompletionProvider.Metadata(schemas: [], tables: [], columns: [])
+        /// Mirrors `SQLEditorView.autocompleteWhileTyping`. When false, the
+        /// popup never fires on its own (GH #4); on-demand completion (Escape)
+        /// still routes through `textView(_:completions:…)`.
+        var autocompleteWhileTyping = true
         weak var textStorage: SQLTextStorage?
         private var isUpdatingFromStorage = false
 
@@ -173,6 +188,12 @@ struct SQLEditorView: NSViewRepresentable {
         /// inside an identifier of at least `autoTriggerMinChars` characters
         /// and not inside a string/comment.
         private func maybeAutoComplete(in textView: NSTextView) {
+            // Respect the user's preference — when auto-trigger is off we never
+            // pop the list while typing (GH #4). The user can still invoke
+            // completion on demand with Escape, which goes through
+            // `textView(_:completions:…)` directly without this path.
+            guard autocompleteWhileTyping else { return }
+
             let cursor = textView.selectedRange().location
             guard cursor > 0 else { return }
 

@@ -17,6 +17,7 @@ struct SettingsView: View {
 
 private struct GeneralSettingsPane: View {
     @Environment(ThemePreference.self) private var themePreference
+    @Environment(EditorPreference.self) private var editorPreference
 
     /// Mirrors `PGToolchain.configuredDirectory` (UserDefaults-backed). Local
     /// state because the toolchain isn't an `@Observable` model.
@@ -26,6 +27,7 @@ private struct GeneralSettingsPane: View {
 
     var body: some View {
         @Bindable var pref = themePreference
+        @Bindable var editorPref = editorPreference
         Form {
             Section {
                 Picker("Appearance", selection: $pref.mode) {
@@ -40,6 +42,16 @@ private struct GeneralSettingsPane: View {
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
                 Text("Theme").font(.headline)
+            }
+
+            Section {
+                Toggle("Suggest completions while typing", isOn: $editorPref.autocompleteWhileTyping)
+                Text("Pops the autocomplete list automatically as you type in the SQL editor. Turn this off to type without interruption — you can still request completions on demand by pressing Escape.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("SQL Editor").font(.headline)
             }
 
             Section {
