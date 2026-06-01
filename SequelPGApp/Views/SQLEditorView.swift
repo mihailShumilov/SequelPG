@@ -1,24 +1,25 @@
 import AppKit
 import SwiftUI
 
-/// NSViewRepresentable wrapping NSTextView with SQL syntax highlighting and
-/// context-aware autocompletion. Uses NSTextView's native `complete(_:)` popup
-/// — its UI is plain by macOS standards (system list, no themed chips) but it
-/// participates correctly in the text view's responder chain, which a custom
-/// floating panel does not. A previous custom-panel implementation could steal
-/// key focus mid-typing and corrupt input; falling back to the native popup
-/// trades visual polish for input reliability.
+/// NSViewRepresentable wrapping NSTextView with SQL syntax highlighting and a
+/// custom, JetBrains-style autocompletion popup (`SQLCompletionController`).
+///
+/// The popup is a non-activating panel that never becomes key, so the text
+/// view stays first responder and every keystroke is typed normally — the
+/// popup just re-queries afterwards. While it's visible the text view forwards
+/// ↑/↓/Tab/Return/Esc to the controller; nothing intercepts or rewrites
+/// character events. (An earlier custom panel that *did* take key focus
+/// corrupted input — see the `SQLCompletionWindow.swift` tombstone.)
 ///
 /// The smart part of completion lives in `SQLCompletionProvider`: prefix-first
-/// ranking with fuzzy fallback, JetBrains-style, and context detection that
-/// biases the candidate pool based on whether the cursor is after FROM,
-/// WHERE, ON, etc.
+/// ranking with fuzzy fallback and context detection that biases candidates by
+/// whether the cursor is after FROM, WHERE, ON, DROP SCHEMA, etc.
 struct SQLEditorView: NSViewRepresentable {
     @Binding var text: String
     var completionMetadata: SQLCompletionProvider.Metadata
     /// When false, the completion popup is never triggered automatically while
-    /// typing (GH #4). On-demand completion via Escape still works. Defaults to
-    /// true so callers that don't care keep the original behaviour.
+    /// typing (GH #4). On-demand completion (Escape / ⌃Space) still works.
+    /// Defaults to true so callers that don't care keep the original behaviour.
     var autocompleteWhileTyping: Bool = true
 
     func makeCoordinator() -> Coordinator {
@@ -64,8 +65,18 @@ struct SQLEditorView: NSViewRepresentable {
             textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
         }
         context.coordinator.resetGrowthBaseline(to: (text as NSString).length)
-
         context.coordinator.autocompleteWhileTyping = autocompleteWhileTyping
+
+        // Wire the completion popup: the controller is owned by the coordinator
+        // (lives as long as the view), holds the text view weakly, and the text
+        // view holds the controller weakly — no retain cycle.
+        let coordinator = context.coordinator
+        coordinator.completion.attach(to: textView)
+        textView.completion = coordinator.completion
+        textView.onManualTrigger = { [weak coordinator, weak textView] in
+            guard let coordinator, let textView else { return }
+            coordinator.forceCompletion(in: textView)
+        }
 
         textStorage.onChange = { [weak coordinator = context.coordinator] newText in
             coordinator?.storageDidChange(newText)
@@ -84,7 +95,7 @@ struct SQLEditorView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView,
+        guard let textView = nsView.documentView as? CompletionTextView,
               let storage = textView.textStorage as? SQLTextStorage
         else { return }
 
@@ -96,35 +107,34 @@ struct SQLEditorView: NSViewRepresentable {
         guard context.coordinator.metadata != completionMetadata else {
             // Still check text sync even if metadata hasn't changed
             if storage.string != text {
-                let savedRange = textView.selectedRange()
-                storage.replaceCharacters(
-                    in: NSRange(location: 0, length: storage.length),
-                    with: text
-                )
-                let clamped = NSRange(
-                    location: min(savedRange.location, storage.length),
-                    length: 0
-                )
-                textView.setSelectedRange(clamped)
+                replaceText(in: textView, storage: storage, with: text)
             }
             return
         }
 
         // Only update when the binding changed externally (e.g., beautify, clear)
         if storage.string != text {
-            let savedRange = textView.selectedRange()
-            storage.replaceCharacters(
-                in: NSRange(location: 0, length: storage.length),
-                with: text
-            )
-            let clamped = NSRange(
-                location: min(savedRange.location, storage.length),
-                length: 0
-            )
-            textView.setSelectedRange(clamped)
+            replaceText(in: textView, storage: storage, with: text)
         }
 
         context.coordinator.metadata = completionMetadata
+    }
+
+    /// Tear-down hook — make sure the popup's child window doesn't outlive the
+    /// editor it was attached to.
+    static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        coordinator.completion.hide()
+    }
+
+    /// Replace the whole document with `newText` while preserving the caret as
+    /// best we can. Hides any open popup — the text changed out from under it.
+    private func replaceText(in textView: CompletionTextView, storage: SQLTextStorage, with newText: String) {
+        textView.completion?.hide()
+        let savedRange = textView.selectedRange()
+        storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: newText)
+        let clamped = NSRange(location: min(savedRange.location, storage.length), length: 0)
+        textView.setSelectedRange(clamped)
+        textView.completionBaselineDidReset()
     }
 
     // MARK: - Coordinator
@@ -133,22 +143,20 @@ struct SQLEditorView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         var metadata = SQLCompletionProvider.Metadata(schemas: [], tables: [], columns: [])
-        /// Mirrors `SQLEditorView.autocompleteWhileTyping`. When false, the
-        /// popup never fires on its own (GH #4); on-demand completion (Escape)
-        /// still routes through `textView(_:completions:…)`.
+        /// Mirrors `SQLEditorView.autocompleteWhileTyping` (GH #4). When false,
+        /// the popup never pops on its own; Escape / ⌃Space still work.
         var autocompleteWhileTyping = true
         weak var textStorage: SQLTextStorage?
+        /// The popup controller, owned here for the lifetime of the view.
+        let completion = SQLCompletionController()
         private var isUpdatingFromStorage = false
 
         /// Minimum partial length before completion auto-fires. Two chars
         /// avoids the popup flickering on every single keystroke.
         private let autoTriggerMinChars = 2
 
-        /// Length of the document as of the previous `textDidChange`. We auto-
-        /// trigger the completion popup only when the text *grows* — typing,
-        /// not deleting. Without this guard, every backspace would re-fire
-        /// `complete(nil)` and re-suggest whatever the user was trying to
-        /// remove ("public" reappearing while the user tries to delete it).
+        /// Length of the document as of the previous `textDidChange`, used to
+        /// detect typing (growth) vs deleting.
         private var lastTextLength: Int = 0
 
         init(text: Binding<String>) {
@@ -163,101 +171,58 @@ struct SQLEditorView: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard let textView = notification.object as? CompletionTextView else { return }
             let currentLength = (textView.string as NSString).length
             let didGrow = currentLength > lastTextLength
             lastTextLength = currentLength
-            // Don't auto-trigger on deletion — the user is correcting input,
-            // not asking for suggestions. Don't auto-trigger on equal-length
-            // changes either (most common case: undo / programmatic
-            // replacement). The popup can still be manually invoked with
-            // NSTextView's ESC-then-F5 (or via the completion menu item).
-            guard didGrow else { return }
-            maybeAutoComplete(in: textView)
+
+            // A just-accepted completion leaves a full, valid identifier under
+            // the caret; without this guard `refreshCompletion` would
+            // immediately re-pop the popup for the word we just inserted.
+            if textView.consumeAutoCompleteSuppression() {
+                completion.hide()
+                return
+            }
+            refreshCompletion(in: textView, autoShow: didGrow)
         }
 
-        /// Called from `makeNSView` after the initial text is set, so the
-        /// growth-detection baseline starts at the actual document length
-        /// rather than 0 (which would cause the popup to fire on first edit
-        /// even if the user is deleting from pre-loaded content).
         func resetGrowthBaseline(to length: Int) {
             lastTextLength = length
         }
 
-        /// Triggers NSTextView's native completion popup when the user is
-        /// inside an identifier of at least `autoTriggerMinChars` characters
-        /// and not inside a string/comment.
-        private func maybeAutoComplete(in textView: NSTextView) {
-            // Respect the user's preference — when auto-trigger is off we never
-            // pop the list while typing (GH #4). The user can still invoke
-            // completion on demand with Escape, which goes through
-            // `textView(_:completions:…)` directly without this path.
-            guard autocompleteWhileTyping else { return }
-
-            let cursor = textView.selectedRange().location
-            guard cursor > 0 else { return }
-
-            let string = textView.string
-            guard cursor <= (string as NSString).length else { return }
-
-            // Find start of the current identifier.
-            let nsString = string as NSString
-            var partialStart = cursor
-            while partialStart > 0 {
-                let prev = nsString.substring(with: NSRange(location: partialStart - 1, length: 1))
-                guard let ch = prev.unicodeScalars.first,
-                      Character(ch).isLetter || Character(ch).isNumber || ch == "_"
-                else { break }
-                partialStart -= 1
-            }
-            let partialLen = cursor - partialStart
-            guard partialLen >= autoTriggerMinChars else { return }
-
-            // Don't pop inside string literals or comments.
-            if let tokens = textStorage?.lastTokens, !shouldShowCompletion(tokens: tokens, at: cursor) {
-                return
-            }
-            textView.complete(nil)
+        /// On-demand completion (Escape / ⌃Space): show regardless of the
+        /// auto-trigger preference and minimum-length gate.
+        func forceCompletion(in textView: CompletionTextView) {
+            refreshCompletion(in: textView, autoShow: true, force: true)
         }
 
-        // MARK: NSTextViewDelegate
-
-        /// Asked by NSTextView when its native completion popup needs items.
-        /// We ignore the supplied `words` (system-generated guesses) and
-        /// compute our own ranked list from `SQLCompletionProvider`.
+        /// Compute the partial word + clause context under the caret, rank
+        /// candidates, and present/update/hide the popup accordingly.
         ///
-        /// Returns **bare identifiers only** — no category suffix. An earlier
-        /// version appended `  ·  category` and stripped it on accept, but
-        /// the strip path bypassed NSTextView's undo manager, leaving the
-        /// user unable to Cmd-Z a wrong completion. We accept a less
-        /// informative popup in exchange for correct undo.
-        ///
-        /// Pre-selection: index 0 only when there's a confident prefix
-        /// match. For fuzzy-only fallbacks we deliberately leave index at -1
-        /// so the user has to actively arrow-down before Tab/Return commits
-        /// — that prevents a stray Tab from inserting a marginal match (the
-        /// `li → public` problem).
-        func textView(
-            _ textView: NSTextView,
-            completions words: [String],
-            forPartialWordRange charRange: NSRange,
-            indexOfSelectedItem index: UnsafeMutablePointer<Int>?
-        ) -> [String] {
-            guard charRange.length >= 1,
-                  let range = Range(charRange, in: textView.string)
-            else { return [] }
+        /// - `autoShow`: this change was growth (typing), so an auto-trigger is
+        ///   permitted (subject to the preference + min-length gate).
+        /// - `force`: an explicit on-demand request — bypass the gate.
+        private func refreshCompletion(in textView: CompletionTextView, autoShow: Bool, force: Bool = false) {
+            guard let range = textView.completionRange else { completion.hide(); return }
+            let nsString = textView.string as NSString
+            let partial = nsString.substring(with: range)
+            guard !partial.isEmpty else { completion.hide(); return }
 
-            let partial = String(textView.string[range])
             let tokens = textStorage?.lastTokens ?? []
-            let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: charRange.location + charRange.length)
-            let result = SQLCompletionProvider.result(for: partial, metadata: metadata, context: context)
+            let cursorEnd = range.location + range.length
+            guard shouldShowCompletion(tokens: tokens, at: cursorEnd) else { completion.hide(); return }
 
-            if result.items.isEmpty {
-                index?.pointee = -1
-                return []
+            let context = CompletionContext.detect(tokens: tokens, cursorUTF16Offset: cursorEnd)
+            let result = SQLCompletionProvider.result(for: partial, metadata: metadata, context: context)
+            guard !result.items.isEmpty else { completion.hide(); return }
+
+            // Show when: explicitly requested, already open (keep filtering as
+            // the user types/deletes), or this is a fresh auto-trigger that
+            // clears the preference + min-length gate.
+            let canAutoShow = autoShow && autocompleteWhileTyping && partial.utf16.count >= autoTriggerMinChars
+            if force || completion.isVisible || canAutoShow {
+                completion.present(items: result.items, partialRange: range, in: textView)
             }
-            index?.pointee = result.preselectTop ? 0 : -1
-            return result.items.map(\.insertText)
         }
 
         /// Check if the cursor is at a position where completion makes sense
@@ -281,50 +246,123 @@ struct SQLEditorView: NSViewRepresentable {
     }
 }
 
-/// NSTextView subclass that reports a sensible `rangeForUserCompletion` for
-/// SQL identifiers — NSTextView's default treats `_` as a word boundary, which
-/// truncates `my_column` to just `column`.
+/// NSTextView subclass for the SQL editor. Hosts the custom completion popup:
+/// it keeps key focus, computes the identifier range under the caret, commits
+/// accepted completions (caret left at the end, nothing selected), and routes
+/// navigation keys to the controller while the popup is visible.
 final class CompletionTextView: NSTextView {
-    override var rangeForUserCompletion: NSRange {
-        let cursorLocation = selectedRange().location
-        guard cursorLocation > 0,
-              let cursorIdx = Range(NSRange(location: 0, length: cursorLocation), in: string)?.upperBound
-        else { return NSRange(location: 0, length: 0) }
+    /// The popup controller (owned by the coordinator). Weak to avoid a cycle.
+    weak var completion: SQLCompletionController?
+    /// Invoked for an on-demand completion request (Escape / ⌃Space).
+    var onManualTrigger: (() -> Void)?
 
-        var startIdx = cursorIdx
-        while startIdx > string.startIndex {
-            let prev = string.index(before: startIdx)
-            let ch = string[prev]
-            guard ch.isLetter || ch.isNumber || ch == "_" else { break }
-            startIdx = prev
+    /// Set for one edit cycle after a commit so the delegate's `textDidChange`
+    /// doesn't immediately re-pop the popup for the word just inserted.
+    private var suppressAutoCompleteOnce = false
+
+    /// The range of the identifier currently under the caret (letters, digits,
+    /// `_`), or nil when the caret isn't at the trailing edge of one. Unlike
+    /// NSTextView's default word logic, `_` is treated as part of the word so
+    /// `my_column` stays whole.
+    var completionRange: NSRange? {
+        let selection = selectedRange()
+        guard selection.length == 0 else { return nil }
+        let caret = selection.location
+        let nsString = string as NSString
+        guard caret > 0, caret <= nsString.length else { return nil }
+
+        var start = caret
+        while start > 0 {
+            let ch = nsString.substring(with: NSRange(location: start - 1, length: 1))
+            guard let scalar = ch.unicodeScalars.first,
+                  Character(scalar).isLetter || Character(scalar).isNumber || scalar == "_"
+            else { break }
+            start -= 1
         }
-
-        return NSRange(startIdx ..< cursorIdx, in: string)
+        guard start < caret else { return nil }
+        return NSRange(location: start, length: caret - start)
     }
 
-    /// Accept a completion JetBrains-style. When the user commits a suggestion
-    /// (Tab / Return / Enter, or by typing a delimiter), NSTextView's default
-    /// can leave the auto-added suffix — the part of the word the user didn't
-    /// type — *selected*. The next keystroke then replaces the word that was
-    /// just accepted, which is the "it overrides what I completed" behaviour
-    /// reported on the editor.
-    ///
-    /// We let the superclass perform the insertion, then on a final commit
-    /// collapse the selection to a zero-length caret at the END of the inserted
-    /// word. The caret sits right after the completion so the user can keep
-    /// typing the next token (a space, `CASCADE`, `.column`, …) without
-    /// destroying what they just confirmed. While the popup is still open and
-    /// the user is navigating it (`isFinal == false`), we leave NSTextView's
-    /// preview/selection untouched so list navigation keeps working.
-    override func insertCompletion(
-        _ word: String,
-        forPartialWordRange charRange: NSRange,
-        movement: Int,
-        isFinal flag: Bool
-    ) {
-        super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: flag)
-        guard flag else { return }
-        let caret = min(charRange.location + (word as NSString).length, (string as NSString).length)
+    /// Replace `range` with `word`, leaving the caret collapsed at the END with
+    /// nothing selected, and registering the edit with the undo manager so a
+    /// wrong completion can be undone with ⌘Z. Leaving no selection is what
+    /// lets the user keep typing the next token without overwriting the word
+    /// they just accepted.
+    func commitCompletion(_ word: String, replacing range: NSRange) {
+        guard shouldChangeText(in: range, replacementString: word) else { return }
+        suppressAutoCompleteOnce = true
+        textStorage?.replaceCharacters(in: range, with: word)
+        didChangeText()
+        let caret = min(range.location + (word as NSString).length, (string as NSString).length)
         setSelectedRange(NSRange(location: caret, length: 0))
+    }
+
+    /// Reads and clears the one-shot suppression flag (see `commitCompletion`).
+    func consumeAutoCompleteSuppression() -> Bool {
+        defer { suppressAutoCompleteOnce = false }
+        return suppressAutoCompleteOnce
+    }
+
+    /// Called after a programmatic full-document replacement so a stale
+    /// suppression flag doesn't swallow the next real auto-trigger.
+    func completionBaselineDidReset() {
+        suppressAutoCompleteOnce = false
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if let completion, completion.isVisible {
+            // Let modifier combinations through untouched — ⌘↵ (run query),
+            // ⌘A, ⌘C, ⌥-arrows, etc. should never be swallowed by the popup.
+            guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else {
+                super.keyDown(with: event)
+                return
+            }
+            switch event.keyCode {
+            case 126: // ↑
+                completion.moveSelection(by: -1)
+                return
+            case 125: // ↓
+                completion.moveSelection(by: 1)
+                return
+            case 36, 76, 48: // Return, keypad Enter, Tab → accept
+                if completion.acceptSelected() { return }
+                completion.hide()
+                super.keyDown(with: event)
+                return
+            case 53: // Esc → dismiss
+                completion.hide()
+                return
+            case 123, 124: // ←/→ → dismiss, then move the caret normally
+                completion.hide()
+                super.keyDown(with: event)
+                return
+            default:
+                // Type the character normally; the delegate's textDidChange
+                // re-queries and updates the list.
+                super.keyDown(with: event)
+                return
+            }
+        }
+
+        // Popup hidden — on-demand triggers.
+        if event.keyCode == 53 { // Esc
+            onManualTrigger?()
+            return
+        }
+        if event.modifierFlags.contains(.control), event.charactersIgnoringModifiers == " " {
+            onManualTrigger?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        completion?.hide()
+        super.mouseDown(with: event)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        completion?.hide()
+        return super.resignFirstResponder()
     }
 }
