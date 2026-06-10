@@ -91,6 +91,9 @@ final class ExportViewModel {
 
         task?.cancel()
         task = Task { @MainActor in
+            // defer (not per-branch resets) so the spinner can't survive an
+            // early exit — e.g. the task being cancelled mid-stream.
+            defer { isExporting = false }
             do {
                 let stream = await service.export(
                     options: options,
@@ -102,12 +105,10 @@ final class ExportViewModel {
                 for try await line in stream {
                     appendProgress(line)
                 }
-                isExporting = false
                 didFinish = true
                 exportedPath = outputPath
                 Log.app.info("Export completed to \(outputPath, privacy: .public)")
             } catch {
-                isExporting = false
                 // A user-initiated cancel terminates pg_dump, which surfaces as
                 // a non-zero exit; don't show that as a failure.
                 if !didCancel, !(error is CancellationError) {

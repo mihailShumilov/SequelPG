@@ -1010,6 +1010,13 @@ struct CascadeDeleteBuilder {
                 }
             }
 
+            // A re-run can drop the previously sorted column (different
+            // SELECT list); clear the orphaned sort instead of keeping a
+            // sort indicator for a column that no longer exists.
+            if let sortCol = queryVM.sortColumn, !result.columns.contains(sortCol) {
+                queryVM.sortColumn = nil
+            }
+
             queryVM.result = result
             queryVM.invalidateSortCache()
             queryVM.isExecuting = false
