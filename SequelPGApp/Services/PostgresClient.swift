@@ -1483,6 +1483,48 @@ actor DatabaseClient: PostgresClientProtocol {
     /// uses this to render typed inputs and to build a SELECT/CALL with explicit
     /// per-arg type casts — without those casts, ambiguous overloads fail at
     /// resolution time (e.g. `'42'` could match `f(int)` or `f(text)`).
+    /// Shared SELECT for `getFunctionMetadata` — both lookup paths (by
+    /// regprocedure signature, by schema+name) need the identical column list.
+    private static let functionMetadataSelect = """
+        SELECT
+            n.nspname,
+            p.proname,
+            '(' || COALESCE(oidvectortypes(p.proargtypes), '') || ')' AS arg_sig,
+            p.prokind::text AS prokind,
+            p.proretset,
+            pg_catalog.format_type(p.prorettype, NULL) AS rettype,
+            (SELECT typname FROM pg_type WHERE oid = p.prorettype) AS rettype_internal,
+            -- Anonymous positional args show as NULL in proargnames,
+            -- which breaks PostgresNIO array decoding. Coalesce each
+            -- NULL to '' so the array elements are uniformly text;
+            -- empty strings are treated as "no name" downstream.
+            CASE
+                WHEN p.proargnames IS NULL THEN NULL
+                ELSE ARRAY(SELECT COALESCE(n, '')
+                           FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
+                           ORDER BY ord)
+            END AS proargnames,
+            -- Same NULL/index hygiene as proargnames: when modes are
+            -- declared, every element is set, so we can decode plain text[].
+            CASE
+                WHEN p.proargmodes IS NULL THEN NULL
+                ELSE ARRAY(SELECT m::text
+                           FROM unnest(p.proargmodes) WITH ORDINALITY AS u(m, ord)
+                           ORDER BY ord)
+            END AS proargmodes,
+            -- proargtypes is an `oidvector` with 0-based indexing; casting
+            -- to oid[] preserves that, and PostgresNIO's array decoder
+            -- rejects non-1-based arrays. Re-aggregate via unnest so the
+            -- result is a regular 1-based int[].
+            (SELECT array_agg(a::int ORDER BY ord)
+             FROM unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[]))
+                  WITH ORDINALITY AS u(a, ord)) AS argtypes,
+            p.pronargdefaults,
+            p.pronargs
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        """
+
     func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata {
         guard let client else { throw AppError.notConnected }
 
@@ -1494,87 +1536,20 @@ actor DatabaseClient: PostgresClientProtocol {
 
         let query: PostgresQuery
         if hasSignature {
-            let regprocLiteral = "\(schema).\(baseName)(\(argList))"
+            // The cast input is parsed like SQL source, so both identifier
+            // parts must be quoted or a CamelCase / spaced / dotted name
+            // resolves to the wrong thing (or nothing). The whole literal is
+            // still a bind parameter — quoting here is for correctness, not
+            // injection safety.
+            let regprocLiteral = "\(quoteIdent(schema)).\(quoteIdent(baseName))(\(argList))"
             query = """
-                SELECT
-                    n.nspname,
-                    p.proname,
-                    '(' || COALESCE(oidvectortypes(p.proargtypes), '') || ')' AS arg_sig,
-                    p.prokind::text AS prokind,
-                    p.proretset,
-                    pg_catalog.format_type(p.prorettype, NULL) AS rettype,
-                    (SELECT typname FROM pg_type WHERE oid = p.prorettype) AS rettype_internal,
-                    -- Anonymous positional args show as NULL in proargnames,
-                    -- which breaks PostgresNIO array decoding. Coalesce each
-                    -- NULL to '' so the array elements are uniformly text;
-                    -- empty strings are treated as "no name" downstream.
-                    CASE
-                        WHEN p.proargnames IS NULL THEN NULL
-                        ELSE ARRAY(SELECT COALESCE(n, '')
-                                   FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
-                                   ORDER BY ord)
-                    END AS proargnames,
-                    -- Same NULL/index hygiene as proargnames: when modes are
-                    -- declared, every element is set, so we can decode plain text[].
-                    CASE
-                        WHEN p.proargmodes IS NULL THEN NULL
-                        ELSE ARRAY(SELECT m::text
-                                   FROM unnest(p.proargmodes) WITH ORDINALITY AS u(m, ord)
-                                   ORDER BY ord)
-                    END AS proargmodes,
-                    -- proargtypes is an `oidvector` with 0-based indexing; casting
-                    -- to oid[] preserves that, and PostgresNIO's array decoder
-                    -- rejects non-1-based arrays. Re-aggregate via unnest so the
-                    -- result is a regular 1-based int[].
-                    (SELECT array_agg(a::int ORDER BY ord)
-                     FROM unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[]))
-                          WITH ORDINALITY AS u(a, ord)) AS argtypes,
-                    p.pronargdefaults,
-                    p.pronargs
-                FROM pg_proc p
-                JOIN pg_namespace n ON p.pronamespace = n.oid
+                \(unescaped: Self.functionMetadataSelect)
                 WHERE p.oid = \(regprocLiteral)::regprocedure
                 LIMIT 1
                 """
         } else {
             query = """
-                SELECT
-                    n.nspname,
-                    p.proname,
-                    '(' || COALESCE(oidvectortypes(p.proargtypes), '') || ')' AS arg_sig,
-                    p.prokind::text AS prokind,
-                    p.proretset,
-                    pg_catalog.format_type(p.prorettype, NULL) AS rettype,
-                    (SELECT typname FROM pg_type WHERE oid = p.prorettype) AS rettype_internal,
-                    -- Anonymous positional args show as NULL in proargnames,
-                    -- which breaks PostgresNIO array decoding. Coalesce each
-                    -- NULL to '' so the array elements are uniformly text;
-                    -- empty strings are treated as "no name" downstream.
-                    CASE
-                        WHEN p.proargnames IS NULL THEN NULL
-                        ELSE ARRAY(SELECT COALESCE(n, '')
-                                   FROM unnest(p.proargnames) WITH ORDINALITY AS u(n, ord)
-                                   ORDER BY ord)
-                    END AS proargnames,
-                    -- Same NULL/index hygiene as proargnames: when modes are
-                    -- declared, every element is set, so we can decode plain text[].
-                    CASE
-                        WHEN p.proargmodes IS NULL THEN NULL
-                        ELSE ARRAY(SELECT m::text
-                                   FROM unnest(p.proargmodes) WITH ORDINALITY AS u(m, ord)
-                                   ORDER BY ord)
-                    END AS proargmodes,
-                    -- proargtypes is an `oidvector` with 0-based indexing; casting
-                    -- to oid[] preserves that, and PostgresNIO's array decoder
-                    -- rejects non-1-based arrays. Re-aggregate via unnest so the
-                    -- result is a regular 1-based int[].
-                    (SELECT array_agg(a::int ORDER BY ord)
-                     FROM unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[]))
-                          WITH ORDINALITY AS u(a, ord)) AS argtypes,
-                    p.pronargdefaults,
-                    p.pronargs
-                FROM pg_proc p
-                JOIN pg_namespace n ON p.pronamespace = n.oid
+                \(unescaped: Self.functionMetadataSelect)
                 WHERE n.nspname = \(schema) AND p.proname = \(baseName)
                 LIMIT 1
                 """
@@ -1717,7 +1692,10 @@ actor DatabaseClient: PostgresClientProtocol {
             let (baseName, argList) = splitFunctionSignature(name)
             let hasArgs = !argList.isEmpty && argList != "*"
             if hasArgs {
-                let regprocLiteral = "\(schema).\(baseName)(\(argList))"
+                // Quote both identifier parts — the regprocedure cast parses
+                // its input like SQL source, so CamelCase / spaced names need
+                // quoting to resolve. The literal itself is a bind parameter.
+                let regprocLiteral = "\(quoteIdent(schema)).\(quoteIdent(baseName))(\(argList))"
                 return """
                     SELECT pg_get_functiondef(p.oid)
                     FROM pg_proc p
