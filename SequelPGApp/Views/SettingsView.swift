@@ -50,6 +50,19 @@ private struct GeneralSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Picker("Query timeout", selection: $editorPref.queryTimeoutSeconds) {
+                    Text("5 seconds").tag(5)
+                    Text("10 seconds").tag(10)
+                    Text("30 seconds").tag(30)
+                    Text("1 minute").tag(60)
+                    Text("5 minutes").tag(300)
+                    Text("No limit").tag(0)
+                }
+                Text("Queries that run longer than this are stopped automatically. With “No limit”, a query runs until it finishes or you press Stop.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } header: {
                 Text("SQL Editor").font(.headline)
             }

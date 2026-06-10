@@ -204,87 +204,27 @@ actor DatabaseClient: PostgresClientProtocol {
 
         let start = CFAbsoluteTimeGetCurrent()
 
-        // `statement_timeout` is a session-level setting; we must always reset
-        // it back to 0 once this query ends, success or failure, so later
-        // introspection queries aren't silently capped.
-        let resetTimeout = { [client] in
-            try? await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = 0"))
-        }
-
         do {
-            let result = try await withThrowingTaskGroup(of: QueryResult.self) { group in
-                group.addTask { [client] in
-                    try Task.checkCancellation()
-
-                    // Server-side guard — the server kills the query if our
-                    // client-side cancellation doesn't reach the driver in time.
-                    let timeoutMs = Int(timeout * 1000)
-                    try await client.query(PostgresQuery(unsafeSQL: "SET statement_timeout = \(timeoutMs)"))
-
-                    let rowSequence = try await client.query(PostgresQuery(unsafeSQL: sql))
-
-                    var columns: [String] = []
-                    var rows: [[CellValue]] = []
-                    var isTruncated = false
-
-                    for try await row in rowSequence {
-                        try Task.checkCancellation()
-
-                        let randomRow = PostgresRandomAccessRow(row)
-
-                        if columns.isEmpty {
-                            for i in 0 ..< randomRow.count {
-                                columns.append(randomRow[i].columnName)
-                            }
-                        }
-
-                        var cellValues: [CellValue] = []
-                        for i in 0 ..< randomRow.count {
-                            cellValues.append(Self.decodeCellValue(randomRow[i]))
-                        }
-
-                        rows.append(cellValues)
-
-                        if rows.count >= maxRows {
-                            isTruncated = true
-                            break
-                        }
-                    }
-
-                    let elapsed = CFAbsoluteTimeGetCurrent() - start
-                    Log.perf.info("Query: \(elapsed, format: .fixed(precision: 3))s, \(rows.count) rows")
-
-                    return QueryResult(
-                        columns: columns,
-                        rows: rows,
-                        executionTime: elapsed,
-                        rowsAffected: nil,
-                        isTruncated: isTruncated
-                    )
-                }
-
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                    throw AppError.queryTimeout
-                }
-
-                // Return whichever task finishes first, then cancel the other.
-                // `withThrowingTaskGroup` also auto-cancels on throw, but doing
-                // it explicitly prevents the timeout task from firing after
-                // the query has already succeeded.
-                defer { group.cancelAll() }
-                guard let winner = try await group.next() else {
-                    throw AppError.queryTimeout
-                }
-                return winner
+            // Lease one pool connection for the whole SET → query → RESET
+            // sequence. `statement_timeout` is session-level state: issued via
+            // the pooled `client.query` it could land on a *different*
+            // connection than the query it's meant to guard.
+            return try await client.withConnection { connection in
+                try await Self.runQueryOnConnection(
+                    sql,
+                    maxRows: maxRows,
+                    timeout: timeout,
+                    start: start,
+                    connection: connection
+                )
             }
-            await resetTimeout()
-            return result
         } catch let error as AppError {
-            await resetTimeout()
             throw error
+        } catch is CancellationError {
+            // Surface user-initiated cancellation as-is so callers can tell
+            // it apart from a real failure.
+            throw CancellationError()
         } catch let error as PSQLError {
-            await resetTimeout()
             if error.code == .serverClosedConnection || error.code == .connectionError {
                 self.client = nil
                 self.runTask?.cancel()
@@ -302,9 +242,129 @@ actor DatabaseClient: PostgresClientProtocol {
             }
             throw AppError.queryFailed(Self.formatPSQLError(error))
         } catch {
-            await resetTimeout()
             throw AppError.queryFailed(error.localizedDescription)
         }
+    }
+
+    /// Runs `sql` on a single leased connection, optionally guarded by a
+    /// server-side `statement_timeout` plus a client-side timer race.
+    /// `timeout <= 0` means no limit: the query runs until it finishes or the
+    /// owning task is cancelled (Stop button).
+    private static func runQueryOnConnection(
+        _ sql: String,
+        maxRows: Int,
+        timeout: TimeInterval,
+        start: CFAbsoluteTime,
+        connection: PostgresConnection
+    ) async throws -> QueryResult {
+        let hasTimeout = timeout > 0
+
+        if hasTimeout {
+            // Server-side guard — the server kills the query if our
+            // client-side cancellation doesn't reach the driver in time.
+            let timeoutMs = Int(timeout * 1000)
+            try await connection.query(
+                PostgresQuery(unsafeSQL: "SET statement_timeout = \(timeoutMs)"),
+                logger: connection.logger
+            )
+        }
+
+        // The connection returns to the pool when this scope ends, so the
+        // timeout must be restored — success or failure — or later queries on
+        // this connection would be silently capped. RESET (not `SET … = 0`)
+        // restores the role/database default rather than assuming it was 0.
+        let resetTimeout = {
+            guard hasTimeout else { return }
+            do {
+                try await connection.query(
+                    PostgresQuery(unsafeSQL: "RESET statement_timeout"),
+                    logger: connection.logger
+                )
+            } catch {
+                Log.db.error("Failed to reset statement_timeout: \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        do {
+            let result = try await withThrowingTaskGroup(of: QueryResult.self) { group in
+                group.addTask {
+                    try await Self.collectRows(sql: sql, maxRows: maxRows, start: start, connection: connection)
+                }
+
+                if hasTimeout {
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                        throw AppError.queryTimeout
+                    }
+                }
+
+                // Return whichever task finishes first, then cancel the other.
+                // `withThrowingTaskGroup` also auto-cancels on throw, but doing
+                // it explicitly prevents the timeout task from firing after
+                // the query has already succeeded.
+                defer { group.cancelAll() }
+                guard let winner = try await group.next() else {
+                    throw AppError.queryTimeout
+                }
+                return winner
+            }
+            await resetTimeout()
+            return result
+        } catch {
+            await resetTimeout()
+            throw error
+        }
+    }
+
+    /// Streams the query's rows into a `QueryResult`, stopping at `maxRows`.
+    private static func collectRows(
+        sql: String,
+        maxRows: Int,
+        start: CFAbsoluteTime,
+        connection: PostgresConnection
+    ) async throws -> QueryResult {
+        try Task.checkCancellation()
+
+        let rowSequence = try await connection.query(PostgresQuery(unsafeSQL: sql), logger: connection.logger)
+
+        var columns: [String] = []
+        var rows: [[CellValue]] = []
+        var isTruncated = false
+
+        for try await row in rowSequence {
+            try Task.checkCancellation()
+
+            let randomRow = PostgresRandomAccessRow(row)
+
+            if columns.isEmpty {
+                for i in 0 ..< randomRow.count {
+                    columns.append(randomRow[i].columnName)
+                }
+            }
+
+            var cellValues: [CellValue] = []
+            for i in 0 ..< randomRow.count {
+                cellValues.append(Self.decodeCellValue(randomRow[i]))
+            }
+
+            rows.append(cellValues)
+
+            if rows.count >= maxRows {
+                isTruncated = true
+                break
+            }
+        }
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        Log.perf.info("Query: \(elapsed, format: .fixed(precision: 3))s, \(rows.count) rows")
+
+        return QueryResult(
+            columns: columns,
+            rows: rows,
+            executionTime: elapsed,
+            rowsAffected: nil,
+            isTruncated: isTruncated
+        )
     }
 
     /// Runs `EXPLAIN (FORMAT JSON, ANALYZE on/off, BUFFERS on/off) <sql>` and
