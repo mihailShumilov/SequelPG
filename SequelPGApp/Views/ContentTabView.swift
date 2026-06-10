@@ -387,6 +387,11 @@ struct ContentTabView: View {
                     .accessibilityLabel("Reloading rows")
             }
 
+            ResultExportButton(
+                result: tableVM.contentResult,
+                defaultFileName: tableVM.selectedObjectName ?? "table"
+            )
+
             Text("≈ \(tableVM.approximateRowCount) rows")
                 .font(Theme.mono(size: 11))
                 .foregroundStyle(Theme.ink3)

@@ -261,6 +261,7 @@ struct QueryTabView: View {
                                     .appMono(11, color: Theme.amber)
                             }
                             Spacer()
+                            ResultExportButton(result: result, defaultFileName: "query-result")
                             Text("\(Int(result.executionTime * 1000)) ms")
                                 .appMono(11, color: Theme.ink3)
                         }

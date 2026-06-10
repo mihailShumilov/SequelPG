@@ -87,6 +87,8 @@
 		AA10000000000000000065 /* SQLCompletionProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000065; };
 		AA10000000000000000066 /* ThemePreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000066; };
 		AA10000000000000000E20 /* EditorPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E20; };
+		AA10000000000000000E24 /* ResultExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E24; };
+		AA10000000000000000E25 /* ResultExportButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E25; };
 		AA10000000000000000067 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000067; };
 		AA10000000000000000070 /* DatabaseTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000070; };
 		AA10000000000000000071 /* PGToolchain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000071; };
@@ -98,6 +100,7 @@
 		AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000077; };
 		AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E21; };
 		AA10000000000000000E22 /* CompletionTextViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E22; };
+		AA10000000000000000E26 /* ResultExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E26; };
 		AA10000000000000000078 /* TransferComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000078; };
 		AA10000000000000000E01 /* ERDDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E01; };
 		AA10000000000000000E02 /* ERDLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E02; };
@@ -209,6 +212,8 @@
 		AB10000000000000000065 /* SQLCompletionProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCompletionProviderTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000066 /* ThemePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePreference.swift; sourceTree = "<group>"; };
 		AB10000000000000000E20 /* EditorPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreference.swift; sourceTree = "<group>"; };
+		AB10000000000000000E24 /* ResultExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultExporter.swift; sourceTree = "<group>"; };
+		AB10000000000000000E25 /* ResultExportButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultExportButton.swift; sourceTree = "<group>"; };
 		AB10000000000000000067 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AB10000000000000000070 /* DatabaseTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransfer.swift; sourceTree = "<group>"; };
 		AB10000000000000000071 /* PGToolchain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PGToolchain.swift; sourceTree = "<group>"; };
@@ -220,6 +225,7 @@
 		AB10000000000000000077 /* DatabaseTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E21 /* EditorPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreferenceTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E22 /* CompletionTextViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionTextViewTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E26 /* ResultExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultExporterTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000078 /* TransferComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferComponents.swift; sourceTree = "<group>"; };
 		AB10000000000000000E01 /* ERDDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagram.swift; sourceTree = "<group>"; };
 		AB10000000000000000E02 /* ERDLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayout.swift; sourceTree = "<group>"; };
@@ -370,6 +376,7 @@
 				AB1000000000000000005A /* SQLSyntaxView.swift */,
 				AB10000000000000000011 /* SidebarView.swift */,
 				AB10000000000000000029 /* StartPageView.swift */,
+				AB10000000000000000E25 /* ResultExportButton.swift */,
 				AB10000000000000000067 /* SettingsView.swift */,
 				AB10000000000000000030 /* SSHTunnelFormSection.swift */,
 				AB10000000000000000015 /* StructureTabView.swift */,
@@ -387,6 +394,7 @@
 			isa = PBXGroup;
 			children = (
 				AB1000000000000000005E /* BoundedLRU.swift */,
+				AB10000000000000000E24 /* ResultExporter.swift */,
 				AB10000000000000000062 /* PlanNarrator.swift */,
 				AB1000000000000000005F /* Theme.swift */,
 				AB1000000000000000001B /* Logger.swift */,
@@ -422,6 +430,7 @@
 				AB10000000000000000077 /* DatabaseTransferTests.swift */,
 				AB10000000000000000E21 /* EditorPreferenceTests.swift */,
 				AB10000000000000000E22 /* CompletionTextViewTests.swift */,
+				AB10000000000000000E26 /* ResultExporterTests.swift */,
 				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
 				AB10000000000000000023 /* TableViewModelTests.swift */,
@@ -613,6 +622,8 @@
 				AA10000000000000000E23 /* SQLCompletionPopup.swift in Sources */,
 				AA10000000000000000066 /* ThemePreference.swift in Sources */,
 				AA10000000000000000E20 /* EditorPreference.swift in Sources */,
+				AA10000000000000000E24 /* ResultExporter.swift in Sources */,
+				AA10000000000000000E25 /* ResultExportButton.swift in Sources */,
 				AA10000000000000000067 /* SettingsView.swift in Sources */,
 				AA10000000000000000070 /* DatabaseTransfer.swift in Sources */,
 				AA10000000000000000071 /* PGToolchain.swift in Sources */,
@@ -647,6 +658,7 @@
 				AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */,
 				AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */,
 				AA10000000000000000E22 /* CompletionTextViewTests.swift in Sources */,
+				AA10000000000000000E26 /* ResultExporterTests.swift in Sources */,
 				AA10000000000000000020 /* ModelTests.swift in Sources */,
 				AA10000000000000000023 /* TableViewModelTests.swift in Sources */,
 				AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */,

@@ -213,6 +213,19 @@ struct CascadeDeleteBuilder {
         (try? await dbClient.listSchemas()) ?? []
     }
 
+    /// Writes a result grid to disk as CSV or JSON. Lives here (not in the
+    /// View) so Views never do file I/O directly; failures surface through
+    /// the standard `errorMessage` banner.
+    func exportResult(_ result: QueryResult, format: ResultExportFormat, to url: URL) {
+        do {
+            let data = try ResultExporter.data(columns: result.columns, rows: result.rows, format: format)
+            try data.write(to: url, options: .atomic)
+            Log.app.info("Exported \(result.rowCount) rows as \(format.rawValue, privacy: .public) to \(url.path, privacy: .public)")
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - ERD diagram
 
     /// Populates the diagram's schema picker from the connected database, and
