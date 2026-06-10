@@ -101,6 +101,8 @@
 		AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E21; };
 		AA10000000000000000E22 /* CompletionTextViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E22; };
 		AA10000000000000000E26 /* ResultExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E26; };
+		AA10000000000000000E27 /* CascadeDeleteBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E27; };
+		AA10000000000000000E28 /* TransferViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E28; };
 		AA10000000000000000078 /* TransferComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000078; };
 		AA10000000000000000E01 /* ERDDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E01; };
 		AA10000000000000000E02 /* ERDLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E02; };
@@ -226,6 +228,8 @@
 		AB10000000000000000E21 /* EditorPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreferenceTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E22 /* CompletionTextViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionTextViewTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E26 /* ResultExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultExporterTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E27 /* CascadeDeleteBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CascadeDeleteBuilderTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E28 /* TransferViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferViewModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000078 /* TransferComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferComponents.swift; sourceTree = "<group>"; };
 		AB10000000000000000E01 /* ERDDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDDiagram.swift; sourceTree = "<group>"; };
 		AB10000000000000000E02 /* ERDLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDLayout.swift; sourceTree = "<group>"; };
@@ -431,6 +435,8 @@
 				AB10000000000000000E21 /* EditorPreferenceTests.swift */,
 				AB10000000000000000E22 /* CompletionTextViewTests.swift */,
 				AB10000000000000000E26 /* ResultExporterTests.swift */,
+				AB10000000000000000E27 /* CascadeDeleteBuilderTests.swift */,
+				AB10000000000000000E28 /* TransferViewModelTests.swift */,
 				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
 				AB10000000000000000023 /* TableViewModelTests.swift */,
@@ -659,6 +665,8 @@
 				AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */,
 				AA10000000000000000E22 /* CompletionTextViewTests.swift in Sources */,
 				AA10000000000000000E26 /* ResultExporterTests.swift in Sources */,
+				AA10000000000000000E27 /* CascadeDeleteBuilderTests.swift in Sources */,
+				AA10000000000000000E28 /* TransferViewModelTests.swift in Sources */,
 				AA10000000000000000020 /* ModelTests.swift in Sources */,
 				AA10000000000000000023 /* TableViewModelTests.swift in Sources */,
 				AA10000000000000000024 /* NavigatorViewModelTests.swift in Sources */,
