@@ -356,10 +356,12 @@ struct CascadeDeleteBuilder {
 
     init(
         dbClient: any PostgresClientProtocol = DatabaseClient(),
-        editorPreference: EditorPreference = .shared
+        editorPreference: EditorPreference? = nil
     ) {
         self.dbClient = dbClient
-        self.editorPreference = editorPreference
+        // Resolved here rather than as a default argument: default arguments
+        // evaluate in a nonisolated context, and `.shared` is MainActor-bound.
+        self.editorPreference = editorPreference ?? .shared
 
         self.navigatorVM = NavigatorViewModel()
         self.tableVM = TableViewModel()
@@ -528,6 +530,9 @@ struct CascadeDeleteBuilder {
     /// Used by both `selectObject` for first-time opens and
     /// `navigateForeignKey` for FK jumps that need to land filtered.
     func openInNewTab(object: DBObject, filters: [ContentFilter]? = nil) async {
+        // An in-flight load belongs to the outgoing tab; let it die rather
+        // than write the old tab's rows into the one we're about to open.
+        invalidateContentLoads()
         snapshotIntoActiveTab()
 
         var tab = ObjectTab(dbObject: object, pageSize: tableVM.pageSize)
@@ -573,6 +578,7 @@ struct CascadeDeleteBuilder {
     func activateTab(_ id: UUID) {
         guard activeTabId != id else { return }
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        invalidateContentLoads()
         snapshotIntoActiveTab()
         activeTabId = id
         restoreFromTab(tab)
@@ -588,6 +594,7 @@ struct CascadeDeleteBuilder {
         let wasActive = (activeTabId == id)
         tabs.remove(at: idx)
         guard wasActive else { return }
+        invalidateContentLoads()
         if tabs.isEmpty {
             activeTabId = nil
             tableVM.clear()
@@ -604,6 +611,7 @@ struct CascadeDeleteBuilder {
     /// Closes every tab and resets the main area. Called on disconnect and
     /// database switch — tab state is bound to the connection.
     func closeAllTabs() {
+        invalidateContentLoads()
         tabs.removeAll()
         activeTabId = nil
         tableVM.clear()
@@ -781,6 +789,33 @@ struct CascadeDeleteBuilder {
         }
     }
 
+    /// The in-flight content page load started by `reloadContentPage`.
+    /// Tracked so rapid filter/sort/pagination actions cancel the previous
+    /// fetch instead of racing it.
+    @ObservationIgnored private var contentLoadTask: Task<Void, Never>?
+
+    /// Monotonic token identifying the latest content load. Loads compare
+    /// their captured token before writing into `tableVM`, so a stale fetch
+    /// (superseded by a newer one, or finishing after a tab switch) can't
+    /// overwrite the state the user is now looking at.
+    @ObservationIgnored private var contentLoadGeneration = 0
+
+    /// Fire-and-forget entry point for content reloads (filters, sorting,
+    /// pagination, page-size changes). Cancels any in-flight load first.
+    func reloadContentPage() {
+        contentLoadTask?.cancel()
+        contentLoadTask = Task { await loadContentPage() }
+    }
+
+    /// Invalidates any in-flight content load. Called on tab switches and
+    /// closes: the load belongs to the *previous* tab's state, and letting it
+    /// complete would write that tab's rows into the newly activated one.
+    private func invalidateContentLoads() {
+        contentLoadTask?.cancel()
+        contentLoadTask = nil
+        contentLoadGeneration &+= 1
+    }
+
     func loadContentPage() async {
         guard let object = navigatorVM.selectedObject else { return }
         // Defensive: callers (ContentTabView .task / .onChange, pagination,
@@ -788,6 +823,10 @@ struct CascadeDeleteBuilder {
         // for a type / function / sequence would surface a confusing
         // "cannot open relation" from PG.
         guard object.type.hasQueryableContent else { return }
+
+        contentLoadGeneration &+= 1
+        let generation = contentLoadGeneration
+
         let schema = quoteIdent(object.schema)
         let table = quoteIdent(object.name)
         let limit = tableVM.pageSize
@@ -806,6 +845,7 @@ struct CascadeDeleteBuilder {
         do {
             tableVM.isLoadingContent = true
             var result = try await dbClient.runQuery(sql, maxRows: limit, timeout: userQueryTimeout)
+            guard generation == contentLoadGeneration else { return }
 
             // When the table has zero rows, runQuery returns empty columns
             // because column names are derived from row data. Use the
@@ -830,7 +870,14 @@ struct CascadeDeleteBuilder {
                 success: true,
                 rowCount: result.rowCount
             )
+        } catch is CancellationError {
+            // Superseded by a newer load or a tab switch — the newer owner
+            // controls the spinner unless this was the latest load.
+            if generation == contentLoadGeneration {
+                tableVM.isLoadingContent = false
+            }
         } catch {
+            guard generation == contentLoadGeneration else { return }
             tableVM.isLoadingContent = false
             errorMessage = error.localizedDescription
 
@@ -1070,7 +1117,7 @@ struct CascadeDeleteBuilder {
         tableVM.activeFilterSQL = conditions.joined(separator: " AND ")
         tableVM.currentPage = 0
         clearSelectedRow()
-        Task { await loadContentPage() }
+        reloadContentPage()
     }
 
     func clearContentFilters() {
@@ -1078,7 +1125,7 @@ struct CascadeDeleteBuilder {
         tableVM.filters = [ContentFilter()]
         tableVM.currentPage = 0
         clearSelectedRow()
-        Task { await loadContentPage() }
+        reloadContentPage()
     }
 
     // MARK: - Foreign Key Navigation
@@ -1195,7 +1242,7 @@ struct CascadeDeleteBuilder {
         applySort(column: column, currentColumn: &tableVM.sortColumn, ascending: &tableVM.sortAscending)
         tableVM.currentPage = 0
         clearSelectedRow()
-        Task { await loadContentPage() }
+        reloadContentPage()
     }
 
     func toggleQuerySort(column: String) {
