@@ -112,13 +112,11 @@ SwiftFormat is used for consistent formatting. See [CONTRIBUTING.md](CONTRIBUTIN
 ## Known Limitations
 
 - No custom SSL certificate management (verify-ca and verify-full modes available).
-- No CSV import/export.
-- No ER diagrams.
+- No CSV import (CSV/JSON export of result rows is available from the results footer).
 - No user/role management.
 - No triggers/procedures editing UI (view-only via Definition tab).
 - No schema diff.
 - No multi-window support.
-- Stop button in query editor is disabled if driver-level cancellation is not supported.
 
 ## Troubleshooting
 

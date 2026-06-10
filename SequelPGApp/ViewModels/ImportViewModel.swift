@@ -62,6 +62,9 @@ final class ImportViewModel {
 
         task?.cancel()
         task = Task { @MainActor in
+            // defer (not per-branch resets) so the spinner can't survive an
+            // early exit — e.g. the task being cancelled mid-stream.
+            defer { isImporting = false }
             do {
                 let stream = await service.runImport(
                     options: options,
@@ -73,11 +76,9 @@ final class ImportViewModel {
                 for try await line in stream {
                     appendProgress(line)
                 }
-                isImporting = false
                 didFinish = true
                 Log.app.info("Import completed from \(path, privacy: .public)")
             } catch {
-                isImporting = false
                 // A user-initiated cancel terminates psql, surfacing as a
                 // non-zero exit; don't show that as a failure.
                 if !didCancel, !(error is CancellationError) {

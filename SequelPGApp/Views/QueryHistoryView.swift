@@ -174,7 +174,7 @@ struct QueryHistoryView: View {
                     Button {
                         queryVM.queryText = entry.sql
                         appVM.selectedTab = .query
-                        Task { await appVM.executeQuery(entry.sql) }
+                        appVM.runQueryAction(entry.sql)
                     } label: {
                         Image(systemName: "play.fill")
                             .font(.system(size: 10))

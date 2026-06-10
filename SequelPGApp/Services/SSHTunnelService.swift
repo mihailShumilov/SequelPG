@@ -127,6 +127,10 @@ actor SSHTunnelService {
         }
         // Ensure no terminal prompt by detaching from controlling terminal
         environment["TERM"] = "dumb"
+        // Pin ssh's messages to the C locale so the stderr classification
+        // below (host-key phrases, "address already in use") doesn't silently
+        // stop matching on localized systems.
+        environment["LC_ALL"] = "C"
         sshProcess.environment = environment
 
         // Launch in a new process group so it doesn't inherit our terminal
@@ -154,6 +158,22 @@ actor SSHTunnelService {
             // Log full stderr for diagnostics
             if !stderrText.isEmpty {
                 Log.ssh.error("SSH stderr: \(stderrText, privacy: .private)")
+            }
+
+            // "REMOTE HOST IDENTIFICATION HAS CHANGED" is what ssh prints when
+            // a known host presents a *different* key (potential MITM) — it
+            // doesn't contain the "verification failed" phrase, and blindly
+            // appending the new key would defeat the protection, so the
+            // guidance here is deliberately *not* the keyscan one-liner.
+            if stderrText.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
+                throw AppError.sshTunnelFailed(
+                    "The SSH host key for \(sshHost) has CHANGED since it was last trusted. "
+                        + "This can mean the server was reinstalled — or that the connection is being intercepted. "
+                        + "Verify the new key fingerprint with the server administrator before trusting it; "
+                        + "if it is legitimate, remove the old entry with:\n"
+                        + "  ssh-keygen -R '[\(sshHost)]:\(sshPort)'\n"
+                        + "then retry the connection."
+                )
             }
 
             // Detect unknown host key and provide actionable guidance

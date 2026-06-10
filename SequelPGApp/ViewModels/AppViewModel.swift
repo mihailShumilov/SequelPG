@@ -138,6 +138,18 @@ struct CascadeDeleteBuilder {
 
     @ObservationIgnored let dbClient: any PostgresClientProtocol
 
+    /// Source of the user-configurable query timeout (Settings ▸ SQL Editor).
+    /// Injected so tests can supply an ephemeral instance.
+    @ObservationIgnored private let editorPreference: EditorPreference
+
+    /// Timeout for user-initiated reads (Run / Explain / content pages).
+    /// `0` means no limit. Internal system queries (introspection, DDL) keep
+    /// the fixed `defaultQueryTimeout` — they're expected to be fast, and an
+    /// unlimited setting shouldn't let them hang the app's metadata loads.
+    var userQueryTimeout: TimeInterval {
+        TimeInterval(editorPreference.queryTimeoutSeconds)
+    }
+
     let navigatorVM: NavigatorViewModel
     let tableVM: TableViewModel
     let queryVM: QueryViewModel
@@ -199,6 +211,19 @@ struct CascadeDeleteBuilder {
     /// Returns an empty list on error — the picker simply shows nothing.
     func schemasForExport() async -> [String] {
         (try? await dbClient.listSchemas()) ?? []
+    }
+
+    /// Writes a result grid to disk as CSV or JSON. Lives here (not in the
+    /// View) so Views never do file I/O directly; failures surface through
+    /// the standard `errorMessage` banner.
+    func exportResult(_ result: QueryResult, format: ResultExportFormat, to url: URL) {
+        do {
+            let data = try ResultExporter.data(columns: result.columns, rows: result.rows, format: format)
+            try data.write(to: url, options: .atomic)
+            Log.app.info("Exported \(result.rowCount) rows as \(format.rawValue, privacy: .public) to \(url.path, privacy: .public)")
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - ERD diagram
@@ -343,9 +368,13 @@ struct CascadeDeleteBuilder {
     }
 
     init(
-        dbClient: any PostgresClientProtocol = DatabaseClient()
+        dbClient: any PostgresClientProtocol = DatabaseClient(),
+        editorPreference: EditorPreference? = nil
     ) {
         self.dbClient = dbClient
+        // Resolved here rather than as a default argument: default arguments
+        // evaluate in a nonisolated context, and `.shared` is MainActor-bound.
+        self.editorPreference = editorPreference ?? .shared
 
         self.navigatorVM = NavigatorViewModel()
         self.tableVM = TableViewModel()
@@ -514,6 +543,9 @@ struct CascadeDeleteBuilder {
     /// Used by both `selectObject` for first-time opens and
     /// `navigateForeignKey` for FK jumps that need to land filtered.
     func openInNewTab(object: DBObject, filters: [ContentFilter]? = nil) async {
+        // An in-flight load belongs to the outgoing tab; let it die rather
+        // than write the old tab's rows into the one we're about to open.
+        invalidateContentLoads()
         snapshotIntoActiveTab()
 
         var tab = ObjectTab(dbObject: object, pageSize: tableVM.pageSize)
@@ -559,6 +591,7 @@ struct CascadeDeleteBuilder {
     func activateTab(_ id: UUID) {
         guard activeTabId != id else { return }
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        invalidateContentLoads()
         snapshotIntoActiveTab()
         activeTabId = id
         restoreFromTab(tab)
@@ -574,6 +607,7 @@ struct CascadeDeleteBuilder {
         let wasActive = (activeTabId == id)
         tabs.remove(at: idx)
         guard wasActive else { return }
+        invalidateContentLoads()
         if tabs.isEmpty {
             activeTabId = nil
             tableVM.clear()
@@ -590,6 +624,7 @@ struct CascadeDeleteBuilder {
     /// Closes every tab and resets the main area. Called on disconnect and
     /// database switch — tab state is bound to the connection.
     func closeAllTabs() {
+        invalidateContentLoads()
         tabs.removeAll()
         activeTabId = nil
         tableVM.clear()
@@ -767,6 +802,33 @@ struct CascadeDeleteBuilder {
         }
     }
 
+    /// The in-flight content page load started by `reloadContentPage`.
+    /// Tracked so rapid filter/sort/pagination actions cancel the previous
+    /// fetch instead of racing it.
+    @ObservationIgnored private var contentLoadTask: Task<Void, Never>?
+
+    /// Monotonic token identifying the latest content load. Loads compare
+    /// their captured token before writing into `tableVM`, so a stale fetch
+    /// (superseded by a newer one, or finishing after a tab switch) can't
+    /// overwrite the state the user is now looking at.
+    @ObservationIgnored private var contentLoadGeneration = 0
+
+    /// Fire-and-forget entry point for content reloads (filters, sorting,
+    /// pagination, page-size changes). Cancels any in-flight load first.
+    func reloadContentPage() {
+        contentLoadTask?.cancel()
+        contentLoadTask = Task { await loadContentPage() }
+    }
+
+    /// Invalidates any in-flight content load. Called on tab switches and
+    /// closes: the load belongs to the *previous* tab's state, and letting it
+    /// complete would write that tab's rows into the newly activated one.
+    private func invalidateContentLoads() {
+        contentLoadTask?.cancel()
+        contentLoadTask = nil
+        contentLoadGeneration &+= 1
+    }
+
     func loadContentPage() async {
         guard let object = navigatorVM.selectedObject else { return }
         // Defensive: callers (ContentTabView .task / .onChange, pagination,
@@ -774,6 +836,10 @@ struct CascadeDeleteBuilder {
         // for a type / function / sequence would surface a confusing
         // "cannot open relation" from PG.
         guard object.type.hasQueryableContent else { return }
+
+        contentLoadGeneration &+= 1
+        let generation = contentLoadGeneration
+
         let schema = quoteIdent(object.schema)
         let table = quoteIdent(object.name)
         let limit = tableVM.pageSize
@@ -791,7 +857,8 @@ struct CascadeDeleteBuilder {
 
         do {
             tableVM.isLoadingContent = true
-            var result = try await dbClient.runQuery(sql, maxRows: limit, timeout: Self.defaultQueryTimeout)
+            var result = try await dbClient.runQuery(sql, maxRows: limit, timeout: userQueryTimeout)
+            guard generation == contentLoadGeneration else { return }
 
             // When the table has zero rows, runQuery returns empty columns
             // because column names are derived from row data. Use the
@@ -816,7 +883,14 @@ struct CascadeDeleteBuilder {
                 success: true,
                 rowCount: result.rowCount
             )
+        } catch is CancellationError {
+            // Superseded by a newer load or a tab switch — the newer owner
+            // controls the spinner unless this was the latest load.
+            if generation == contentLoadGeneration {
+                tableVM.isLoadingContent = false
+            }
         } catch {
+            guard generation == contentLoadGeneration else { return }
             tableVM.isLoadingContent = false
             errorMessage = error.localizedDescription
 
@@ -856,8 +930,39 @@ struct CascadeDeleteBuilder {
         tableVM.selectedRowData = nil
     }
 
+    /// The in-flight Run/Explain task. Tracked so the Stop button (and a
+    /// rapid re-run) can cancel it instead of letting it race the next one.
+    @ObservationIgnored private var queryTask: Task<Void, Never>?
+
+    /// Monotonic token identifying the latest Run/Explain. Awaited completions
+    /// compare their captured token against this before touching `queryVM`, so
+    /// a superseded run can't clobber the newer run's state.
+    @ObservationIgnored private var queryGeneration = 0
+
+    /// Run the editor's query as a tracked, cancellable task. UI entry point —
+    /// `executeQuery` stays awaitable for tests and internal callers.
+    func runQueryAction(_ sql: String) {
+        queryTask?.cancel()
+        queryTask = Task { await executeQuery(sql) }
+    }
+
+    /// Explain/Analyze as a tracked, cancellable task, mirroring `runQueryAction`.
+    func runExplainAction(_ sql: String, analyze: Bool) {
+        queryTask?.cancel()
+        queryTask = Task { await explainQuery(sql, analyze: analyze) }
+    }
+
+    /// Stop button: cancels the in-flight Run/Explain. The server-side
+    /// `statement_timeout` still applies as a backstop where configured.
+    func cancelRunningQuery() {
+        queryTask?.cancel()
+    }
+
     func executeQuery(_ sql: String) async {
         guard !sql.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        queryGeneration += 1
+        let generation = queryGeneration
 
         queryVM.isExecuting = true
         queryVM.errorMessage = nil
@@ -869,12 +974,14 @@ struct CascadeDeleteBuilder {
         clearSelectedRow()
 
         do {
-            var result = try await dbClient.runQuery(sql, maxRows: Self.maxQueryRows, timeout: Self.defaultQueryTimeout)
+            var result = try await dbClient.runQuery(sql, maxRows: Self.maxQueryRows, timeout: userQueryTimeout)
+            guard generation == queryGeneration else { return }
 
             // Detect table context for inline editing and resolve empty columns
             if let tableRef = queryVM.parseTableFromQuery() {
                 do {
                     let columns = try await dbClient.getColumns(schema: tableRef.schema, table: tableRef.table)
+                    guard generation == queryGeneration else { return }
 
                     // When a SELECT returns 0 rows, PostgresNIO doesn't yield
                     // any rows so column names aren't captured. Use the table's
@@ -903,6 +1010,13 @@ struct CascadeDeleteBuilder {
                 }
             }
 
+            // A re-run can drop the previously sorted column (different
+            // SELECT list); clear the orphaned sort instead of keeping a
+            // sort indicator for a column that no longer exists.
+            if let sortCol = queryVM.sortColumn, !result.columns.contains(sortCol) {
+                queryVM.sortColumn = nil
+            }
+
             queryVM.result = result
             queryVM.invalidateSortCache()
             queryVM.isExecuting = false
@@ -914,7 +1028,19 @@ struct CascadeDeleteBuilder {
                 success: true,
                 rowCount: result.rowCount
             )
+        } catch is CancellationError {
+            // User pressed Stop (or started a newer run). Not a failure —
+            // clear the spinner only if no newer run owns it.
+            queryHistoryVM.logQuery(
+                sql: sql,
+                source: .manual,
+                success: false,
+                errorMessage: "Cancelled"
+            )
+            guard generation == queryGeneration else { return }
+            queryVM.isExecuting = false
         } catch {
+            guard generation == queryGeneration else { return }
             queryVM.errorMessage = error.localizedDescription
             queryVM.isExecuting = false
 
@@ -935,18 +1061,27 @@ struct CascadeDeleteBuilder {
         let trimmed = sql.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        queryGeneration += 1
+        let generation = queryGeneration
+
         queryVM.isExecuting = true
         queryVM.errorMessage = nil
         queryVM.plan = nil
         queryVM.activeResultsTab = .explain
+
+        // ANALYZE actually executes the query, so give it extra headroom over
+        // the plain-EXPLAIN planning round trip. 0 stays 0 (no limit).
+        let timeout = userQueryTimeout
+        let explainTimeout = analyze ? timeout * 3 : timeout
 
         do {
             let plan = try await dbClient.explainQuery(
                 trimmed,
                 analyze: analyze,
                 buffers: analyze,
-                timeout: analyze ? Self.defaultQueryTimeout * 3 : Self.defaultQueryTimeout
+                timeout: explainTimeout
             )
+            guard generation == queryGeneration else { return }
             queryVM.plan = plan
             queryVM.isExecuting = false
 
@@ -957,7 +1092,17 @@ struct CascadeDeleteBuilder {
                 success: true,
                 rowCount: 0
             )
+        } catch is CancellationError {
+            queryHistoryVM.logQuery(
+                sql: (analyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + trimmed,
+                source: .manual,
+                success: false,
+                errorMessage: "Cancelled"
+            )
+            guard generation == queryGeneration else { return }
+            queryVM.isExecuting = false
         } catch {
+            guard generation == queryGeneration else { return }
             queryVM.errorMessage = error.localizedDescription
             queryVM.isExecuting = false
             queryHistoryVM.logQuery(
@@ -992,7 +1137,7 @@ struct CascadeDeleteBuilder {
         tableVM.activeFilterSQL = conditions.joined(separator: " AND ")
         tableVM.currentPage = 0
         clearSelectedRow()
-        Task { await loadContentPage() }
+        reloadContentPage()
     }
 
     func clearContentFilters() {
@@ -1000,7 +1145,7 @@ struct CascadeDeleteBuilder {
         tableVM.filters = [ContentFilter()]
         tableVM.currentPage = 0
         clearSelectedRow()
-        Task { await loadContentPage() }
+        reloadContentPage()
     }
 
     // MARK: - Foreign Key Navigation
@@ -1117,7 +1262,7 @@ struct CascadeDeleteBuilder {
         applySort(column: column, currentColumn: &tableVM.sortColumn, ascending: &tableVM.sortAscending)
         tableVM.currentPage = 0
         clearSelectedRow()
-        Task { await loadContentPage() }
+        reloadContentPage()
     }
 
     func toggleQuerySort(column: String) {

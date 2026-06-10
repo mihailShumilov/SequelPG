@@ -121,7 +121,7 @@ struct ContentTabView: View {
                appVM.selectedTab == .content,
                tableVM.contentResult == nil
             {
-                Task { await appVM.loadContentPage() }
+                appVM.reloadContentPage()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .toggleFilterBar)) { _ in
@@ -338,7 +338,7 @@ struct ContentTabView: View {
             .onChange(of: tableVM.pageSize) { _, _ in
                 tableVM.currentPage = 0
                 appVM.clearSelectedRow()
-                Task { await appVM.loadContentPage() }
+                appVM.reloadContentPage()
             }
 
             Spacer()
@@ -346,7 +346,7 @@ struct ContentTabView: View {
             Button {
                 tableVM.currentPage = max(0, tableVM.currentPage - 1)
                 appVM.clearSelectedRow()
-                Task { await appVM.loadContentPage() }
+                appVM.reloadContentPage()
             } label: {
                 Image(systemName: "chevron.left")
             }
@@ -360,7 +360,7 @@ struct ContentTabView: View {
                     let clamped = max(1, min(tableVM.totalPages, newPage))
                     tableVM.currentPage = clamped - 1
                     appVM.clearSelectedRow()
-                    Task { await appVM.loadContentPage() }
+                    appVM.reloadContentPage()
                 }
             )
             .disabled(tableVM.totalPages <= 1 || tableVM.isInsertingRow)
@@ -368,7 +368,7 @@ struct ContentTabView: View {
             Button {
                 tableVM.currentPage = min(tableVM.totalPages - 1, tableVM.currentPage + 1)
                 appVM.clearSelectedRow()
-                Task { await appVM.loadContentPage() }
+                appVM.reloadContentPage()
             } label: {
                 Image(systemName: "chevron.right")
             }
@@ -386,6 +386,11 @@ struct ContentTabView: View {
                     .padding(.trailing, 4)
                     .accessibilityLabel("Reloading rows")
             }
+
+            ResultExportButton(
+                result: tableVM.contentResult,
+                defaultFileName: tableVM.selectedObjectName ?? "table"
+            )
 
             Text("≈ \(tableVM.approximateRowCount) rows")
                 .font(Theme.mono(size: 11))

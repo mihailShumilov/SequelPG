@@ -59,13 +59,25 @@ struct QueryTabView: View {
         @Bindable var queryVM = queryVM
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
-                QueryActionButton(
-                    title: "Run", systemImage: "play.fill", isPrimary: true,
-                    disabled: queryVM.isExecuting || !appVM.isConnected
-                ) {
-                    Task { await appVM.executeQuery(queryVM.queryText) }
+                if queryVM.isExecuting {
+                    // Swaps in for Run while a query is in flight. ⌘. is the
+                    // macOS-standard cancel chord.
+                    QueryActionButton(
+                        title: "Stop", systemImage: "stop.fill", isPrimary: true,
+                        disabled: false
+                    ) {
+                        appVM.cancelRunningQuery()
+                    }
+                    .keyboardShortcut(".", modifiers: .command)
+                } else {
+                    QueryActionButton(
+                        title: "Run", systemImage: "play.fill", isPrimary: true,
+                        disabled: !appVM.isConnected
+                    ) {
+                        appVM.runQueryAction(queryVM.queryText)
+                    }
+                    .keyboardShortcut(.return, modifiers: .command)
                 }
-                .keyboardShortcut(.return, modifiers: .command)
 
                 // Explain (no execute) — safe to press on any query, including
                 // DML. Renders the planner's predicted shape.
@@ -74,7 +86,7 @@ struct QueryTabView: View {
                     disabled: queryVM.isExecuting || !appVM.isConnected ||
                         queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
-                    Task { await appVM.explainQuery(queryVM.queryText, analyze: false) }
+                    appVM.runExplainAction(queryVM.queryText, analyze: false)
                 }
 
                 // Analyze — actually runs the query. Hold ⌥ for a finer "yes
@@ -85,7 +97,7 @@ struct QueryTabView: View {
                     disabled: queryVM.isExecuting || !appVM.isConnected ||
                         queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
-                    Task { await appVM.explainQuery(queryVM.queryText, analyze: true) }
+                    appVM.runExplainAction(queryVM.queryText, analyze: true)
                 }
 
                 QueryActionButton(title: "Clear", systemImage: "trash", disabled: false) {
@@ -249,6 +261,7 @@ struct QueryTabView: View {
                                     .appMono(11, color: Theme.amber)
                             }
                             Spacer()
+                            ResultExportButton(result: result, defaultFileName: "query-result")
                             Text("\(Int(result.executionTime * 1000)) ms")
                                 .appMono(11, color: Theme.ink3)
                         }
