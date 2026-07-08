@@ -306,6 +306,143 @@ final class InsertDeleteTests: AppViewModelTestCase {
         XCTAssertTrue(deleteSQL?.contains("\"id\" = E'1'") ?? false)
     }
 
+    // MARK: - deleteContentRows(rowIndices:) - Bulk delete
+
+    /// A 3-row fixture so bulk deletes have a non-contiguous selection to work with.
+    private func threeRowContentResult() -> QueryResult {
+        QueryResult(
+            columns: ["id", "name"],
+            rows: [
+                [.text("1"), .text("Alice")],
+                [.text("2"), .text("Bob")],
+                [.text("3"), .text("Carol")],
+            ],
+            executionTime: 0.05,
+            rowsAffected: nil,
+            isTruncated: false
+        )
+    }
+
+    func testDeleteContentRowsGeneratesOrJoinedSQL() async {
+        await makeConnectedVM()
+        setupContentState(contentResult: threeRowContentResult())
+
+        await vm.deleteContentRows(rowIndices: [0, 2])
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        XCTAssertTrue(deleteSQL?.contains("\"public\".\"users\"") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("(\"id\" = E'1')") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("(\"id\" = E'3')") ?? false)
+        XCTAssertTrue(deleteSQL?.contains(") OR (") ?? false)
+        // The unselected row must not be targeted.
+        XCTAssertFalse(deleteSQL?.contains("E'2'") ?? true)
+    }
+
+    func testDeleteContentRowsWithCompositePK() async {
+        await makeConnectedVM()
+        setupContentState(
+            columns: [
+                makePKColumn(name: "order_id", position: 1),
+                makePKColumn(name: "product_id", position: 2),
+                makeColumn(name: "qty", position: 3),
+            ],
+            contentResult: QueryResult(
+                columns: ["order_id", "product_id", "qty"],
+                rows: [
+                    [.text("10"), .text("20"), .text("5")],
+                    [.text("11"), .text("21"), .text("6")],
+                ],
+                executionTime: 0.01,
+                rowsAffected: nil,
+                isTruncated: false
+            )
+        )
+
+        await vm.deleteContentRows(rowIndices: [0, 1])
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        XCTAssertTrue(deleteSQL?.contains("(\"order_id\" = E'10' AND \"product_id\" = E'20')") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("(\"order_id\" = E'11' AND \"product_id\" = E'21')") ?? false)
+        XCTAssertTrue(deleteSQL?.contains(") OR (") ?? false)
+    }
+
+    func testDeleteContentRowsWithNullPKValue() async {
+        await makeConnectedVM()
+        setupContentState(
+            contentResult: QueryResult(
+                columns: ["id", "name"],
+                rows: [
+                    [.null, .text("Alice")],
+                    [.text("2"), .text("Bob")],
+                ],
+                executionTime: 0.01,
+                rowsAffected: nil,
+                isTruncated: false
+            )
+        )
+
+        await vm.deleteContentRows(rowIndices: [0, 1])
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        XCTAssertTrue(deleteSQL?.contains("(\"id\" IS NULL)") ?? false)
+        XCTAssertTrue(deleteSQL?.contains("(\"id\" = E'2')") ?? false)
+    }
+
+    func testDeleteContentRowsSingleRowUsesSinglePredicateSQL() async {
+        await makeConnectedVM()
+        setupContentState(contentResult: threeRowContentResult())
+
+        // A one-element selection routes through the single-row path, which
+        // emits a plain WHERE without OR-groups.
+        await vm.deleteContentRows(rowIndices: [1])
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        XCTAssertTrue(deleteSQL?.contains("WHERE \"id\" = E'2'") ?? false)
+        XCTAssertFalse(deleteSQL?.contains(" OR ") ?? true)
+    }
+
+    func testDeleteContentRowsReloadsContentPageAfterSuccess() async {
+        await makeConnectedVM()
+        setupContentState(contentResult: threeRowContentResult())
+
+        await vm.deleteContentRows(rowIndices: [0, 1])
+
+        let lastSQL = await mockDB.lastRunQuerySQL
+        XCTAssertTrue(lastSQL?.contains("SELECT * FROM") ?? false)
+    }
+
+    func testDeleteContentRowsIsNoOpForEmptySelection() async {
+        await makeConnectedVM()
+        setupContentState(contentResult: threeRowContentResult())
+
+        await vm.deleteContentRows(rowIndices: [])
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        XCTAssertNil(allSQLs.first { $0.contains("DELETE FROM") })
+    }
+
+    func testDeleteContentRowsDeduplicatesIndices() async {
+        await makeConnectedVM()
+        setupContentState(contentResult: threeRowContentResult())
+
+        // Duplicate indices collapse to a single predicate for that row.
+        await vm.deleteContentRows(rowIndices: [0, 0, 2])
+
+        let allSQLs = await mockDB.getAllRunQuerySQLs()
+        let deleteSQL = allSQLs.first { $0.contains("DELETE FROM") }
+        XCTAssertNotNil(deleteSQL)
+        let occurrences = deleteSQL?.components(separatedBy: "\"id\" = E'1'").count ?? 0
+        XCTAssertEqual(occurrences, 2, "id=1 predicate should appear exactly once")
+    }
+
     // MARK: - deleteContentRow(rowIndex:) - State Changes
 
     func testDeleteContentRowClearsSelectedRow() async {

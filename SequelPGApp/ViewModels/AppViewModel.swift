@@ -970,7 +970,7 @@ struct CascadeDeleteBuilder {
         queryVM.invalidateSortCache()
         queryVM.editableTableContext = nil
         queryVM.editableColumns = []
-        queryVM.deleteConfirmationRowIndex = nil
+        queryVM.deleteConfirmationRowIndices = nil
         clearSelectedRow()
 
         do {
@@ -1522,6 +1522,101 @@ struct CascadeDeleteBuilder {
         }
     }
 
+    /// Deletes one or more selected content rows. A single row routes to
+    /// `deleteContentRow(rowIndex:)` so it keeps the FK-cascade offer; multiple
+    /// rows are removed in one atomic bulk `DELETE` (no cascade offer for bulk).
+    func deleteContentRows(rowIndices: [Int]) async {
+        let rows = Set(rowIndices).sorted()
+        guard !rows.isEmpty else { return }
+        if rows.count == 1 {
+            await deleteContentRow(rowIndex: rows[0])
+            return
+        }
+
+        guard let object = navigatorVM.selectedObject,
+              let result = tableVM.contentResult
+        else { return }
+
+        let pkColumns = tableVM.columns.filter { $0.isPrimaryKey }
+        guard !pkColumns.isEmpty else { return }
+
+        let originalRows = rows.compactMap { idx in
+            idx < result.rows.count ? result.rows[idx] : nil
+        }
+        guard originalRows.count == rows.count else { return }
+
+        guard let sql = buildDeleteSQLForRows(
+            schema: object.schema,
+            table: object.name,
+            originalRows: originalRows,
+            resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name)
+        ) else {
+            errorMessage = "Cannot delete: primary key columns missing from result"
+            return
+        }
+
+        switch await performRowMutation(sql: sql) {
+        case .success:
+            clearSelectedRow()
+            do {
+                let approxRows = try await dbClient.getApproximateRowCount(
+                    schema: object.schema, table: object.name
+                )
+                tableVM.approximateRowCount = approxRows
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            await loadContentPage()
+        case .foreignKeyViolation(let msg), .error(let msg):
+            errorMessage = msg
+        }
+    }
+
+    /// Deletes one or more selected query-result rows. A single row routes to
+    /// `deleteQueryRow(rowIndex:)` (keeps the FK-cascade offer); multiple rows
+    /// are removed in one atomic bulk `DELETE`.
+    func deleteQueryRows(rowIndices: [Int]) async {
+        let rows = Set(rowIndices).sorted()
+        guard !rows.isEmpty else { return }
+        if rows.count == 1 {
+            await deleteQueryRow(rowIndex: rows[0])
+            return
+        }
+
+        guard let tableRef = queryVM.editableTableContext,
+              let result = queryVM.result
+        else { return }
+
+        let pkColumns = queryVM.editableColumns.filter { $0.isPrimaryKey }
+        guard !pkColumns.isEmpty else { return }
+
+        let originalRows = rows.compactMap { idx -> [CellValue]? in
+            let actual = queryVM.originalRowIndex(idx)
+            return actual < result.rows.count ? result.rows[actual] : nil
+        }
+        guard originalRows.count == rows.count else { return }
+
+        guard let sql = buildDeleteSQLForRows(
+            schema: tableRef.schema,
+            table: tableRef.table,
+            originalRows: originalRows,
+            resultColumns: result.columns,
+            pkColumnNames: pkColumns.map(\.name)
+        ) else {
+            errorMessage = "Cannot delete: primary key columns missing from result"
+            return
+        }
+
+        switch await performRowMutation(sql: sql) {
+        case .success:
+            clearSelectedRow()
+            await executeQuery(queryVM.queryText)
+        case .foreignKeyViolation(let msg), .error(let msg):
+            errorMessage = msg
+        }
+    }
+
     func startInsertRow() {
         guard let object = navigatorVM.selectedObject,
               object.type == .table
@@ -1899,6 +1994,27 @@ struct CascadeDeleteBuilder {
         }
     }
 
+    /// Builds the AND-joined PK predicate identifying a single row, e.g.
+    /// `"id" = E'1' AND "tenant" = E'2'`. Returns nil if any PK column is
+    /// missing from the result (composite-PK safety guard).
+    private func pkPredicate(
+        row: [CellValue],
+        resultColumns: [String],
+        pkColumnNames: [String]
+    ) -> String? {
+        var parts: [String] = []
+        for pkName in pkColumnNames {
+            guard let idx = resultColumns.firstIndex(of: pkName) else { return nil }
+            let val = row[idx]
+            if val.isNull {
+                parts.append("\(quoteIdent(pkName)) IS NULL")
+            } else {
+                parts.append("\(quoteIdent(pkName)) = \(quoteLiteral(val))")
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " AND ")
+    }
+
     private func buildDeleteSQL(
         schema: String,
         table: String,
@@ -1906,22 +2022,32 @@ struct CascadeDeleteBuilder {
         resultColumns: [String],
         pkColumnNames: [String]
     ) -> String? {
-        var whereParts: [String] = []
-        for pkName in pkColumnNames {
-            guard let idx = resultColumns.firstIndex(of: pkName) else {
-                return nil
-            }
-            let val = originalRow[idx]
-            if val.isNull {
-                whereParts.append("\(quoteIdent(pkName)) IS NULL")
-            } else {
-                whereParts.append("\(quoteIdent(pkName)) = \(quoteLiteral(val))")
-            }
+        guard let whereClause = pkPredicate(
+            row: originalRow, resultColumns: resultColumns, pkColumnNames: pkColumnNames
+        ) else { return nil }
+        return "DELETE FROM \(quoteIdent(schema)).\(quoteIdent(table)) WHERE \(whereClause)"
+    }
+
+    /// Builds a single `DELETE` targeting multiple rows, OR-joining each row's
+    /// PK predicate: `... WHERE (id = E'1') OR (id = E'2')`. Runs as one
+    /// statement so the delete is atomic. Returns nil if any PK column is
+    /// missing from the result or no rows are supplied.
+    private func buildDeleteSQLForRows(
+        schema: String,
+        table: String,
+        originalRows: [[CellValue]],
+        resultColumns: [String],
+        pkColumnNames: [String]
+    ) -> String? {
+        var orGroups: [String] = []
+        for row in originalRows {
+            guard let predicate = pkPredicate(
+                row: row, resultColumns: resultColumns, pkColumnNames: pkColumnNames
+            ) else { return nil }
+            orGroups.append("(\(predicate))")
         }
-
-        guard !whereParts.isEmpty else { return nil }
-
-        let whereClause = whereParts.joined(separator: " AND ")
+        guard !orGroups.isEmpty else { return nil }
+        let whereClause = orGroups.joined(separator: " OR ")
         return "DELETE FROM \(quoteIdent(schema)).\(quoteIdent(table)) WHERE \(whereClause)"
     }
 

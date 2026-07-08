@@ -19,23 +19,27 @@ struct QueryTabView: View {
                 .frame(minHeight: 100)
         }
         .alert(
-            "Delete Row?",
+            (queryVM.deleteConfirmationRowIndices?.count ?? 0) > 1
+                ? "Delete \(queryVM.deleteConfirmationRowIndices?.count ?? 0) Rows?"
+                : "Delete Row?",
             isPresented: Binding<Bool>(
-                get: { queryVM.deleteConfirmationRowIndex != nil },
-                set: { if !$0 { queryVM.deleteConfirmationRowIndex = nil } }
+                get: { queryVM.deleteConfirmationRowIndices != nil },
+                set: { if !$0 { queryVM.deleteConfirmationRowIndices = nil } }
             )
         ) {
             Button("Cancel", role: .cancel) {
-                queryVM.deleteConfirmationRowIndex = nil
+                queryVM.deleteConfirmationRowIndices = nil
             }
             Button("Delete", role: .destructive) {
-                if let idx = queryVM.deleteConfirmationRowIndex {
-                    queryVM.deleteConfirmationRowIndex = nil
-                    Task { await appVM.deleteQueryRow(rowIndex: idx) }
+                if let rows = queryVM.deleteConfirmationRowIndices {
+                    queryVM.deleteConfirmationRowIndices = nil
+                    Task { await appVM.deleteQueryRows(rowIndices: rows) }
                 }
             }
         } message: {
-            Text("This row will be permanently deleted from the database.")
+            Text((queryVM.deleteConfirmationRowIndices?.count ?? 0) > 1
+                ? "These rows will be permanently deleted from the database."
+                : "This row will be permanently deleted from the database.")
         }
         .alert(
             "Foreign Key Conflict",
@@ -245,8 +249,8 @@ struct QueryTabView: View {
                             onColumnHeaderTapped: { column in
                                 appVM.toggleQuerySort(column: column)
                             },
-                            onDeleteRow: appVM.canDeleteQueryRow ? { rowIdx in
-                                queryVM.deleteConfirmationRowIndex = rowIdx
+                            onDeleteRows: appVM.canDeleteQueryRow ? { rows in
+                                queryVM.deleteConfirmationRowIndices = rows
                             } : nil,
                             selectedRowIndex: $tableVM.selectedRowIndex
                         )
@@ -518,7 +522,7 @@ struct ResultsGridView: View {
     var sortColumn: String?
     var sortAscending: Bool
     var onColumnHeaderTapped: ((String) -> Void)?
-    var onDeleteRow: ((Int) -> Void)?
+    var onDeleteRows: (([Int]) -> Void)?
     var isInsertingRow: Bool
     var insertRowValues: Binding<[String: String]>?
     var onInsertCommit: (() -> Void)?
@@ -556,7 +560,7 @@ struct ResultsGridView: View {
         sortColumn: String? = nil,
         sortAscending: Bool = true,
         onColumnHeaderTapped: ((String) -> Void)? = nil,
-        onDeleteRow: ((Int) -> Void)? = nil,
+        onDeleteRows: (([Int]) -> Void)? = nil,
         selectedRowIndex: Binding<Int?> = .constant(nil),
         isInsertingRow: Bool = false,
         insertRowValues: Binding<[String: String]>? = nil,
@@ -573,7 +577,7 @@ struct ResultsGridView: View {
         self.sortColumn = sortColumn
         self.sortAscending = sortAscending
         self.onColumnHeaderTapped = onColumnHeaderTapped
-        self.onDeleteRow = onDeleteRow
+        self.onDeleteRows = onDeleteRows
         self._selectedRowIndex = selectedRowIndex
         self.isInsertingRow = isInsertingRow
         self.insertRowValues = insertRowValues
@@ -628,13 +632,13 @@ struct ResultsGridView: View {
                 onDoubleClick: { rowIdx, colIdx in
                     handleCellDoubleClick(row: rowIdx, col: colIdx)
                 },
-                onDeleteSelected: {
-                    if let onDeleteRow, let idx = selectedRowIndex {
-                        onDeleteRow(idx)
+                onDeleteSelected: { rows in
+                    if let onDeleteRows, !rows.isEmpty {
+                        onDeleteRows(rows)
                     }
                 },
-                contextMenuItems: { rowIdx in
-                    buildContextMenuItems(rowIdx: rowIdx)
+                contextMenuItems: { targetRows in
+                    buildContextMenuItems(targetRows: targetRows)
                 },
                 renderCell: { rowIdx, colIdx in
                     AnyView(cellView(rowIdx: rowIdx, colIdx: colIdx))
@@ -680,14 +684,17 @@ struct ResultsGridView: View {
         return true
     }
 
-    /// Builds the row's context menu, prepending a "Jump to <ref_table>" item
-    /// when the right-clicked column is a non-null FK source.
-    private func buildContextMenuItems(rowIdx: Int) -> [DataGridView.MenuItem] {
+    /// Builds the context menu for the operand rows. FK "Jump to <ref_table>"
+    /// items are only offered for a single-row target (they navigate to one
+    /// referenced row); the delete item operates on the whole target set.
+    private func buildContextMenuItems(targetRows: [Int]) -> [DataGridView.MenuItem] {
         var items: [DataGridView.MenuItem] = []
         if let onFKJump,
+           targetRows.count == 1,
+           let rowIdx = targetRows.first,
            rowIdx < result.rows.count
         {
-            // The DataGridView coordinator passes a row index but not a column
+            // The DataGridView coordinator passes row indices but not a column
             // — its menuNeedsUpdate uses tv.clickedRow only. So we walk the
             // row's cells and offer a Jump item for each FK column that has a
             // non-null value. That keeps the right-click surface comprehensive
@@ -705,9 +712,10 @@ struct ResultsGridView: View {
                 ) { onFKJump(rowIdx, captured) })
             }
         }
-        if let onDeleteRow {
-            items.append(DataGridView.MenuItem(title: "Delete Row", isDestructive: true) {
-                onDeleteRow(rowIdx)
+        if let onDeleteRows, !targetRows.isEmpty {
+            let title = targetRows.count == 1 ? "Delete Row" : "Delete \(targetRows.count) Rows"
+            items.append(DataGridView.MenuItem(title: title, isDestructive: true) {
+                onDeleteRows(targetRows)
             })
         }
         return items
@@ -1057,8 +1065,8 @@ struct DataGridView: NSViewRepresentable {
     var onSelectionChanged: (Int?) -> Void
     var onColumnHeaderClicked: (String) -> Void
     var onDoubleClick: (Int, Int) -> Void
-    var onDeleteSelected: () -> Void
-    var contextMenuItems: (Int) -> [MenuItem]
+    var onDeleteSelected: ([Int]) -> Void
+    var contextMenuItems: ([Int]) -> [MenuItem]
     var renderCell: (Int, Int) -> AnyView
     /// Cmd-click handler. Returns true to consume the event (suppressing the
     /// default multi-select toggle), false to fall through to normal handling.
@@ -1149,16 +1157,27 @@ struct DataGridView: NSViewRepresentable {
             coordinator.lastReloadSortAscending = sortAscending
         }
 
-        // Sync selection from the binding into the table. The flag suppresses
-        // the resulting tableViewSelectionDidChange callback so we don't write
-        // back into the SwiftUI binding during a view update (which is what
-        // produced the "Modifying state during view update" warnings).
-        let desiredSelection = selectedRowIndex.flatMap { ($0 >= 0 && $0 < rowCount) ? IndexSet(integer: $0) : nil } ?? IndexSet()
-        if tableView.selectedRowIndexes != desiredSelection {
-            coordinator.isSyncingFromSwiftUI = true
-            tableView.selectRowIndexes(desiredSelection, byExtendingSelection: false)
-            coordinator.isSyncingFromSwiftUI = false
+        // Sync selection from the single-Int binding into the table. The flag
+        // suppresses the resulting tableViewSelectionDidChange callback so we
+        // don't write back into the SwiftUI binding during a view update (which
+        // is what produced the "Modifying state during view update" warnings).
+        //
+        // Crucially, this must NOT collapse a multi-row selection. During a
+        // Shift/Cmd-click the coordinator writes the most-recent row to the
+        // single `selectedRowIndex`, which then re-enters here on the next
+        // view update. If that bound row is already part of the current
+        // selection, the user is mid-multi-select — leave the table's richer
+        // selection intact. Only push a selection for a genuine programmatic
+        // change (bound row not currently selected) or a clear to nil.
+        coordinator.isSyncingFromSwiftUI = true
+        if let idx = selectedRowIndex, idx >= 0, idx < rowCount {
+            if !tableView.selectedRowIndexes.contains(idx) {
+                tableView.selectRowIndexes(IndexSet(integer: idx), byExtendingSelection: false)
+            }
+        } else if !tableView.selectedRowIndexes.isEmpty {
+            tableView.deselectAll(nil)
         }
+        coordinator.isSyncingFromSwiftUI = false
 
         // Sort indicator on the header. Cheap to refresh unconditionally — it
         // touches a handful of NSTableColumn objects, not the row body.
@@ -1277,12 +1296,24 @@ struct DataGridView: NSViewRepresentable {
         func menuNeedsUpdate(_ menu: NSMenu) {
             menu.removeAllItems()
             guard let tv = tableView else { return }
-            // Right-click semantics: the row under the cursor is the operand
-            // even if it isn't selected. Mirror Finder-style behavior.
-            let targetRow = tv.clickedRow >= 0 ? tv.clickedRow : tv.selectedRow
-            guard targetRow >= 0 else { return }
+            // Right-click semantics, Finder-style: if the clicked row is part
+            // of a multi-row selection, operate on the whole selection. If the
+            // click landed outside the selection (or on a single row), operate
+            // on just that row.
+            let clicked = tv.clickedRow
+            let selected = tv.selectedRowIndexes
+            let targetRows: [Int]
+            if clicked >= 0, selected.contains(clicked), selected.count > 1 {
+                targetRows = selected.sorted()
+            } else if clicked >= 0 {
+                targetRows = [clicked]
+            } else if !selected.isEmpty {
+                targetRows = selected.sorted()
+            } else {
+                return
+            }
 
-            for item in parent.contextMenuItems(targetRow) {
+            for item in parent.contextMenuItems(targetRows) {
                 let menuItem = NSMenuItem(title: item.title, action: #selector(menuItemClicked(_:)), keyEquivalent: "")
                 menuItem.target = self
                 menuItem.representedObject = item.action
@@ -1393,7 +1424,7 @@ struct DataGridView: NSViewRepresentable {
             let chars = event.charactersIgnoringModifiers ?? ""
             if (chars == "\u{7F}" || chars == "\u{8}") && selectedRow >= 0 {
                 if let coord = delegate as? Coordinator {
-                    coord.parent.onDeleteSelected()
+                    coord.parent.onDeleteSelected(selectedRowIndexes.sorted())
                     return
                 }
             }
