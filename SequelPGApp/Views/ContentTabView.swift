@@ -41,6 +41,7 @@ struct ContentTabView: View {
                             tableVM.deleteConfirmationRowIndices = rows
                         } : nil,
                         selectedRowIndex: $tableVM.selectedRowIndex,
+                        selectedRowIndices: $tableVM.selectedRowIndices,
                         isInsertingRow: tableVM.isInsertingRow,
                         insertRowValues: Binding(
                             get: { tableVM.newRowValues },
@@ -289,8 +290,13 @@ struct ContentTabView: View {
             .help("Insert a new row")
 
             Button {
-                if let idx = tableVM.selectedRowIndex {
-                    tableVM.deleteConfirmationRowIndices = [idx]
+                // Honor the full multi-row selection; fall back to the anchor
+                // when only a single row (or none synced) is selected.
+                let rows = tableVM.selectedRowIndices.isEmpty
+                    ? tableVM.selectedRowIndex.map { [$0] } ?? []
+                    : tableVM.selectedRowIndices
+                if !rows.isEmpty {
+                    tableVM.deleteConfirmationRowIndices = rows
                 }
             } label: {
                 Image(systemName: "minus")

@@ -536,6 +536,10 @@ struct ResultsGridView: View {
     /// or the context-menu item). Receives the displayed row and column index.
     var onFKJump: ((Int, Int) -> Void)?
     @Binding var selectedRowIndex: Int?
+    /// Full multi-row selection, kept in sync with the grid so callers outside
+    /// the grid (e.g. the Content toolbar's "−" button) can act on every
+    /// selected row rather than just the `selectedRowIndex` anchor.
+    @Binding var selectedRowIndices: [Int]
     @FocusState private var isFocused: Bool
     @FocusState private var editFieldFocused: Bool
     @FocusState private var insertFieldFocused: Bool
@@ -562,6 +566,7 @@ struct ResultsGridView: View {
         onColumnHeaderTapped: ((String) -> Void)? = nil,
         onDeleteRows: (([Int]) -> Void)? = nil,
         selectedRowIndex: Binding<Int?> = .constant(nil),
+        selectedRowIndices: Binding<[Int]> = .constant([]),
         isInsertingRow: Bool = false,
         insertRowValues: Binding<[String: String]>? = nil,
         onInsertCommit: (() -> Void)? = nil,
@@ -579,6 +584,7 @@ struct ResultsGridView: View {
         self.onColumnHeaderTapped = onColumnHeaderTapped
         self.onDeleteRows = onDeleteRows
         self._selectedRowIndex = selectedRowIndex
+        self._selectedRowIndices = selectedRowIndices
         self.isInsertingRow = isInsertingRow
         self.insertRowValues = insertRowValues
         self.onInsertCommit = onInsertCommit
@@ -621,6 +627,7 @@ struct ResultsGridView: View {
                     )
                 },
                 selectedRowIndex: $selectedRowIndex,
+                selectedRowIndices: $selectedRowIndices,
                 sortColumnName: sortColumn,
                 sortAscending: sortAscending,
                 onSelectionChanged: { idx in
@@ -1060,6 +1067,9 @@ struct DataGridView: NSViewRepresentable {
     let resultRevision: UUID
     let columns: [Column]
     @Binding var selectedRowIndex: Int?
+    /// Full multi-row selection, mirrored back to the caller so non-grid UI can
+    /// act on every selected row. Kept in sync from `tableViewSelectionDidChange`.
+    @Binding var selectedRowIndices: [Int]
     var sortColumnName: String?
     var sortAscending: Bool
     var onSelectionChanged: (Int?) -> Void
@@ -1169,6 +1179,12 @@ struct DataGridView: NSViewRepresentable {
         // selection, the user is mid-multi-select — leave the table's richer
         // selection intact. Only push a selection for a genuine programmatic
         // change (bound row not currently selected) or a clear to nil.
+        //
+        // A stale multi-selection from a *previous* object cannot survive as a
+        // no-op here: object switches drive the binding to nil (see
+        // `restoreFromTab` / `TableViewModel.clear`), which takes the
+        // `deselectAll` branch and wipes the reused table's highlight before the
+        // new object's rows can be deleted.
         coordinator.isSyncingFromSwiftUI = true
         if let idx = selectedRowIndex, idx >= 0, idx < rowCount {
             if !tableView.selectedRowIndexes.contains(idx) {
@@ -1276,6 +1292,10 @@ struct DataGridView: NSViewRepresentable {
             // the single-Int? binding. Multi-row context-menu / delete picks
             // up the full set via NSTableView.selectedRowIndexes directly.
             let newIdx: Int? = tv.selectedRow >= 0 ? tv.selectedRow : nil
+            let newIndices = tv.selectedRowIndexes.sorted()
+            if parent.selectedRowIndices != newIndices {
+                parent.selectedRowIndices = newIndices
+            }
             if parent.selectedRowIndex != newIdx {
                 parent.selectedRowIndex = newIdx
                 parent.onSelectionChanged(newIdx)
@@ -1298,8 +1318,10 @@ struct DataGridView: NSViewRepresentable {
             guard let tv = tableView else { return }
             // Right-click semantics, Finder-style: if the clicked row is part
             // of a multi-row selection, operate on the whole selection. If the
-            // click landed outside the selection (or on a single row), operate
-            // on just that row.
+            // click landed on a single/unselected row, operate on just that row.
+            // A right-click on empty area below the last row (`clickedRow == -1`)
+            // shows no menu — Finder presents a background menu there, never a
+            // destructive action over the existing selection.
             let clicked = tv.clickedRow
             let selected = tv.selectedRowIndexes
             let targetRows: [Int]
@@ -1307,8 +1329,6 @@ struct DataGridView: NSViewRepresentable {
                 targetRows = selected.sorted()
             } else if clicked >= 0 {
                 targetRows = [clicked]
-            } else if !selected.isEmpty {
-                targetRows = selected.sorted()
             } else {
                 return
             }

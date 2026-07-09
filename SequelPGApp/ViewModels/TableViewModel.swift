@@ -52,6 +52,7 @@ enum FilterOperator: String, CaseIterable {
     var selectedObjectName: String?
     var selectedObjectColumnCount = 0
     var selectedRowIndex: Int?
+    var selectedRowIndices: [Int] = []
     var selectedRowData: [(column: String, value: CellValue)]?
     var sortColumn: String?
     var sortAscending: Bool = true
@@ -109,6 +110,7 @@ enum FilterOperator: String, CaseIterable {
         selectedObjectName = defaults.selectedObjectName
         selectedObjectColumnCount = defaults.selectedObjectColumnCount
         selectedRowIndex = defaults.selectedRowIndex
+        selectedRowIndices = []
         selectedRowData = defaults.selectedRowData
         sortColumn = defaults.sortColumn
         sortAscending = defaults.sortAscending
