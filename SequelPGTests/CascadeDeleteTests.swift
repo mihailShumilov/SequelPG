@@ -316,6 +316,45 @@ final class CascadeDeleteTests: AppViewModelTestCase {
         XCTAssertEqual(vm.cascadeDeleteContext?.errorMessage, fkMsg)
     }
 
+    // MARK: - Bulk delete folds FK violation into errorMessage (no cascade offer)
+
+    func testDeleteContentRowsBulkFKViolationSetsErrorNotCascade() async {
+        await makeConnectedVM()
+        setupContentState()
+
+        await mockDB.setRunQueryHandler { sql in
+            if sql.contains("DELETE FROM") {
+                throw AppError.foreignKeyViolation("Key (id)=(1) is still referenced from table \"orders\"")
+            }
+            return QueryResult(columns: [], rows: [], executionTime: 0.01, rowsAffected: nil, isTruncated: false)
+        }
+
+        // Two rows → bulk path, which deliberately does NOT offer a cascade.
+        await vm.deleteContentRows(rowIndices: [0, 1])
+
+        XCTAssertNil(vm.cascadeDeleteContext, "bulk delete must not open the cascade UI")
+        XCTAssertNotNil(vm.errorMessage)
+        XCTAssertTrue(vm.errorMessage?.contains("orders") ?? false)
+    }
+
+    func testDeleteQueryRowsBulkFKViolationSetsErrorNotCascade() async {
+        await makeConnectedVM()
+        setupQueryState()
+
+        await mockDB.setRunQueryHandler { sql in
+            if sql.contains("DELETE FROM") {
+                throw AppError.foreignKeyViolation("Key (id)=(1) referenced from \"orders\"")
+            }
+            return QueryResult(columns: [], rows: [], executionTime: 0.01, rowsAffected: nil, isTruncated: false)
+        }
+
+        await vm.deleteQueryRows(rowIndices: [0, 1])
+
+        XCTAssertNil(vm.cascadeDeleteContext, "bulk delete must not open the cascade UI")
+        XCTAssertNotNil(vm.errorMessage)
+        XCTAssertTrue(vm.errorMessage?.contains("orders") ?? false)
+    }
+
     // MARK: - executeCascadeDelete returns early when context is nil
 
     func testExecuteCascadeDeleteReturnsEarlyWhenContextNil() async {

@@ -189,26 +189,26 @@ final class QueryViewModelTests: XCTestCase {
         XCTAssertEqual(vm.errorMessage, longMessage)
     }
 
-    // MARK: - deleteConfirmationRowIndex
+    // MARK: - deleteConfirmationRowIndices
 
-    func testInitialDeleteConfirmationRowIndexIsNil() {
-        XCTAssertNil(vm.deleteConfirmationRowIndex)
+    func testInitialDeleteConfirmationRowIndicesIsNil() {
+        XCTAssertNil(vm.deleteConfirmationRowIndices)
     }
 
-    func testDeleteConfirmationRowIndexCanBeSet() {
-        vm.deleteConfirmationRowIndex = 2
-        XCTAssertEqual(vm.deleteConfirmationRowIndex, 2)
+    func testDeleteConfirmationRowIndicesCanBeSet() {
+        vm.deleteConfirmationRowIndices = [2]
+        XCTAssertEqual(vm.deleteConfirmationRowIndices, [2])
     }
 
-    func testDeleteConfirmationRowIndexCanBeSetToZero() {
-        vm.deleteConfirmationRowIndex = 0
-        XCTAssertEqual(vm.deleteConfirmationRowIndex, 0)
+    func testDeleteConfirmationRowIndicesCanHoldMultiple() {
+        vm.deleteConfirmationRowIndices = [0, 3]
+        XCTAssertEqual(vm.deleteConfirmationRowIndices, [0, 3])
     }
 
-    func testDeleteConfirmationRowIndexCanBeSetBackToNil() {
-        vm.deleteConfirmationRowIndex = 4
-        vm.deleteConfirmationRowIndex = nil
-        XCTAssertNil(vm.deleteConfirmationRowIndex)
+    func testDeleteConfirmationRowIndicesCanBeSetBackToNil() {
+        vm.deleteConfirmationRowIndices = [4]
+        vm.deleteConfirmationRowIndices = nil
+        XCTAssertNil(vm.deleteConfirmationRowIndices)
     }
 
     // MARK: - State Management (Simulating Query Execution Workflow)

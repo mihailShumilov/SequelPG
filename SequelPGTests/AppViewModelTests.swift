@@ -1347,34 +1347,34 @@ final class AppViewModelTests: AppViewModelTestCase {
         XCTAssertFalse(vm.isConnected)
     }
 
-    // MARK: - executeQuery clears deleteConfirmationRowIndex
+    // MARK: - executeQuery clears deleteConfirmationRowIndices
 
-    func testExecuteQueryClearsDeleteConfirmationRowIndex() async {
+    func testExecuteQueryClearsDeleteConfirmationRowIndices() async {
         await makeConnectedVM()
-        vm.queryVM.deleteConfirmationRowIndex = 3
+        vm.queryVM.deleteConfirmationRowIndices = [3]
 
         await vm.executeQuery("SELECT 1")
 
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
     }
 
-    func testExecuteQueryClearsDeleteConfirmationRowIndexEvenWhenAlreadyNil() async {
+    func testExecuteQueryClearsDeleteConfirmationRowIndicesEvenWhenAlreadyNil() async {
         await makeConnectedVM()
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
 
         await vm.executeQuery("SELECT 1")
 
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
     }
 
-    func testExecuteQueryClearsDeleteConfirmationRowIndexOnError() async {
+    func testExecuteQueryClearsDeleteConfirmationRowIndicesOnError() async {
         await makeConnectedVM()
-        vm.queryVM.deleteConfirmationRowIndex = 5
+        vm.queryVM.deleteConfirmationRowIndices = [5]
         await mockDB.setShouldThrowOnRunQuery(true)
 
         await vm.executeQuery("SELECT bad")
 
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
     }
 
     // MARK: - deleteQueryRow with active sort

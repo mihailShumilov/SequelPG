@@ -2,10 +2,11 @@ import Foundation
 
 /// Adopted by every view model that surfaces a per-row delete confirmation prompt.
 /// The shared property keeps both content-tab and query-tab views using the same
-/// binding shape: setting an `Int?` opens the confirmation alert; nil dismisses it.
+/// binding shape: setting a non-nil array opens the confirmation alert (one or
+/// more rows); nil dismisses it.
 @MainActor
 protocol RowDeleteConfirming: AnyObject {
-    var deleteConfirmationRowIndex: Int? { get set }
+    var deleteConfirmationRowIndices: [Int]? { get set }
 }
 
 /// A single filter condition for the content tab.
@@ -51,10 +52,11 @@ enum FilterOperator: String, CaseIterable {
     var selectedObjectName: String?
     var selectedObjectColumnCount = 0
     var selectedRowIndex: Int?
+    var selectedRowIndices: [Int] = []
     var selectedRowData: [(column: String, value: CellValue)]?
     var sortColumn: String?
     var sortAscending: Bool = true
-    var deleteConfirmationRowIndex: Int?
+    var deleteConfirmationRowIndices: [Int]?
     var isInsertingRow = false
     var newRowValues: [String: String] = [:]
 
@@ -108,10 +110,11 @@ enum FilterOperator: String, CaseIterable {
         selectedObjectName = defaults.selectedObjectName
         selectedObjectColumnCount = defaults.selectedObjectColumnCount
         selectedRowIndex = defaults.selectedRowIndex
+        selectedRowIndices = []
         selectedRowData = defaults.selectedRowData
         sortColumn = defaults.sortColumn
         sortAscending = defaults.sortAscending
-        deleteConfirmationRowIndex = defaults.deleteConfirmationRowIndex
+        deleteConfirmationRowIndices = defaults.deleteConfirmationRowIndices
         isInsertingRow = defaults.isInsertingRow
         newRowValues = defaults.newRowValues
         showFilterBar = defaults.showFilterBar
@@ -138,7 +141,7 @@ enum FilterOperator: String, CaseIterable {
         let selectedRowData: [(column: String, value: CellValue)]? = nil
         let sortColumn: String? = nil
         let sortAscending = true
-        let deleteConfirmationRowIndex: Int? = nil
+        let deleteConfirmationRowIndices: [Int]? = nil
         let isInsertingRow = false
         let newRowValues: [String: String] = [:]
         let showFilterBar = false
