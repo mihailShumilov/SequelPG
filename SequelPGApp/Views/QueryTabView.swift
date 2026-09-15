@@ -12,12 +12,16 @@ struct QueryTabView: View {
     @Environment(EditorPreference.self) var editorPreference
 
     var body: some View {
+        // NSSplitView (behind VSplitView) treats each pane's intrinsic width as
+        // a compression floor. Pinning a modest idealWidth keeps the pane's
+        // intrinsic width small, so the sidebar and inspector aren't squeezed
+        // when the editor toolbar or an empty-state view would rather be wide.
         VSplitView {
             editorArea
-                .frame(minHeight: 120)
+                .frame(minWidth: 0, idealWidth: 480, maxWidth: .infinity, minHeight: 120)
 
             resultsArea
-                .frame(minHeight: 120)
+                .frame(minWidth: 0, idealWidth: 480, maxWidth: .infinity, minHeight: 120)
         }
         .alert(
             "Delete Row?",

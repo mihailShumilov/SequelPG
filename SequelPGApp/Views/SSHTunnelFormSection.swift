@@ -19,17 +19,17 @@ struct SSHTunnelFormSection: View {
         Toggle("Connect via SSH Tunnel", isOn: $useSSHTunnel.animation())
 
         if useSSHTunnel {
-            TextField("SSH Host:", text: $sshHost)
-            TextField("SSH Port:", text: $sshPort)
-            TextField("SSH User:", text: $sshUser)
-            Picker("Auth Method:", selection: $sshAuthMethod) {
+            TextField("SSH Host", text: $sshHost)
+            TextField("SSH Port", text: $sshPort)
+            TextField("SSH User", text: $sshUser)
+            Picker("Authentication", selection: $sshAuthMethod) {
                 ForEach(SSHAuthMethod.allCases, id: \.self) { method in
                     Text(method.displayName).tag(method)
                 }
             }
 
             if sshAuthMethod == .keyFile {
-                TextField("Key Path:", text: $sshKeyPath)
+                TextField("Key File", text: $sshKeyPath, prompt: Text("~/.ssh/id_ed25519"))
                     .help("Path to SSH private key (e.g. ~/.ssh/id_rsa). Leave empty to use SSH agent.")
             }
 
@@ -37,9 +37,9 @@ struct SSHTunnelFormSection: View {
                 if let showBinding = showSSHPassword {
                     HStack {
                         if showBinding.wrappedValue {
-                            TextField("SSH Password:", text: $sshPassword)
+                            TextField("SSH Password", text: $sshPassword)
                         } else {
-                            SecureField("SSH Password:", text: $sshPassword)
+                            SecureField("SSH Password", text: $sshPassword)
                         }
                         Button {
                             showBinding.wrappedValue.toggle()
@@ -49,7 +49,7 @@ struct SSHTunnelFormSection: View {
                         .buttonStyle(.borderless)
                     }
                 } else {
-                    SecureField("SSH Password:", text: $sshPassword)
+                    SecureField("SSH Password", text: $sshPassword)
                 }
             }
         }

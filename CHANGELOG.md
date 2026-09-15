@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Native macOS shell.** The window is now a standard `NavigationSplitView`: a real sidebar (collapsible with the toolbar button or ⌃⌘S, resizable with the native divider, vibrant background), the main area, and a native trailing **Inspector** (⌥⌘I) — replacing the hand-rolled column layout and resize handle. The window title shows the connection name and the current database.
+- **Mode switcher in the toolbar.** Structure / Content / Definition / Query / Diagram are a segmented control in the window toolbar (⌘1–⌘5), as in Sequel Pro/Ace, instead of an in-content tab strip. Modes that need an object show a native empty state instead of being disabled.
+- **Native window tabs.** ⌘T opens a new connection as a macOS window tab of the current window; the system tab bar handles reordering, tearing off into its own window, and merging. The custom in-window tab bar is gone. Closing a tab or window disconnects its session.
+- **System colors and fonts throughout the chrome.** Sidebar, toolbars, bars, sheets, lists, and labels use the system semantic colors and SF Pro, so Light/Dark and the user's accent-color choice are respected (the lime accent remains the app's own `AccentColor` for the “multicolor” setting). Monospaced type and the syntax palette are reserved for SQL, DDL, identifiers, and values. Roman-numeral kickers, dotted rules, and decorative key-cap chips are gone.
+- **Full menu bar.** New **Database** menu (Refresh ⌘R, New Database…, New Schema…, Extensions…, Roles & Privileges…, Function Library…, Disconnect ⇧⌘W) and **Query** menu (Run ⌘↩, Stop ⌘., Explain ⌥⌘E, Explain Analyze ⌥⇧⌘E, Beautify ⇧⌘F, Clear ⌘K). **View** gains the five modes, Show/Hide Inspector, Show/Hide Query History (⇧⌘Y), Show Advanced Objects, and Appearance. Every command targets the key window only. **Edit ▸ Find** (⌘F) filters rows on the Content tab and opens the editor's native find bar elsewhere; Find Next/Previous and Use Selection for Find work in the editor.
+- **Sticky mode.** Selecting another object in the sidebar keeps the current mode instead of jumping to Structure, so you can browse tables while writing a query (their columns feed autocompletion). The first object opened still switches to Structure/Definition. Structure and Content fall back to Definition for functions, types, and other non-relations.
+- **Sidebar.** A filter field in the sidebar's bottom bar narrows the tree to matching objects (matching categories expand automatically); the create menu (+) and sidebar options (Show Advanced Objects, Refresh) sit next to it. Double-click a database to switch to it.
+- **Object tabs** are native-looking chips with a context menu: Close Tab, Close Other Tabs, Close All Tabs.
+- **Content.** Inserting a row opens a form listing every column with its type, NOT NULL, default hint, and the required columns called out — replacing the inline row whose fields never lined up with the grid's columns. The bottom bar is a compact Finder-style status bar; the filter bar's Apply/Clear/Show SQL buttons enable only when a condition is usable. Empty states use the native `ContentUnavailableView`.
+- **Query.** Native toolbar buttons (Run/Stop, Explain, Analyze, Beautify, Clear), one status bar under the grid (row count, cap notice, editable hint, Export, timing) instead of the duplicated header meta, and a working **Messages** tab showing the last statement's outcome (rows affected/returned, timing, full error text). Errors show in a dismissable inline banner.
+- **Structure.** Editing a column's name, type, or default is now a **double-click** (a single click only selects the row), so a stray click can no longer issue `ALTER TABLE`; the compact header shows the object, schema, row and column counts. Right-click a column to drop it.
+- **Sheets.** Extensions, Roles, Function Library, Export, Import, and every create/add sheet share one layout: title, grouped form, Cancel/primary buttons bottom-right (no more “Done” in headers). Type fields accept any custom type and offer common ones in a menu, replacing the picker-plus-text-field pair. Roles shows role flags as tags; Extensions shows installed/available counts.
+- **Settings** is split into General (Appearance), Editor (completion, query timeout, and a new **editor font** family/size — SF Mono, JetBrains Mono, or Menlo, 10–20 pt, applied live to the SQL editor and Definition view), and Tools (PostgreSQL client binaries).
+- The start page is a sidebar of saved connections (with filter, +/− bar, Duplicate in the context menu) and a grouped settings form with native Test Connection / Connect buttons; validation and test results appear as inline banners.
+
+### Fixed
+- **EXPLAIN / EXPLAIN ANALYZE failed on non-trivial plans** (“The data couldn't be read because it isn't in the correct format”). The plan JSON was passing through the 10 000-character cell display cap, so any plan over that size — partitioned tables, wide joins — was truncated before parsing. EXPLAIN now reads its output whole.
+- ⌘F, ⇧⌘Y, Export and Import no longer act on every open connection at once; they target the key window.
+- The Disconnect command (⇧⌘W) documented in the README now exists.
+- Beautify has the ⇧⌘F shortcut the empty state advertised.
+- The Messages tab in query results, previously a no-op, shows the execution transcript.
+
+### Removed
+- The unused modal connection form and the unused connection list view.
+
 ### Added
 - **CSV / JSON result export.** A new **Export ▾** menu in the query-results footer and the content tab's pagination bar writes the rows currently shown to a `.csv` (RFC 4180 quoting, NULL as an empty field) or `.json` (array of objects, NULL as `null`, duplicate column names suffixed `_2`, `_3`…) file.
 - **Configurable query timeout with a Stop button.** Settings ▸ SQL Editor gains a **Query timeout** picker (5 s – 5 min, or **No limit**) that applies to Run, Explain/Analyze, and content-page loads. While a statement runs the **Run** button becomes **Stop** (⌘.) and cancels the in-flight query; a stopped query reads as *Cancelled* rather than as a failure.

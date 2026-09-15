@@ -18,12 +18,14 @@ struct MainAreaView: View {
             }
 
             if appVM.showQueryHistory {
+                // See QueryTabView: keep the panes' intrinsic width small so the
+                // split view doesn't force the detail column wider than needed.
                 VSplitView {
                     modeContent
-                        .frame(minHeight: 120)
+                        .frame(minWidth: 0, idealWidth: 480, maxWidth: .infinity, minHeight: 120)
 
                     QueryHistoryView()
-                        .frame(minHeight: 120, idealHeight: 220)
+                        .frame(minWidth: 0, idealWidth: 480, maxWidth: .infinity, minHeight: 120, idealHeight: 220)
                 }
             } else {
                 modeContent

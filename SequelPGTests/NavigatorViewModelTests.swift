@@ -541,4 +541,46 @@ final class NavigatorViewModelTests: XCTestCase {
     private func makeFunction(_ name: String) -> DBObject {
         DBObject(schema: "public", name: name, type: .function)
     }
+
+
+    // MARK: - Sidebar filter
+
+    func testFilteredObjectsReturnsAllWhenFilterIsEmpty() {
+        let tables = [
+            DBObject(schema: "public", name: "users", type: .table),
+            DBObject(schema: "public", name: "orders", type: .table),
+        ]
+        sut.setSchemaObjects(db: db, schema: "public", objects: SchemaObjects(tables: tables))
+
+        XCTAssertFalse(sut.isFiltering)
+        XCTAssertEqual(sut.filteredObjects(for: db, schema: "public", category: .tables), tables)
+    }
+
+    func testFilteredObjectsMatchesCaseInsensitiveSubstring() {
+        let tables = [
+            DBObject(schema: "public", name: "users", type: .table),
+            DBObject(schema: "public", name: "user_orders", type: .table),
+            DBObject(schema: "public", name: "products", type: .table),
+        ]
+        sut.setSchemaObjects(db: db, schema: "public", objects: SchemaObjects(tables: tables))
+
+        sut.filterText = "USER"
+
+        XCTAssertTrue(sut.isFiltering)
+        XCTAssertEqual(
+            sut.filteredObjects(for: db, schema: "public", category: .tables).map(\.name),
+            ["users", "user_orders"]
+        )
+    }
+
+    func testWhitespaceOnlyFilterIsNotFiltering() {
+        sut.filterText = "   "
+        XCTAssertFalse(sut.isFiltering)
+    }
+
+    func testClearResetsFilterText() {
+        sut.filterText = "abc"
+        sut.clear()
+        XCTAssertEqual(sut.filterText, "")
+    }
 }

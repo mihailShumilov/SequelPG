@@ -9,7 +9,7 @@ struct InspectorView: View {
     @State private var editingColumn: String?
     @State private var editingText: String = ""
     @State private var showDeleteConfirmation = false
-    @State private var fieldEditorColumn: String?
+    @State private var fieldEditorColumn: EditingColumn?
     @State private var columnInfoIndex: [String: ColumnInfo] = [:]
     @FocusState private var editFieldFocused: Bool
 
@@ -79,6 +79,29 @@ struct InspectorView: View {
         .onAppear { rebuildColumnIndexIfNeeded() }
         .onChange(of: tableVM.columns.count) { _, _ in rebuildColumnIndexIfNeeded() }
         .onChange(of: tableVM.selectedObjectName) { _, _ in rebuildColumnIndexIfNeeded() }
+        // One sheet for the rich editor (JSON / array / boolean / long text),
+        // matching the results grid. A per-row popover inside a grouped Form
+        // rendered as a blank panel on macOS 14.
+        .sheet(item: $fieldEditorColumn) { editing in
+            let column = editing.name
+            let colInfo = columnInfoIndex[column]
+            let value = tableVM.selectedRowData?.first { $0.column == column }?.value ?? .null
+            FieldEditorView(
+                columnName: column,
+                dataType: colInfo?.dataType ?? "text",
+                isNullable: colInfo?.isNullable ?? true,
+                initialValue: value,
+                onSave: { newText in
+                    fieldEditorColumn = nil
+                    Task {
+                        await appVM.updateInspectorCell(columnName: column, newText: newText)
+                    }
+                },
+                onCancel: {
+                    fieldEditorColumn = nil
+                }
+            )
+        }
         .alert("Delete Row?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -124,35 +147,12 @@ struct InspectorView: View {
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         if needsRichInspectorEditor(kind: kind) {
-                            fieldEditorColumn = column
+                            fieldEditorColumn = EditingColumn(name: column)
                         } else {
                             editingText = value.isNull ? "NULL" : value.displayString
                             editingColumn = column
                             editFieldFocused = true
                         }
-                    }
-                    .popover(
-                        isPresented: Binding(
-                            get: { fieldEditorColumn == column },
-                            set: { if !$0 { fieldEditorColumn = nil } }
-                        ),
-                        arrowEdge: .leading
-                    ) {
-                        FieldEditorView(
-                            columnName: column,
-                            dataType: colInfo?.dataType ?? "text",
-                            isNullable: colInfo?.isNullable ?? true,
-                            initialValue: value,
-                            onSave: { newText in
-                                fieldEditorColumn = nil
-                                Task {
-                                    await appVM.updateInspectorCell(columnName: column, newText: newText)
-                                }
-                            },
-                            onCancel: {
-                                fieldEditorColumn = nil
-                            }
-                        )
                     }
             } else {
                 inspectorValueView(value: value, kind: kind)
@@ -326,6 +326,12 @@ struct InspectorView: View {
         JSONPreviewCache.shared.set(key, value: value)
         return value
     }
+}
+
+/// Identifiable wrapper so a column name can drive `.sheet(item:)`.
+private struct EditingColumn: Identifiable {
+    let name: String
+    var id: String { name }
 }
 
 /// Pretty-printed JSON previews are expensive enough (parse + reserialize with
