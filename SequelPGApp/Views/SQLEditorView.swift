@@ -21,6 +21,9 @@ struct SQLEditorView: NSViewRepresentable {
     /// typing (GH #4). On-demand completion (Escape / ⌃Space) still works.
     /// Defaults to true so callers that don't care keep the original behaviour.
     var autocompleteWhileTyping: Bool = true
+    /// Editor font from Settings ▸ Editor. Applied to the text view and the
+    /// syntax-highlighting storage; changes take effect live.
+    var font: NSFont = EditorFontFamily.system.nsFont(size: CGFloat(EditorPreference.defaultFontSize))
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -41,12 +44,16 @@ struct SQLEditorView: NSViewRepresentable {
         textView.isSelectable = true
         textView.isRichText = false
         textView.allowsUndo = true
-        let jbm = NSFont(name: "JetBrainsMono-Regular", size: 13.5)
-            ?? NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular)
-        textView.font = jbm
+        textView.font = font
+        textStorage.updateFont(font)
         textView.textColor = Theme.inkNS
         textView.backgroundColor = Theme.bgNS
         textView.insertionPointColor = Theme.accentNS
+        textView.textContainerInset = NSSize(width: 6, height: 8)
+        // Native ⌘F find bar inside the editor (Edit ▸ Find routes here when
+        // the Query tab is active).
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -103,6 +110,11 @@ struct SQLEditorView: NSViewRepresentable {
         // independently of the metadata, and the metadata guard below returns
         // early when only the text (not the metadata) differs.
         context.coordinator.autocompleteWhileTyping = autocompleteWhileTyping
+
+        if textView.font != font {
+            textView.font = font
+            storage.updateFont(font)
+        }
 
         guard context.coordinator.metadata != completionMetadata else {
             // Still check text sync even if metadata hasn't changed

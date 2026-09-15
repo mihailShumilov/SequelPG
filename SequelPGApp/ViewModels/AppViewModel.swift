@@ -159,7 +159,6 @@ struct CascadeDeleteBuilder {
     var selectedTab: MainTab = .query
     var showInspector = true
     var showQueryHistory = false
-    var sidebarWidth: CGFloat = SidebarWidthStore.load()
     var isConnected = false
     var connectedProfileName: String?
     var errorMessage: String?
@@ -186,6 +185,10 @@ struct CascadeDeleteBuilder {
     var showFunctionLibrary = false
     var showExportSheet = false
     var showImportSheet = false
+
+    // Create-object sheets reachable from the Database menu and the sidebar.
+    var showCreateDatabaseSheet = false
+    var showCreateSchemaSheet = false
 
     /// Immutable snapshot of the live connection for handing to external tools
     /// (`pg_dump` / `psql`). The endpoint host/port is fetched separately via
@@ -529,7 +532,7 @@ struct CascadeDeleteBuilder {
         // snapshot — no DB calls needed.
         if let existing = tabs.first(where: { $0.dbObject == object }) {
             activateTab(existing.id)
-            adjustSubTabForObjectType(object)
+            adjustSubTabForObjectType(object, isFirstOpen: false)
             return
         }
         await openInNewTab(object: object)
@@ -556,6 +559,7 @@ struct CascadeDeleteBuilder {
         tabs.append(tab)
         activeTabId = tab.id
         trimOldestNonActiveTab()
+        let isFirstOpen = tabs.count == 1
 
         // Hydrate tableVM into the new tab's initial empty state. Restoring
         // an empty tab clears stale columns/contentResult from the previous
@@ -567,7 +571,7 @@ struct CascadeDeleteBuilder {
         if navigatorVM.selectedObject != object {
             navigatorVM.selectedObject = object
         }
-        adjustSubTabForObjectType(object)
+        adjustSubTabForObjectType(object, isFirstOpen: isFirstOpen)
 
         await loadObjectMetadata(object)
 
@@ -619,6 +623,13 @@ struct CascadeDeleteBuilder {
         let neighbor = tabs[newIdx]
         activeTabId = neighbor.id
         restoreFromTab(neighbor)
+    }
+
+    /// Closes every tab except `id`, which becomes (or stays) the active tab.
+    func closeOtherTabs(except id: UUID) {
+        guard tabs.contains(where: { $0.id == id }) else { return }
+        if activeTabId != id { activateTab(id) }
+        tabs.removeAll { $0.id != id }
     }
 
     /// Closes every tab and resets the main area. Called on disconnect and
@@ -691,9 +702,17 @@ struct CascadeDeleteBuilder {
         }
     }
 
-    private func adjustSubTabForObjectType(_ object: DBObject) {
-        // If no object-specific tab is active, switch to an appropriate tab.
-        if selectedTab == .query {
+    /// Keeps the main-area mode sensible for the object being opened.
+    ///
+    /// The mode is *sticky*: selecting another object in the sidebar keeps
+    /// whatever mode the user is in (Sequel Pro behaviour), so browsing tables
+    /// while writing a query doesn't yank the editor away. The one exception
+    /// is the very first object opened while the Query mode is active — there
+    /// is nothing else on screen yet, so the object is shown (Structure for
+    /// tables, Definition otherwise). Modes that can't apply to the object
+    /// (Content/Structure for a function, say) fall back to Definition.
+    private func adjustSubTabForObjectType(_ object: DBObject, isFirstOpen: Bool) {
+        if selectedTab == .query, isFirstOpen {
             switch object.type {
             case .table:
                 selectedTab = .structure
@@ -701,12 +720,23 @@ struct CascadeDeleteBuilder {
                 selectedTab = .definition
             }
         }
-        // The Content tab only works for relations. Selecting a type, function,
-        // or other non-relation while Content is active would otherwise issue
-        // SELECT * FROM <type> and fail with "cannot open relation".
-        if selectedTab == .content, !object.type.hasQueryableContent {
+        // The Content and Structure modes only make sense for relations.
+        // Selecting a type, function, or other non-relation while one of them
+        // is active would otherwise issue SELECT * FROM <type> and fail with
+        // "cannot open relation", or show an empty column list.
+        if selectedTab == .content || selectedTab == .structure, !object.type.hasQueryableContent {
             selectedTab = .definition
         }
+    }
+
+    /// Empties the editor and every result/plan/error tied to it.
+    func clearQuery() {
+        queryVM.queryText = ""
+        queryVM.result = nil
+        queryVM.plan = nil
+        queryVM.activeResultsTab = .results
+        queryVM.errorMessage = nil
+        queryVM.invalidateSortCache()
     }
 
     /// Loads columns, row count, and per-table extras for the active tab's

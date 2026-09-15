@@ -198,6 +198,18 @@ actor DatabaseClient: PostgresClientProtocol {
         maxRows: Int = 2000,
         timeout: TimeInterval = 10.0
     ) async throws -> QueryResult {
+        try await execute(sql, maxRows: maxRows, timeout: timeout, truncateCells: true)
+    }
+
+    /// Shared executor behind `runQuery` and `explainQuery`. `truncateCells`
+    /// applies the 10 000-character display cap to every text cell; EXPLAIN
+    /// output must be read whole or its JSON can't be parsed.
+    private func execute(
+        _ sql: String,
+        maxRows: Int,
+        timeout: TimeInterval,
+        truncateCells: Bool
+    ) async throws -> QueryResult {
         guard let client else {
             throw AppError.notConnected
         }
@@ -214,6 +226,7 @@ actor DatabaseClient: PostgresClientProtocol {
                     sql,
                     maxRows: maxRows,
                     timeout: timeout,
+                    truncateCells: truncateCells,
                     start: start,
                     connection: connection
                 )
@@ -254,6 +267,7 @@ actor DatabaseClient: PostgresClientProtocol {
         _ sql: String,
         maxRows: Int,
         timeout: TimeInterval,
+        truncateCells: Bool,
         start: CFAbsoluteTime,
         connection: PostgresConnection
     ) async throws -> QueryResult {
@@ -288,7 +302,9 @@ actor DatabaseClient: PostgresClientProtocol {
         do {
             let result = try await withThrowingTaskGroup(of: QueryResult.self) { group in
                 group.addTask {
-                    try await Self.collectRows(sql: sql, maxRows: maxRows, start: start, connection: connection)
+                    try await Self.collectRows(
+                        sql: sql, maxRows: maxRows, truncateCells: truncateCells, start: start, connection: connection
+                    )
                 }
 
                 if hasTimeout {
@@ -320,6 +336,7 @@ actor DatabaseClient: PostgresClientProtocol {
     private static func collectRows(
         sql: String,
         maxRows: Int,
+        truncateCells: Bool,
         start: CFAbsoluteTime,
         connection: PostgresConnection
     ) async throws -> QueryResult {
@@ -344,7 +361,7 @@ actor DatabaseClient: PostgresClientProtocol {
 
             var cellValues: [CellValue] = []
             for i in 0 ..< randomRow.count {
-                cellValues.append(Self.decodeCellValue(randomRow[i]))
+                cellValues.append(Self.decodeCellValue(randomRow[i], truncate: truncateCells))
             }
 
             rows.append(cellValues)
@@ -381,7 +398,9 @@ actor DatabaseClient: PostgresClientProtocol {
         let buffersFlag = buffers ? "ON" : "OFF"
         let wrapped = "EXPLAIN (FORMAT JSON, ANALYZE \(analyzeFlag), BUFFERS \(buffersFlag), VERBOSE OFF) \(sql)"
 
-        let result = try await runQuery(wrapped, maxRows: 1, timeout: timeout)
+        // Plans for partitioned tables or wide joins easily exceed the
+        // display cap applied by `runQuery`; a truncated document is not JSON.
+        let result = try await execute(wrapped, maxRows: 1, timeout: timeout, truncateCells: false)
         guard let first = result.rows.first?.first, case let .text(jsonString) = first else {
             throw AppError.queryFailed("EXPLAIN returned no JSON output")
         }
@@ -411,18 +430,18 @@ actor DatabaseClient: PostgresClientProtocol {
     /// When adding support for a new PostgreSQL type: add a case to
     /// `formatBinary(buffer:type:)` so the binary wire bytes get a proper
     /// textual rendering instead of leaking through as garbled UTF-8.
-    private static func decodeCellValue(_ cell: PostgresCell) -> CellValue {
+    private static func decodeCellValue(_ cell: PostgresCell, truncate shouldTruncate: Bool = true) -> CellValue {
         guard let bytes = cell.bytes else { return .null }
 
         if cell.format == .binary {
             var buf = bytes
             if let s = formatBinary(buffer: &buf, type: cell.dataType) {
-                return .text(truncate(s))
+                return .text(shouldTruncate ? truncate(s) : s)
             }
         }
 
         guard let v = try? cell.decode(String.self) else { return .text("<binary>") }
-        return .text(truncate(v))
+        return .text(shouldTruncate ? truncate(v) : v)
     }
 
     private static func truncate(_ s: String) -> String {

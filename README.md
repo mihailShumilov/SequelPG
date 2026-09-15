@@ -38,23 +38,23 @@ Or use **Cmd+U** in Xcode.
 - [x] Keychain-backed password storage with in-memory caching
 - [x] SSL mode toggle (Off / Prefer / Require / Verify-CA / Verify-Full)
 - [x] SSH tunnel support (key file or password auth)
-- [x] Hierarchical tree navigator (databases, schemas, 17 object categories)
+- [x] Hierarchical tree navigator (databases, schemas, 17 object categories) with a filter field
 - [x] PG version-adaptive object categories (e.g., Procedures for PG 11+)
 - [x] Multi-database browsing (expand any database to see its schemas)
-- [x] iTerm2-style tabs (Cmd+T) for multiple connections in one window
+- [x] Native window tabs (⌘T) and windows (⌘N) for multiple connections
 - [x] Structure tab with column, index, constraint, trigger, and partition sections
 - [x] Content tab with pagination (50 / 100 / 200 rows)
-- [x] Single-click inline cell editing with auto-save
-- [x] Insert and delete records (with cascade-delete prompt for FK violations)
-- [x] Schema editing (add/drop/rename columns, change types, toggle nullable)
+- [x] Double-click cell editing through a type-aware editor sheet, saved immediately
+- [x] Insert (form with per-column type/default hints) and delete records (with cascade-delete prompt for FK violations)
+- [x] Schema editing (add/drop/rename columns, change types, toggle nullable — double-click to edit)
 - [x] Index creation sheet
-- [x] SQL editor with syntax highlighting, autocompletion, and query formatter
+- [x] SQL editor with syntax highlighting, autocompletion, native find bar, query formatter, and a configurable font
 - [x] Query history log of every system- and user-issued query
 - [x] Query timeout (10s default, server-side `statement_timeout`)
 - [x] Query result row cap (2000 rows)
 - [x] Execution time display
 - [x] AppKit `DataGridView` results grid: type-aware cell rendering, vertical dividers, column sorting, multi-select
-- [x] Right inspector panel (object name, row count, column count)
+- [x] Native inspector panel (⌥⌘I): object facts and the selected row with type-aware editing
 - [x] Create database, schema, table, view, function, sequence, type, and domain from navigator
 - [x] Drop any database object from navigator context menu
 - [x] Object Definition tab (DDL/source viewer for views, functions, sequences, types, etc.)
@@ -62,7 +62,9 @@ Or use **Cmd+U** in Xcode.
 - [x] Content filter bar (Cmd+F) with column/operator/value filtering and SQL preview
 - [x] Type-aware field editor (JSON, array, boolean, long text) in Inspector
 - [x] Connection status indicators
-- [x] Disconnect menu item (Cmd+Shift+W)
+- [x] Database and Query menus with shortcuts (Refresh ⌘R, Disconnect ⇧⌘W, Run ⌘↩, Stop ⌘., Explain ⌥⌘E, Beautify ⇧⌘F)
+- [x] Structure / Content / Definition / Query / Diagram mode switcher in the toolbar (⌘1–⌘5)
+- [x] Light and Dark appearance with system colors and the user's accent color
 
 ## Architecture Overview
 
@@ -116,7 +118,6 @@ SwiftFormat is used for consistent formatting. See [CONTRIBUTING.md](CONTRIBUTIN
 - No user/role management.
 - No triggers/procedures editing UI (view-only via Definition tab).
 - No schema diff.
-- No multi-window support.
 
 ## Troubleshooting
 

@@ -23,8 +23,6 @@
 		AA1000000000000000000E /* TableViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000E; };
 		AA1000000000000000000F /* QueryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000F; };
 		AA10000000000000000010 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000010; };
-		AA10000000000000000011 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000011; };
-		AA10000000000000000012 /* ConnectionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000012; };
 		AA10000000000000000013 /* ConnectionFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000013; };
 		AA10000000000000000014 /* NavigatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000014; };
 		AA10000000000000000015 /* StructureTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000015; };
@@ -150,8 +148,6 @@
 		AB1000000000000000000E /* TableViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableViewModel.swift; sourceTree = "<group>"; };
 		AB1000000000000000000F /* QueryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryViewModel.swift; sourceTree = "<group>"; };
 		AB10000000000000000010 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		AB10000000000000000011 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
-		AB10000000000000000012 /* ConnectionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionListView.swift; sourceTree = "<group>"; };
 		AB10000000000000000013 /* ConnectionFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionFormView.swift; sourceTree = "<group>"; };
 		AB10000000000000000014 /* NavigatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigatorView.swift; sourceTree = "<group>"; };
 		AB10000000000000000015 /* StructureTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructureTabView.swift; sourceTree = "<group>"; };
@@ -355,7 +351,6 @@
 			isa = PBXGroup;
 			children = (
 				AB10000000000000000013 /* ConnectionFormView.swift */,
-				AB10000000000000000012 /* ConnectionListView.swift */,
 				AB10000000000000000016 /* ContentTabView.swift */,
 				AB10000000000000000010 /* ContentView.swift */,
 				AB10000000000000000075 /* ExportSheet.swift */,
@@ -378,7 +373,6 @@
 				AB10000000000000000E23 /* SQLCompletionPopup.swift */,
 				AB1000000000000000002F /* SQLEditorView.swift */,
 				AB1000000000000000005A /* SQLSyntaxView.swift */,
-				AB10000000000000000011 /* SidebarView.swift */,
 				AB10000000000000000029 /* StartPageView.swift */,
 				AB10000000000000000E25 /* ResultExportButton.swift */,
 				AB10000000000000000067 /* SettingsView.swift */,
@@ -579,8 +573,6 @@
 				AA1000000000000000000E /* TableViewModel.swift in Sources */,
 				AA1000000000000000000F /* QueryViewModel.swift in Sources */,
 				AA10000000000000000010 /* ContentView.swift in Sources */,
-				AA10000000000000000011 /* SidebarView.swift in Sources */,
-				AA10000000000000000012 /* ConnectionListView.swift in Sources */,
 				AA10000000000000000013 /* ConnectionFormView.swift in Sources */,
 				AA10000000000000000014 /* NavigatorView.swift in Sources */,
 				AA10000000000000000015 /* StructureTabView.swift in Sources */,
@@ -755,12 +747,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.3.5;
+				MARKETING_VERSION = 0.3.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -777,12 +769,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.3.5;
+				MARKETING_VERSION = 0.3.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -796,9 +788,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.5;
+				MARKETING_VERSION = 0.3.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -813,9 +805,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.5;
+				MARKETING_VERSION = 0.3.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

@@ -10,7 +10,9 @@ final class SQLTextStorage: NSTextStorage {
 
     private let backing = NSMutableAttributedString()
     private var isHighlighting = false
-    private let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    /// Font applied to the whole document. Set via `updateFont(_:)` so the
+    /// editor-font preference can change it live without rebuilding the view.
+    private(set) var documentFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
     // MARK: - NSTextStorage Required Overrides
 
@@ -33,6 +35,19 @@ final class SQLTextStorage: NSTextStorage {
         beginEditing()
         backing.setAttributes(attrs, range: range)
         edited(.editedAttributes, range: range, changeInLength: 0)
+        endEditing()
+    }
+
+    /// Swaps the document font and re-applies highlighting so the change is
+    /// visible immediately. A no-op when the font is unchanged.
+    func updateFont(_ newFont: NSFont) {
+        guard newFont != documentFont else { return }
+        documentFont = newFont
+        guard length > 0, !isHighlighting else { return }
+        isHighlighting = true
+        defer { isHighlighting = false }
+        beginEditing()
+        applyHighlighting()
         endEditing()
     }
 
@@ -66,7 +81,7 @@ final class SQLTextStorage: NSTextStorage {
         }
 
         // Set font on the full range (not set per-token)
-        addAttribute(.font, value: monoFont, range: fullRange)
+        addAttribute(.font, value: documentFont, range: fullRange)
 
         // Tokenize and apply colors per token
         let tokens = SQLFormatter.tokenize(string)

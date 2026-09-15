@@ -47,9 +47,9 @@ struct ImportSheet: View {
         HStack {
             Text("Import SQL File").font(.headline)
             Spacer()
-            Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
         }
-        .padding()
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Options
@@ -101,7 +101,7 @@ struct ImportSheet: View {
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.caption)
-                .foregroundStyle(Theme.amber)
+                .foregroundStyle(.orange)
                 .padding(.top, 4)
             }
         }
@@ -126,7 +126,7 @@ struct ImportSheet: View {
             if let error = vm.errorMessage {
                 Text(error)
                     .font(Theme.mono(size: 11))
-                    .foregroundStyle(Theme.rose)
+                    .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -148,12 +148,15 @@ struct ImportSheet: View {
             } else if showsProgress {
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             } else {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button("Import") { startImport() }
                     .buttonStyle(.borderedProminent)
                     .disabled(vm.toolMissing || vm.inputURL == nil || appVM.liveConnection == nil)
             }
         }
-        .padding()
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Actions

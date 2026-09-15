@@ -1925,6 +1925,85 @@ final class AppViewModelTests: AppViewModelTestCase {
         XCTAssertTrue(vm.tabs.isEmpty)
         XCTAssertNil(vm.activeTabId)
     }
+
+    // MARK: - Sticky main-area mode
+
+    func testSelectingAnotherObjectKeepsQueryModeAfterFirstOpen() async {
+        await makeConnectedVM()
+        vm.selectedTab = .query
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        XCTAssertEqual(vm.selectedTab, .structure, "First open shows the object")
+
+        vm.selectedTab = .query
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+
+        XCTAssertEqual(vm.selectedTab, .query, "Browsing the sidebar must not yank the user out of the editor")
+        XCTAssertEqual(vm.tabs.count, 2)
+    }
+
+    func testReactivatingOpenObjectKeepsQueryMode() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        vm.selectedTab = .query
+
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+
+        XCTAssertEqual(vm.selectedTab, .query)
+    }
+
+    func testStructureModeFallsBackToDefinitionForFunctions() async {
+        await makeConnectedVM()
+        vm.selectedTab = .structure
+
+        await vm.selectObject(DBObject(schema: "public", name: "fn_total", type: .function))
+
+        XCTAssertEqual(vm.selectedTab, .definition)
+    }
+
+    // MARK: - closeOtherTabs / clearQuery
+
+    func testCloseOtherTabsKeepsOnlyTheGivenTabActive() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+        let ordersId = vm.activeTabId!
+        await vm.selectObject(DBObject(schema: "public", name: "users", type: .table))
+        await vm.selectObject(DBObject(schema: "public", name: "posts", type: .table))
+        XCTAssertEqual(vm.tabs.count, 3)
+
+        vm.closeOtherTabs(except: ordersId)
+
+        XCTAssertEqual(vm.tabs.map(\.dbObject.name), ["orders"])
+        XCTAssertEqual(vm.activeTabId, ordersId)
+        XCTAssertEqual(vm.navigatorVM.selectedObject?.name, "orders")
+    }
+
+    func testCloseOtherTabsIgnoresUnknownId() async {
+        await makeConnectedVM()
+        await vm.selectObject(DBObject(schema: "public", name: "orders", type: .table))
+
+        vm.closeOtherTabs(except: UUID())
+
+        XCTAssertEqual(vm.tabs.count, 1)
+    }
+
+    func testClearQueryResetsEditorAndResults() async {
+        await makeConnectedVM()
+        vm.queryVM.queryText = "SELECT 1"
+        vm.queryVM.errorMessage = "boom"
+        vm.queryVM.activeResultsTab = .explain
+        await vm.executeQuery("SELECT * FROM users")
+        XCTAssertNotNil(vm.queryVM.result)
+
+        vm.clearQuery()
+
+        XCTAssertEqual(vm.queryVM.queryText, "")
+        XCTAssertNil(vm.queryVM.result)
+        XCTAssertNil(vm.queryVM.sortedResult)
+        XCTAssertNil(vm.queryVM.plan)
+        XCTAssertNil(vm.queryVM.errorMessage)
+        XCTAssertEqual(vm.queryVM.activeResultsTab, .results)
+    }
 }
 
 // MARK: - MockDatabaseClient setter helpers

@@ -27,118 +27,138 @@ struct RolesSheet: View {
         return roles.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
+    private var canGrant: Bool {
+        !grantTarget.trimmingCharacters(in: .whitespaces).isEmpty
+            && !grantRole.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Roles").font(.headline)
+            HStack(spacing: 10) {
+                Text("Roles & Privileges")
+                    .font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding()
-
-            HStack {
-                TextField("Search roles…", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                Button { Task { await reload() } } label: {
+                SearchField(text: $searchText, prompt: "Search roles", controlSize: .regular)
+                    .frame(width: 220)
+                Button {
+                    Task { await reload() }
+                } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help("Refresh list")
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            Divider()
 
             if isLoading {
-                ProgressView().padding()
-                Spacer()
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filtered.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             } else {
                 rolesList
-                Divider()
-                grantForm
             }
+
+            Divider()
+            grantForm
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .frame(width: 640, height: 560)
+        .frame(width: 680, height: 600)
         .task { await reload() }
     }
 
     private var rolesList: some View {
         List {
             ForEach(filtered) { role in
-                HStack(alignment: .top) {
+                HStack(alignment: .top, spacing: 10) {
                     Image(systemName: role.canLogin ? "person.fill" : "person.crop.circle")
                         .foregroundStyle(role.canLogin ? Color.accentColor : Color.secondary)
                         .frame(width: 20)
+                        .padding(.top, 2)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(role.name).font(.callout.weight(.medium))
-                            if role.isSuperuser { badge("SUPERUSER", Color.red) }
-                            if !role.canLogin { badge("NOLOGIN", Color.secondary) }
-                            if role.canCreateDB { badge("CREATEDB", Color.blue) }
-                            if role.canCreateRole { badge("CREATEROLE", Color.blue) }
-                            if role.isReplication { badge("REPLICATION", Color.purple) }
+                            Text(role.name)
+                                .font(.system(.body, design: .monospaced).weight(.medium))
+                            if role.isSuperuser { Tag("superuser", color: Theme.rose) }
+                            if !role.canLogin { Tag("nologin", color: .secondary) }
+                            if role.canCreateDB { Tag("createdb", color: Theme.blue) }
+                            if role.canCreateRole { Tag("createrole", color: Theme.blue) }
+                            if role.isReplication { Tag("replication", color: Theme.violet) }
                         }
                         if !role.memberOf.isEmpty {
-                            Text("Member of: \(role.memberOf.joined(separator: ", "))")
+                            Text("Member of \(role.memberOf.joined(separator: ", "))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         if let until = role.validUntil {
-                            Text("Valid until: \(until)")
+                            Text("Valid until \(until)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    Button("Grant") {
+                    Button("Grant…") {
                         grantRole = role.name
                     }
-                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .help("Use this role in the GRANT / REVOKE builder below")
                 }
                 .padding(.vertical, 3)
             }
         }
-        .listStyle(.plain)
+        .listStyle(.inset)
     }
 
     private var grantForm: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("GRANT / REVOKE").font(.subheadline).fontWeight(.medium)
+            Text("GRANT / REVOKE")
+                .font(.subheadline.weight(.semibold))
             HStack {
-                Picker("Privilege:", selection: $grantPrivilege) {
+                Picker("Privilege", selection: $grantPrivilege) {
                     ForEach(privileges, id: \.self) { Text($0).tag($0) }
                 }
-                .frame(width: 240)
-                TextField("ON target (e.g. SCHEMA public, TABLE public.users)", text: $grantTarget)
+                .labelsHidden()
+                .frame(width: 150)
+                Text("ON")
+                    .foregroundStyle(.secondary)
+                TextField("target", text: $grantTarget, prompt: Text("TABLE public.users"))
                     .textFieldStyle(.roundedBorder)
-                TextField("TO role", text: $grantRole)
+                    .font(.system(.body, design: .monospaced))
+                Text("TO")
+                    .foregroundStyle(.secondary)
+                TextField("role", text: $grantRole, prompt: Text("role"))
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 160)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 150)
             }
             HStack {
-                Button("GRANT") { Task { await runGrant(isRevoke: false) } }
+                Button("Grant") { Task { await runGrant(isRevoke: false) } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(grantTarget.trimmingCharacters(in: .whitespaces).isEmpty
-                              || grantRole.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("REVOKE") { Task { await runGrant(isRevoke: true) } }
-                    .disabled(grantTarget.trimmingCharacters(in: .whitespaces).isEmpty
-                              || grantRole.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(!canGrant)
+                Button("Revoke") { Task { await runGrant(isRevoke: true) } }
+                    .disabled(!canGrant)
                 Spacer()
                 if let grantResult {
-                    Text(grantResult).font(.caption).foregroundStyle(.secondary)
+                    Text(grantResult)
+                        .font(.caption)
+                        .foregroundStyle(grantResult.hasPrefix("Failed") ? Color.red : Color.secondary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
                 }
             }
         }
-        .padding()
-    }
-
-    @ViewBuilder
-    private func badge(_ text: String, _ color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 9, weight: .medium))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(.rect(cornerRadius: 3))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 
     private func runGrant(isRevoke: Bool) async {
@@ -154,7 +174,7 @@ struct RolesSheet: View {
         switch await appVM.performRowMutation(sql: sql) {
         case .success:
             grantResult = "\(action) executed."
-        case .foreignKeyViolation(let msg), .error(let msg):
+        case let .foreignKeyViolation(msg), let .error(msg):
             grantResult = "Failed: \(msg)"
         }
     }

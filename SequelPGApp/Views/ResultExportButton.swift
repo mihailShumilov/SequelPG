@@ -26,16 +26,9 @@ struct ResultExportButton: View {
                 Button("Export as \(format.label)…") { export(format) }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 10))
-                Text("Export")
-                    .font(Theme.mono(size: 11))
-            }
-            .foregroundStyle(Theme.ink3)
+            Label("Export", systemImage: "square.and.arrow.up")
         }
         .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
         .fixedSize()
         .disabled(isDisabled)
         .help("Export the rows currently shown to a CSV or JSON file")

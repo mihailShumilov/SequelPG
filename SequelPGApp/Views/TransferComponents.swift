@@ -18,8 +18,8 @@ struct TransferLogView: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(lines) { line in
                         Text(line.text)
-                            .font(Theme.mono(size: 10))
-                            .foregroundStyle(Theme.ink2)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
@@ -27,7 +27,7 @@ struct TransferLogView: View {
                 }
                 .padding(8)
             }
-            .background(Theme.panel)
+            .background(Theme.bg)
             .clipShape(.rect(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line, lineWidth: 1)
@@ -48,7 +48,7 @@ struct ConnectionSummaryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("\(profile.username)@\(profile.host):\(profile.port)/\(profile.database)")
-                .font(Theme.mono(size: 11))
+                .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -69,7 +69,7 @@ struct ToolMissingView: View {
         VStack(spacing: 12) {
             Image(systemName: "wrench.and.screwdriver")
                 .font(.largeTitle)
-                .foregroundStyle(Theme.ink3)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("\(toolName) not found")
                 .font(.headline)
@@ -101,10 +101,10 @@ struct TransferStatusHeader: View {
                 ProgressView().controlSize(.small)
                 Text(activeLabel).font(.callout.weight(.medium))
             } else if hasError {
-                icon("xmark.octagon.fill", Theme.rose)
+                icon("xmark.octagon.fill", .red)
                 Text("\(noun) failed").font(.callout.weight(.medium))
             } else if didCancel {
-                icon("stop.circle.fill", Theme.amber)
+                icon("stop.circle.fill", .orange)
                 Text("\(noun) cancelled").font(.callout.weight(.medium))
             } else if didFinish {
                 icon("checkmark.circle.fill", .green)

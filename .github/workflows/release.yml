@@ -18,6 +18,10 @@ jobs:
         uses: actions/checkout@v5
         with:
           persist-credentials: true
+          # Tags are needed to tell a pre-bumped version apart from one that
+          # still needs the automatic patch bump.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Configure git
         run: |
@@ -37,6 +41,18 @@ jobs:
             exit 1
           fi
           echo "Current version: $CURRENT_VERSION"
+
+          # A PR may already carry the version it wants to ship (e.g. a
+          # deliberate bump in project.pbxproj). If that version has no
+          # release tag yet, ship it as-is instead of bumping past it.
+          if ! git rev-parse -q --verify "refs/tags/v${CURRENT_VERSION}" >/dev/null; then
+            echo "Version ${CURRENT_VERSION} is not released yet — using it without bumping."
+            BUILD_NUM=$(grep -m1 'CURRENT_PROJECT_VERSION' "$PBXPROJ" | sed 's/.*= *\(.*\);/\1/' | tr -d ' ')
+            echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "build_number=$BUILD_NUM" >> "$GITHUB_OUTPUT"
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Bump patch: X.Y.Z -> X.Y.(Z+1)
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
@@ -61,8 +77,10 @@ jobs:
           # Export for later steps
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "build_number=$NEW_BUILD_NUM" >> "$GITHUB_OUTPUT"
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
 
       - name: Commit & push version bump
+        if: steps.version.outputs.bumped == 'true'
         run: |
           git add SequelPG.xcodeproj/project.pbxproj
           git commit -m "Bump version to ${{ steps.version.outputs.version }} [skip ci]"

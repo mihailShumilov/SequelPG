@@ -162,6 +162,16 @@ struct SchemaObjects: Sendable {
     // Selection
     var selectedObject: DBObject?
 
+    /// Live filter typed into the sidebar's search field. When non-empty,
+    /// category nodes list only objects whose name contains the text
+    /// (case-insensitive), categories without matches are hidden, and the
+    /// matching categories are shown expanded.
+    var filterText: String = ""
+
+    var isFiltering: Bool {
+        !filterText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     /// Databases currently being loaded (for showing loading indicators in the navigator).
     var loadingDatabases: Set<String> = []
 
@@ -182,6 +192,15 @@ struct SchemaObjects: Sendable {
 
     func objects(for db: String, schema: String, category: ObjectCategory) -> [DBObject] {
         objectsPerKey[schemaKey(db, schema)]?.objects(for: category) ?? []
+    }
+
+    /// Objects in a category after applying `filterText`. Identical to
+    /// `objects(for:schema:category:)` when no filter is active.
+    func filteredObjects(for db: String, schema: String, category: ObjectCategory) -> [DBObject] {
+        let all = objects(for: db, schema: schema, category: category)
+        let needle = filterText.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return all }
+        return all.filter { $0.name.localizedCaseInsensitiveContains(needle) }
     }
 
     /// All tables across all loaded schemas (for SQL completion).
@@ -266,6 +285,7 @@ struct SchemaObjects: Sendable {
         expandedSchemas.removeAll()
         expandedCategories.removeAll()
         selectedObject = nil
+        filterText = ""
     }
 
     /// Clears data for a specific database.

@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Pre-connection window content: saved connections in a sidebar, the
+/// selected connection's settings in the detail column. Edits are saved when
+/// switching connections or connecting; Test opens a throwaway connection.
 struct StartPageView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(ConnectionListViewModel.self) var connectionListVM
@@ -14,6 +17,8 @@ struct StartPageView: View {
     @State private var previousSelectedId: UUID?
     @State private var isTestingConnection = false
     @State private var testResult: TestConnectionResult?
+    @State private var isConnecting = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private enum TestConnectionResult: Equatable {
         case success
@@ -21,133 +26,129 @@ struct StartPageView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            brandingColumn
-            Rectangle().fill(Theme.line).frame(width: 1)
-            connectionListColumn
-            Rectangle().fill(Theme.line).frame(width: 1)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            connectionList
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
+        } detail: {
             detailColumn
         }
-        .background(Theme.bg)
-    }
-
-    // MARK: - Left Column: Branding
-
-    private var brandingColumn: some View {
-        @Bindable var connectionListVM = connectionListVM
-        return VStack(alignment: .leading, spacing: 14) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 56, height: 56)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("SequelPG")
-                    .appDisplay(24)
-                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                    Text("v\(version) · macOS 14+")
-                        .appMono(10.5, color: Theme.ink4)
-                        .tracking(0.6)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    createNewProfile()
+                } label: {
+                    Label("New Connection", systemImage: "plus")
+                }
+                .help("Add a new connection")
+            }
+        }
+        .onChange(of: appVM.isConnected) { _, connected in
+            if connected { isConnecting = false }
+        }
+        .onChange(of: appVM.errorMessage) { _, message in
+            if message != nil { isConnecting = false }
+        }
+        .alert("Delete Connection?", isPresented: .init(
+            get: { deleteTarget != nil },
+            set: { if !$0 { deleteTarget = nil } }
+        )) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                if let target = deleteTarget {
+                    connectionListVM.deleteProfile(target)
                 }
             }
+        } message: {
+            Text("\u{201C}\(deleteTarget?.name ?? "")\u{201D} and its saved password will be removed.")
+        }
+    }
 
-            Text("MIT · No telemetry\nFree, forever")
-                .appMono(10.5, color: Theme.ink4)
-                .lineSpacing(2)
+    // MARK: - Sidebar: Connection List
 
-            Spacer()
-
-            TextField("Filter…", text: $connectionListVM.filterText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.ink2)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Theme.bg)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Theme.line, lineWidth: 1)
+    private var connectionList: some View {
+        @Bindable var connectionListVM = connectionListVM
+        return VStack(spacing: 0) {
+            List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
+                Label {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(profile.name.isEmpty ? "Untitled" : profile.name)
+                            .lineLimit(1)
+                        Text(profileSummary(profile))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                } icon: {
+                    Image(systemName: profile.useSSHTunnel ? "lock.shield" : "server.rack")
+                }
+                .tag(profile.id)
+                .contentShape(Rectangle())
+                // Two separate tap gestures race each other and cause selection
+                // flicker before the double-tap resolves. Use a `simultaneousGesture`
+                // so the selection-on-single-tap behavior is a side effect of the
+                // List's native selection while double-tap triggers connect.
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        connectionListVM.selectedProfileId = profile.id
+                        loadFormFromProfile(profile)
+                        connectSelected()
+                    }
                 )
+                .contextMenu {
+                    Button("Connect") {
+                        connectionListVM.selectedProfileId = profile.id
+                        loadFormFromProfile(profile)
+                        connectSelected()
+                    }
+                    Button("Duplicate") { duplicateProfile(profile) }
+                    Divider()
+                    Button("Delete…", role: .destructive) {
+                        deleteTarget = profile
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .overlay {
+                if connectionListVM.profiles.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Connections", systemImage: "server.rack")
+                    } description: {
+                        Text("Click + to add your first PostgreSQL server.")
+                    }
+                } else if connectionListVM.filteredProfiles.isEmpty {
+                    ContentUnavailableView.search(text: connectionListVM.filterText)
+                }
+            }
 
-            Button {
-                createNewProfile()
-            } label: {
-                HStack(spacing: 8) {
+            Divider()
+
+            HStack(spacing: 6) {
+                SearchField(text: $connectionListVM.filterText, prompt: "Filter")
+                    .frame(maxWidth: .infinity)
+                Button {
+                    createNewProfile()
+                } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("New server")
-                        .font(.system(size: 12.5, weight: .semibold))
                 }
-                .foregroundStyle(Theme.onAccent)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .background(Theme.accent)
-                .clipShape(.rect(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(22)
-        .frame(width: 220)
-        .background(Theme.bg2)
-    }
-
-    // MARK: - Center Column: Connection List
-
-    private var connectionListColumn: some View {
-        @Bindable var connectionListVM = connectionListVM
-        return List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
-            HStack(spacing: 10) {
-                Image(systemName: profile.useSSHTunnel ? "lock.shield.fill" : "server.rack")
-                    .foregroundStyle(Theme.ink3)
-                    .font(.system(size: 12))
-                Text(profile.name)
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                Spacer()
-                Text(profile.useSSHTunnel ? "ssh" : "\(profile.port)")
-                    .font(Theme.mono(size: 10.5))
-                    .foregroundStyle(Theme.ink4)
-            }
-            .padding(.vertical, 4)
-            .tag(profile.id)
-            .contentShape(Rectangle())
-            // Two separate tap gestures race each other and cause selection
-            // flicker before the double-tap resolves. Use a `simultaneousGesture`
-            // so the selection-on-single-tap behavior is a side effect of the
-            // List's native selection while double-tap triggers connect.
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded {
-                    connectionListVM.selectedProfileId = profile.id
-                    loadFormFromProfile(profile)
-                    connectSelected()
+                .help("Add connection")
+                .accessibilityLabel("Add connection")
+                Button {
+                    if let profile = connectionListVM.selectedProfile {
+                        deleteTarget = profile
+                    }
+                } label: {
+                    Image(systemName: "minus")
                 }
-            )
-            .contextMenu {
-                Button("Connect") {
-                    connectionListVM.selectedProfileId = profile.id
-                    loadFormFromProfile(profile)
-                    connectSelected()
-                }
-                Divider()
-                Button("Delete", role: .destructive) {
-                    deleteTarget = profile
-                }
+                .disabled(connectionListVM.selectedProfile == nil)
+                .help("Delete the selected connection")
+                .accessibilityLabel("Delete connection")
             }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background(Theme.bg)
-        .frame(minWidth: 280)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack {
-                Text("i. — saved servers")
-                    .appSectionLabel()
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
-            .background(Theme.bg)
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(.bar)
         }
         .onChange(of: connectionListVM.selectedProfileId) { _, newId in
             // Auto-save previous profile before switching
@@ -168,211 +169,137 @@ struct StartPageView: View {
                 previousSelectedId = profile.id
             }
         }
-        .alert("Delete Connection?", isPresented: .init(
-            get: { deleteTarget != nil },
-            set: { if !$0 { deleteTarget = nil } }
-        )) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                if let target = deleteTarget {
-                    connectionListVM.deleteProfile(target)
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete \"\(deleteTarget?.name ?? "")\"?")
-        }
     }
 
-    // MARK: - Right Column: Detail Form
+    private func profileSummary(_ profile: ConnectionProfile) -> String {
+        if profile.useSSHTunnel {
+            return "\(profile.database) via \(profile.sshHost)"
+        }
+        return "\(profile.host):\(profile.port)/\(profile.database)"
+    }
 
+    // MARK: - Detail: Connection Form
+
+    @ViewBuilder
     private var detailColumn: some View {
-        Group {
-            if let selected = connectionListVM.selectedProfile {
-                VStack(spacing: 0) {
-                    // Editorial header above the form
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("ii. — connection")
-                                .appSectionLabel()
-                            Text(selected.name.isEmpty ? "Untitled" : selected.name)
-                                .appDisplay(26)
+        if connectionListVM.selectedProfile != nil {
+            VStack(spacing: 0) {
+                Form {
+                    Section {
+                        TextField("Name", text: $form.name)
+                        TextField("Host", text: $form.host, prompt: Text("localhost"))
+                        TextField("Port", text: $form.port, prompt: Text("5432"))
+                        TextField("Database", text: $form.database)
+                        TextField("Username", text: $form.username)
+                        HStack {
+                            if showPassword {
+                                TextField("Password", text: $form.password)
+                            } else {
+                                SecureField("Password", text: $form.password)
+                            }
+                            Button {
+                                showPassword.toggle()
+                            } label: {
+                                Image(systemName: showPassword ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(showPassword ? "Hide password" : "Show password")
                         }
-                        Spacer()
-                        if testResult == .success {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(Theme.accent)
-                                    .frame(width: 7, height: 7)
-                                    .overlay(Circle().stroke(Theme.accent.opacity(0.25), lineWidth: 3))
-                                Text("connected")
-                                    .appMono(11, color: Theme.ink3)
+                        Picker("SSL Mode", selection: $form.sslMode) {
+                            ForEach(SSLMode.allCases, id: \.self) { mode in
+                                Text(mode.displayName).tag(mode)
                             }
                         }
-                    }
-                    .padding(.horizontal, 22)
-                    .padding(.top, 22)
-                    .padding(.bottom, 4)
-
-                    Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
-                        .appMono(11, color: Theme.ink4)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .padding(.horizontal, 22)
-                        .padding(.bottom, 18)
-
-                    Form {
-                        Section {
-                            TextField("Name:", text: $form.name)
-                            HStack {
-                                TextField("Host:", text: $form.host)
-                                TextField("Port:", text: $form.port)
-                                    .frame(width: 70)
-                            }
-                            TextField("Database:", text: $form.database)
-                            TextField("Username:", text: $form.username)
-                            HStack {
-                                if showPassword {
-                                    TextField("Password:", text: $form.password)
-                                } else {
-                                    SecureField("Password:", text: $form.password)
-                                }
-                                Button {
-                                    showPassword.toggle()
-                                } label: {
-                                    Image(systemName: showPassword ? "eye.slash" : "eye")
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            Picker("SSL Mode:", selection: $form.sslMode) {
-                                ForEach(SSLMode.allCases, id: \.self) { mode in
-                                    Text(mode.displayName).tag(mode)
-                                }
-                            }
-                        }
-
-                        Section {
-                            SSHTunnelFormSection(
-                                useSSHTunnel: $form.useSSHTunnel,
-                                sshHost: $form.sshHost,
-                                sshPort: $form.sshPort,
-                                sshUser: $form.sshUser,
-                                sshAuthMethod: $form.sshAuthMethod,
-                                sshKeyPath: $form.sshKeyPath,
-                                sshPassword: $form.sshPassword,
-                                showSSHPassword: $showSSHPassword
-                            )
-                        } header: {
-                            Text("iii. — SSH tunnel")
-                                .appSectionLabel()
-                        }
-                    }
-                    .formStyle(.grouped)
-                    .scrollContentBackground(.hidden)
-
-                    if !validationErrors.isEmpty {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(validationErrors, id: \.self) { error in
-                                Text(error)
-                                    .foregroundStyle(.red)
-                                    .font(.caption)
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
+                    } header: {
+                        Text("PostgreSQL Server")
+                    } footer: {
+                        Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
                     }
 
-                    if let testResult {
-                        testResultBanner(testResult)
+                    Section("SSH Tunnel") {
+                        SSHTunnelFormSection(
+                            useSSHTunnel: $form.useSSHTunnel,
+                            sshHost: $form.sshHost,
+                            sshPort: $form.sshPort,
+                            sshUser: $form.sshUser,
+                            sshAuthMethod: $form.sshAuthMethod,
+                            sshKeyPath: $form.sshKeyPath,
+                            sshPassword: $form.sshPassword,
+                            showSSHPassword: $showSSHPassword
+                        )
                     }
-
-                    Rectangle().fill(Theme.line).frame(height: 1)
-
-                    HStack(spacing: 10) {
-                        Button {
-                            if let profile = connectionListVM.selectedProfile {
-                                deleteTarget = profile
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "trash").font(.system(size: 11))
-                                Text("Delete").font(Theme.mono(size: 11.5))
-                            }
-                            .foregroundStyle(Theme.ink3)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Theme.line, lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .help("Delete Connection")
-
-                        Spacer()
-
-                        Button {
-                            testSelected()
-                        } label: {
-                            Group {
-                                if isTestingConnection {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .frame(width: 32)
-                                } else {
-                                    Text("Test")
-                                        .font(Theme.mono(size: 12, weight: .medium))
-                                        .foregroundStyle(Theme.ink)
-                                }
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Theme.line2, lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isTestingConnection)
-                        .help("Test connection")
-
-                        Button {
-                            connectSelected()
-                        } label: {
-                            Text("Connect →")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Theme.onAccent)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 7)
-                                .background(Theme.accent)
-                                .clipShape(.rect(cornerRadius: 6))
-                        }
-                        .buttonStyle(.plain)
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .disabled(isTestingConnection)
-                    }
-                    .padding(18)
-                    .background(Theme.bg)
                 }
-                .background(Theme.bg)
-            } else {
-                VStack(spacing: 14) {
-                    Spacer()
-                    Text("ii. — connection")
-                        .appSectionLabel()
-                    Text("Pick a server.")
-                        .appDisplay(32)
-                    Text("Select an existing connection from the list, or use New server to add one.")
-                        .appBody()
-                        .foregroundStyle(Theme.ink3)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 320)
-                    Spacer()
+                .formStyle(.grouped)
+
+                if !validationErrors.isEmpty {
+                    InlineBanner(kind: .warning, message: validationErrors.joined(separator: "\n")) {
+                        validationErrors = []
+                    }
                 }
-                .frame(maxWidth: .infinity)
-                .background(Theme.bg)
+
+                if let testResult {
+                    switch testResult {
+                    case .success:
+                        InlineBanner(kind: .info, message: "Connection test succeeded.") { self.testResult = nil }
+                    case let .failure(message):
+                        InlineBanner(kind: .error, message: message) { self.testResult = nil }
+                    }
+                }
+
+                Divider()
+
+                HStack(spacing: 10) {
+                    Button {
+                        testSelected()
+                    } label: {
+                        if isTestingConnection {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 60)
+                        } else {
+                            Text("Test Connection")
+                                .frame(minWidth: 60)
+                        }
+                    }
+                    .disabled(isTestingConnection || isConnecting)
+                    .help("Open a throwaway connection to verify these settings")
+
+                    Spacer()
+
+                    Button {
+                        connectSelected()
+                    } label: {
+                        if isConnecting {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 70)
+                        } else {
+                            Text("Connect")
+                                .frame(minWidth: 70)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isTestingConnection || isConnecting)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.bar)
+            }
+        } else {
+            ContentUnavailableView {
+                Label("No Connection Selected", systemImage: "server.rack")
+            } description: {
+                Text("Choose a saved connection, or add a new one with the + button.")
+            } actions: {
+                Button("New Connection") { createNewProfile() }
             }
         }
-        .frame(minWidth: 340, idealWidth: 400)
     }
 
     // MARK: - Actions
@@ -384,13 +311,41 @@ struct StartPageView: View {
         }
 
         let profile = ConnectionProfile(
-            name: "New Server",
+            name: "New Connection",
             host: "localhost",
             port: 5432,
             database: "postgres",
             username: "postgres"
         )
         connectionListVM.addProfile(profile, password: nil)
+    }
+
+    private func duplicateProfile(_ source: ConnectionProfile) {
+        if let prevId = connectionListVM.selectedProfileId {
+            saveFormToProfile(id: prevId)
+        }
+        var copy = source
+        copy.name = "\(source.name) copy"
+        let password = connectionListVM.loadPasswordForProfile(source)
+        let sshPassword = connectionListVM.loadSSHPasswordForProfile(source)
+        connectionListVM.addProfile(
+            ConnectionProfile(
+                name: copy.name,
+                host: copy.host,
+                port: copy.port,
+                database: copy.database,
+                username: copy.username,
+                sslMode: copy.sslMode,
+                useSSHTunnel: copy.useSSHTunnel,
+                sshHost: copy.sshHost,
+                sshPort: copy.sshPort,
+                sshUser: copy.sshUser,
+                sshAuthMethod: copy.sshAuthMethod,
+                sshKeyPath: copy.sshKeyPath
+            ),
+            password: password.isEmpty ? nil : password,
+            sshPassword: copy.useSSHTunnel && !sshPassword.isEmpty ? sshPassword : nil
+        )
     }
 
     private func loadFormFromProfile(_ profile: ConnectionProfile) {
@@ -407,34 +362,6 @@ struct StartPageView: View {
         guard let existing = connectionListVM.profiles.first(where: { $0.id == id }) else { return }
         let updated = form.buildProfile(id: id, fallbackPort: existing.port)
         connectionListVM.updateProfile(updated, password: form.password, sshPassword: form.effectiveSSHPassword)
-    }
-
-    @ViewBuilder
-    private func testResultBanner(_ result: TestConnectionResult) -> some View {
-        switch result {
-        case .success:
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                Text("Connection successful")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-        case .failure(let message):
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.red)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-        }
     }
 
     private func testSelected() {
@@ -479,11 +406,14 @@ struct StartPageView: View {
         // Save before connecting
         connectionListVM.updateProfile(profile, password: form.password, sshPassword: form.effectiveSSHPassword)
         validationErrors = []
+        testResult = nil
 
-        // Connect in the current tab
+        // Connect in the current window
         let password: String? = form.password.isEmpty ? nil : form.password
+        isConnecting = true
         Task {
             await appVM.connect(profile: profile, password: password, sshPassword: form.effectiveSSHPassword)
+            isConnecting = false
         }
     }
 }

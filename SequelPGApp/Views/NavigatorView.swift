@@ -1,11 +1,12 @@
 import SwiftUI
 
+/// Sidebar: the database → schema → category → object tree, with a filter
+/// field and creation menu in a bottom bar (Xcode-style). Selection drives
+/// the main area; context menus expose create / run / maintenance / drop.
 struct NavigatorView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(NavigatorViewModel.self) var navigatorVM
 
-    @State private var showCreateDatabase = false
-    @State private var showCreateSchema = false
     @State private var showCreateTable = false
     @State private var createTableSchema = ""
 
@@ -23,20 +24,19 @@ struct NavigatorView: View {
     @State private var showMaintenanceConfirmation = false
 
     var body: some View {
+        @Bindable var appVM = appVM
         VStack(spacing: 0) {
-            header
-            Rectangle().fill(Theme.line).frame(height: 1)
             treeList
+            Divider()
+            bottomBar
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.bg2)
-        .sheet(isPresented: $showCreateDatabase) {
-            NameInputSheet(title: "Create Database", fieldLabel: "Database name:") { name in
+        .sheet(isPresented: $appVM.showCreateDatabaseSheet) {
+            NameInputSheet(title: "New Database", fieldLabel: "Name") { name in
                 Task { await appVM.createDatabase(name: name) }
             }
         }
-        .sheet(isPresented: $showCreateSchema) {
-            NameInputSheet(title: "Create Schema", fieldLabel: "Schema name:") { name in
+        .sheet(isPresented: $appVM.showCreateSchemaSheet) {
+            NameInputSheet(title: "New Schema", fieldLabel: "Name") { name in
                 Task { await appVM.createSchema(name: name) }
             }
         }
@@ -80,10 +80,7 @@ struct NavigatorView: View {
                 Task { await appVM.executeCreateSQL(sql, inSchema: createSchema) }
             }
         }
-        .sheet(item: Binding(
-            get: { appVM.functionRunTarget },
-            set: { appVM.functionRunTarget = $0 }
-        )) { target in
+        .sheet(item: $appVM.functionRunTarget) { target in
             FunctionRunSheet(object: target)
                 .environment(appVM)
         }
@@ -95,11 +92,13 @@ struct NavigatorView: View {
                 Task { await appVM.dropObject(target) }
             }
         } message: { obj in
-            Text("\"\(obj.name)\" will be permanently dropped.")
+            Text("\u{201C}\(obj.name)\u{201D} will be permanently dropped.")
         }
-        .alert("Run \(maintenanceTarget?.op.rawValue ?? "Operation")?",
-               isPresented: $showMaintenanceConfirmation,
-               presenting: maintenanceTarget) { target in
+        .alert(
+            "Run \(maintenanceTarget?.op.rawValue ?? "Operation")?",
+            isPresented: $showMaintenanceConfirmation,
+            presenting: maintenanceTarget
+        ) { target in
             Button("Cancel", role: .cancel) { maintenanceTarget = nil }
             Button(target.op.rawValue, role: .destructive) {
                 let captured = target
@@ -116,8 +115,8 @@ struct NavigatorView: View {
     /// procedures are CALLed.
     private func runMenuLabel(for object: DBObject) -> String {
         switch object.type {
-        case .procedure: return "Call \(object.name)..."
-        default: return "Run \(object.name)..."
+        case .procedure: return "Call \(object.name)…"
+        default: return "Run \(object.name)…"
         }
     }
 
@@ -142,58 +141,59 @@ struct NavigatorView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Bottom bar
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text("Navigator")
-                .appSectionLabel()
-            Spacer()
-
-            Picker("", selection: Binding(
-                get: { navigatorVM.complexity },
-                set: { navigatorVM.complexity = $0 }
-            )) {
-                ForEach(SidebarComplexity.allCases, id: \.self) { level in
-                    Text(level.rawValue).tag(level)
-                }
-            }
-            .pickerStyle(.menu)
-            .frame(width: 90)
-            .controlSize(.small)
-            .help("Toggle sidebar complexity")
+    private var bottomBar: some View {
+        @Bindable var navigatorVM = navigatorVM
+        return HStack(spacing: 6) {
+            SearchField(text: $navigatorVM.filterText, prompt: "Filter")
+                .frame(maxWidth: .infinity)
 
             Menu {
-                Button("New Database...") { showCreateDatabase = true }
-                Button("New Schema...") { showCreateSchema = true }
+                Button("New Database…") { appVM.showCreateDatabaseSheet = true }
+                Button("New Schema…") { appVM.showCreateSchemaSheet = true }
+                if let schema = navigatorVM.selectedObject?.schema {
+                    Divider()
+                    Button("New Table in \(schema)…") {
+                        createTableSchema = schema
+                        showCreateTable = true
+                    }
+                }
             } label: {
                 Image(systemName: "plus")
-                    .foregroundStyle(Theme.ink3)
             }
             .menuStyle(.borderlessButton)
-            .frame(width: 20)
-            .accessibilityLabel("Create database or schema")
-            .help("Create database or schema")
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Create a database, schema, or table")
+            .accessibilityLabel("Create")
 
-            Button {
-                Task { await appVM.refreshNavigator() }
+            Menu {
+                Toggle("Show Advanced Objects", isOn: Binding(
+                    get: { navigatorVM.complexity == .advanced },
+                    set: { navigatorVM.complexity = $0 ? .advanced : .simple }
+                ))
+                Divider()
+                Button("Refresh") { Task { await appVM.refreshNavigator() } }
             } label: {
-                Image(systemName: "arrow.clockwise")
-                    .foregroundStyle(Theme.ink3)
+                Image(systemName: "ellipsis.circle")
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Refresh navigator")
-            .help("Refresh")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Sidebar options")
+            .accessibilityLabel("Sidebar options")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .controlSize(.small)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.bar)
     }
 
     // MARK: - Tree List
 
     private var treeList: some View {
-        @Bindable var navigatorVM = navigatorVM
-        return List(selection: Binding<DBObject?>(
+        List(selection: Binding<DBObject?>(
             get: { navigatorVM.selectedObject },
             set: { obj in
                 guard let obj, obj != navigatorVM.selectedObject else { return }
@@ -221,21 +221,17 @@ struct NavigatorView: View {
         let isConnected = db == navigatorVM.connectedDatabase
         let schemas = navigatorVM.schemas(for: db)
         let binding = dbExpansionBinding(db)
-        DisclosureGroup(
-            isExpanded: binding
-        ) {
+        DisclosureGroup(isExpanded: binding) {
             if schemas.isEmpty, !navigatorVM.hasSchemasLoaded(for: db) {
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Loading...")
-                        .foregroundStyle(Theme.ink3)
-                        .font(.caption)
+                    Text("Loading…")
+                        .foregroundStyle(.secondary)
                 }
             } else if schemas.isEmpty {
                 Text("No schemas")
-                    .foregroundStyle(Theme.ink3)
-                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
                 ForEach(schemas, id: \.self) { schema in
                     schemaNode(db: db, schema: schema)
@@ -244,20 +240,25 @@ struct NavigatorView: View {
         } label: {
             Label {
                 Text(db)
-                    .font(Theme.mono(size: 12.5, weight: isConnected ? .medium : .regular))
-                    .foregroundStyle(isConnected ? Theme.accent : Theme.ink)
+                    .fontWeight(isConnected ? .semibold : .regular)
             } icon: {
                 Image(systemName: "cylinder.split.1x2")
-                    .foregroundStyle(isConnected ? Theme.accent : Theme.ink3)
+                    .foregroundStyle(isConnected ? Color.accentColor : Color.secondary)
             }
             .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                if !isConnected { Task { await appVM.switchDatabase(db) } }
+            }
             .onTapGesture { binding.wrappedValue.toggle() }
+            .help(isConnected ? "Connected database" : "Double-click to switch to this database")
             .contextMenu {
                 if !isConnected {
                     Button("Switch to \(db)") {
                         Task { await appVM.switchDatabase(db) }
                     }
                 }
+                Button("New Schema…") { appVM.showCreateSchemaSheet = true }
+                    .disabled(!isConnected)
             }
         }
     }
@@ -279,9 +280,7 @@ struct NavigatorView: View {
     @ViewBuilder
     private func schemaNode(db: String, schema: String) -> some View {
         let binding = schemaExpansionBinding(db, schema)
-        DisclosureGroup(
-            isExpanded: binding
-        ) {
+        DisclosureGroup(isExpanded: binding) {
             // Core categories always visible
             ForEach(navigatorVM.coreCategories, id: \.self) { category in
                 categoryNode(db: db, schema: schema, category: category)
@@ -292,43 +291,49 @@ struct NavigatorView: View {
                 ForEach(navigatorVM.advancedCategories, id: \.self) { category in
                     categoryNode(db: db, schema: schema, category: category)
                 }
-            } else if !navigatorVM.advancedCategories.isEmpty {
+            } else if !navigatorVM.advancedCategories.isEmpty, !navigatorVM.isFiltering {
                 DisclosureGroup("More") {
                     ForEach(navigatorVM.advancedCategories, id: \.self) { category in
                         categoryNode(db: db, schema: schema, category: category)
                     }
                 }
+            } else if navigatorVM.isFiltering {
+                ForEach(navigatorVM.advancedCategories, id: \.self) { category in
+                    categoryNode(db: db, schema: schema, category: category)
+                }
             }
         } label: {
-            Label {
-                Text(schema)
-                    .font(Theme.mono(size: 12.5, weight: .regular))
-            } icon: {
-                Image(systemName: "folder")
-                    .foregroundStyle(Theme.ink3)
-            }
+            Label(schema, systemImage: "folder")
                 .contentShape(Rectangle())
                 .onTapGesture { binding.wrappedValue.toggle() }
                 .contextMenu {
-                    Button("New Table...") {
+                    Button("New Table…") {
                         createTableSchema = schema
                         showCreateTable = true
                     }
-                    Button("New View...") {
+                    Button("New View…") {
                         createSchema = schema
                         showCreateView = true
                     }
-                    Button("New Function...") {
+                    Button("New Materialized View…") {
+                        createSchema = schema
+                        showCreateMatView = true
+                    }
+                    Button("New Function…") {
                         createSchema = schema
                         showCreateFunction = true
                     }
-                    Button("New Sequence...") {
+                    Button("New Sequence…") {
                         createSchema = schema
                         showCreateSequence = true
                     }
-                    Button("New Type...") {
+                    Button("New Type…") {
                         createSchema = schema
                         showCreateType = true
+                    }
+                    Button("New Domain…") {
+                        createSchema = schema
+                        showCreateDomain = true
                     }
                 }
         }
@@ -346,75 +351,75 @@ struct NavigatorView: View {
         )
     }
 
-    // MARK: - Category Node — always shown
+    // MARK: - Category Node
 
     @ViewBuilder
     private func categoryNode(db: String, schema: String, category: ObjectCategory) -> some View {
-        let objects = navigatorVM.objects(for: db, schema: schema, category: category)
-        let binding = categoryExpansionBinding(db, schema, category)
+        let isFiltering = navigatorVM.isFiltering
+        let objects = navigatorVM.filteredObjects(for: db, schema: schema, category: category)
+        // While filtering, categories without a match disappear and the rest
+        // are forced open so matches are visible without clicking around.
+        if isFiltering, objects.isEmpty {
+            EmptyView()
+        } else {
+            let binding = isFiltering
+                ? Binding<Bool>(get: { true }, set: { _ in })
+                : categoryExpansionBinding(db, schema, category)
 
-        DisclosureGroup(
-            isExpanded: binding
-        ) {
-            ForEach(objects) { obj in
+            DisclosureGroup(isExpanded: binding) {
+                ForEach(objects) { obj in
+                    Label(obj.name, systemImage: category.icon)
+                        .tag(obj)
+                        .contextMenu {
+                            if appVM.isRunnable(obj) {
+                                Button(runMenuLabel(for: obj)) {
+                                    appVM.functionRunTarget = obj
+                                }
+                                Divider()
+                            }
+                            let ops = maintenanceOps(for: obj)
+                            if !ops.isEmpty {
+                                ForEach(ops) { op in
+                                    Button(op.rawValue) {
+                                        triggerMaintenance(op, on: obj)
+                                    }
+                                }
+                                Divider()
+                            }
+                            Button("Drop \(obj.name)…", role: .destructive) {
+                                dropTarget = obj
+                                showDropConfirmation = true
+                            }
+                        }
+                }
+                if !isFiltering, let action = createAction(for: category, schema: schema) {
+                    Button {
+                        action()
+                    } label: {
+                        Label("New \(createLabel(for: category))…", systemImage: "plus")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } label: {
                 Label {
-                    Text(obj.name)
-                        .font(Theme.mono(size: 12, weight: .regular))
-                        .foregroundStyle(Theme.ink)
+                    HStack {
+                        Text(category.rawValue)
+                        Spacer(minLength: 4)
+                        Text("\(objects.count)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(
+                        "\(category.rawValue), \(objects.count) \(objects.count == 1 ? "object" : "objects")"
+                    )
                 } icon: {
                     Image(systemName: category.icon)
-                        .foregroundStyle(Theme.ink3)
                 }
-                    .tag(obj)
-                    .contextMenu {
-                        if appVM.isRunnable(obj) {
-                            Button(runMenuLabel(for: obj)) {
-                                appVM.functionRunTarget = obj
-                            }
-                            Divider()
-                        }
-                        let ops = maintenanceOps(for: obj)
-                        if !ops.isEmpty {
-                            ForEach(ops) { op in
-                                Button(op.rawValue) {
-                                    triggerMaintenance(op, on: obj)
-                                }
-                            }
-                            Divider()
-                        }
-                        Button("Drop \(obj.name)...", role: .destructive) {
-                            dropTarget = obj
-                            showDropConfirmation = true
-                        }
-                    }
+                .contentShape(Rectangle())
+                .onTapGesture { binding.wrappedValue.toggle() }
             }
-            if let action = createAction(for: category, schema: schema) {
-                Button {
-                    action()
-                } label: {
-                    Label("New \(createLabel(for: category))...", systemImage: "plus")
-                        .foregroundStyle(Theme.ink3)
-                }
-                .buttonStyle(.plain)
-            }
-        } label: {
-            Label {
-                HStack {
-                    Text(category.rawValue)
-                        .foregroundStyle(Theme.ink2)
-                    Spacer(minLength: 4)
-                    Text("\(objects.count)")
-                        .font(Theme.mono(size: 10.5, weight: .regular))
-                        .foregroundStyle(Theme.ink4)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(category.rawValue), \(objects.count) \(objects.count == 1 ? "object" : "objects")")
-            } icon: {
-                Image(systemName: category.icon)
-                    .foregroundStyle(Theme.ink3)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { binding.wrappedValue.toggle() }
         }
     }
 
@@ -485,7 +490,6 @@ struct NavigatorView: View {
             }
         }
     }
-
 }
 
 // MARK: - Column definition for new table
@@ -499,7 +503,7 @@ struct NewColumnDef: Identifiable {
     var defaultValue: String
 }
 
-// MARK: - Reusable Name Input Sheet (used for Create Database / Create Schema)
+// MARK: - Reusable Name Input Sheet (Create Database / Create Schema)
 
 struct NameInputSheet: View {
     let title: String
@@ -508,32 +512,37 @@ struct NameInputSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
 
+    private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
+
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(title)
                 .font(.headline)
-                .padding()
-            Form {
-                TextField(fieldLabel, text: $name)
-            }
-            .padding()
+            TextField(fieldLabel, text: $name, prompt: Text("identifier"))
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .onSubmit {
+                    guard !trimmed.isEmpty else { return }
+                    onCreate(trimmed)
+                    dismiss()
+                }
             HStack {
+                Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
                 Button("Create") {
-                    onCreate(name.trimmingCharacters(in: .whitespaces))
+                    onCreate(trimmed)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                .buttonStyle(.borderedProminent)
+                .disabled(trimmed.isEmpty)
             }
-            .padding()
         }
-        .frame(width: 340)
+        .padding(20)
+        .frame(width: 380)
     }
 }
-
 
 // MARK: - Create Table Sheet
 
@@ -547,99 +556,119 @@ struct CreateTableSheet: View {
         NewColumnDef(name: "id", dataType: "bigserial", isNullable: false, isPrimaryKey: true, defaultValue: ""),
     ]
 
-    private static let commonTypes = [
-        "text", "varchar(255)", "integer", "bigint", "smallint",
-        "boolean", "numeric", "numeric(10,2)", "real", "double precision",
-        "date", "timestamp", "timestamptz", "uuid", "jsonb", "json",
-        "bytea", "serial", "bigserial",
-    ]
+    private var canCreate: Bool {
+        !tableName.trimmingCharacters(in: .whitespaces).isEmpty
+            && columns.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Create Table in \"\(schema)\"")
+            Text("New Table in \u{201C}\(schema)\u{201D}")
                 .font(.headline)
-                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 8)
 
-            Form {
-                TextField("Table name:", text: $tableName)
+            HStack(spacing: 8) {
+                Text("Name")
+                TextField("table_name", text: $tableName)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 14)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Columns")
-                        .font(.subheadline.weight(.medium))
+                        .font(.headline)
                     Spacer()
                     Button {
-                        columns.append(NewColumnDef(name: "", dataType: "text", isNullable: true, isPrimaryKey: false, defaultValue: ""))
+                        columns.append(NewColumnDef(
+                            name: "", dataType: "text", isNullable: true, isPrimaryKey: false, defaultValue: ""
+                        ))
                     } label: {
-                        Image(systemName: "plus")
+                        Label("Add Column", systemImage: "plus")
                     }
-                    .buttonStyle(.borderless)
+                    .controlSize(.small)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 20)
+
+                HStack(spacing: 8) {
+                    Text("Name").frame(minWidth: 110, alignment: .leading)
+                    Text("Type").frame(width: 150, alignment: .leading)
+                    Text("PK").frame(width: 32)
+                    Text("Null").frame(width: 40)
+                    Text("Default").frame(minWidth: 90, maxWidth: .infinity, alignment: .leading)
+                    Color.clear.frame(width: 22)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 20)
 
                 ScrollView {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 6) {
                         ForEach($columns) { $col in
                             columnRow(col: $col)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
                 }
-                .frame(minHeight: 120, maxHeight: 300)
+                .frame(minHeight: 140, maxHeight: 320)
             }
-            .padding(.vertical, 8)
+            .padding(.bottom, 8)
 
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let validColumns = columns.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
-                    onCreate(tableName.trimmingCharacters(in: .whitespaces), validColumns)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(tableName.trimmingCharacters(in: .whitespaces).isEmpty || columns.allSatisfy { $0.name.trimmingCharacters(in: .whitespaces).isEmpty })
+            Divider()
+
+            SheetButtonBar(confirmTitle: "Create", confirmDisabled: !canCreate) {
+                dismiss()
+            } onConfirm: {
+                let validColumns = columns.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+                onCreate(tableName.trimmingCharacters(in: .whitespaces), validColumns)
+                dismiss()
             }
-            .padding()
         }
-        .frame(width: 520)
-        .frame(minHeight: 400)
+        .frame(width: 620)
     }
 
     private func columnRow(col: Binding<NewColumnDef>) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             TextField("name", text: col.name)
-                .frame(minWidth: 80)
+                .font(.system(.body, design: .monospaced))
+                .frame(minWidth: 110)
 
-            Picker("", selection: col.dataType) {
-                ForEach(Self.commonTypes, id: \.self) { type in
-                    Text(type).tag(type)
-                }
-            }
-            .frame(width: 140)
+            SuggestingTextField(label: "type", text: col.dataType, suggestions: PGTypeSuggestions.column)
+                .frame(width: 150)
 
-            Toggle("PK", isOn: col.isPrimaryKey)
+            Toggle("", isOn: col.isPrimaryKey)
                 .toggleStyle(.checkbox)
+                .labelsHidden()
+                .frame(width: 32)
+                .help("Primary key")
 
-            Toggle("Null", isOn: col.isNullable)
+            Toggle("", isOn: col.isNullable)
                 .toggleStyle(.checkbox)
+                .labelsHidden()
+                .frame(width: 40)
                 .disabled(col.isPrimaryKey.wrappedValue)
+                .help("Allows NULL")
 
-            TextField("default", text: col.defaultValue)
-                .frame(minWidth: 60, maxWidth: 100)
+            TextField("expression", text: col.defaultValue)
+                .frame(minWidth: 90, maxWidth: .infinity)
                 .font(.system(.body, design: .monospaced))
 
             Button {
                 columns.removeAll { $0.id == col.id }
             } label: {
-                Image(systemName: "trash")
-                    .foregroundStyle(.red)
+                Image(systemName: "minus.circle")
             }
             .buttonStyle(.borderless)
             .disabled(columns.count <= 1)
+            .frame(width: 22)
+            .help("Remove column")
         }
+        .textFieldStyle(.roundedBorder)
     }
 }

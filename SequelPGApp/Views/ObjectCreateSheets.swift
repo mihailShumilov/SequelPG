@@ -1,5 +1,57 @@
 import SwiftUI
 
+/// Shared frame for the create-object sheets: headline, grouped form, and the
+/// standard Cancel / Create button row.
+private struct CreateSheetFrame<Content: View>: View {
+    let title: String
+    let width: CGFloat
+    let height: CGFloat
+    let canCreate: Bool
+    let onCancel: () -> Void
+    let onCreate: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(title)
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+
+            Form {
+                content()
+            }
+            .formStyle(.grouped)
+
+            Divider()
+
+            SheetButtonBar(confirmTitle: "Create", confirmDisabled: !canCreate, onCancel: onCancel, onConfirm: onCreate)
+        }
+        .frame(width: width, height: height)
+    }
+}
+
+/// Multi-line SQL body field used by the view / function / generic sheets.
+private struct SQLBodyField: View {
+    let label: String
+    @Binding var text: String
+    var minHeight: CGFloat = 140
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+            TextEditor(text: $text)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: minHeight)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .background(Theme.bg, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line, lineWidth: 1))
+        }
+    }
+}
+
 // MARK: - Create View Sheet
 
 struct CreateViewSheet: View {
@@ -9,39 +61,28 @@ struct CreateViewSheet: View {
     @State private var name = ""
     @State private var sqlDefinition = "SELECT "
 
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && !sqlDefinition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !schema.isEmpty
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Create View in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("View name:", text: $name)
-                VStack(alignment: .leading) {
-                    Text("SQL Definition:")
-                    TextEditor(text: $sqlDefinition)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 120)
-                }
+        CreateSheetFrame(
+            title: "New View in \u{201C}\(schema)\u{201D}",
+            width: 520, height: 400, canCreate: canCreate,
+            onCancel: { dismiss() },
+            onCreate: {
+                let trimmedName = name.trimmingCharacters(in: .whitespaces)
+                let sql = "CREATE OR REPLACE VIEW \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(sqlDefinition)"
+                onCreate(sql)
+                dismiss()
             }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimmedName.isEmpty, !schema.isEmpty else { return }
-                    let sql = "CREATE OR REPLACE VIEW \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(sqlDefinition)"
-                    onCreate(sql)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || sqlDefinition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || schema.isEmpty)
-            }
-            .padding()
+        ) {
+            TextField("Name", text: $name)
+                .font(.system(.body, design: .monospaced))
+            SQLBodyField(label: "Definition", text: $sqlDefinition)
         }
-        .frame(width: 480)
     }
 }
 
@@ -54,39 +95,28 @@ struct CreateMaterializedViewSheet: View {
     @State private var name = ""
     @State private var sqlDefinition = "SELECT "
 
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && !sqlDefinition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !schema.isEmpty
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Create Materialized View in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Name:", text: $name)
-                VStack(alignment: .leading) {
-                    Text("SQL Definition:")
-                    TextEditor(text: $sqlDefinition)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 120)
-                }
+        CreateSheetFrame(
+            title: "New Materialized View in \u{201C}\(schema)\u{201D}",
+            width: 520, height: 400, canCreate: canCreate,
+            onCancel: { dismiss() },
+            onCreate: {
+                let trimmedName = name.trimmingCharacters(in: .whitespaces)
+                let sql = "CREATE MATERIALIZED VIEW \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(sqlDefinition)"
+                onCreate(sql)
+                dismiss()
             }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimmedName.isEmpty, !schema.isEmpty else { return }
-                    let sql = "CREATE MATERIALIZED VIEW \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(sqlDefinition)"
-                    onCreate(sql)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || sqlDefinition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || schema.isEmpty)
-            }
-            .padding()
+        ) {
+            TextField("Name", text: $name)
+                .font(.system(.body, design: .monospaced))
+            SQLBodyField(label: "Definition", text: $sqlDefinition)
         }
-        .frame(width: 480)
     }
 }
 
@@ -106,7 +136,7 @@ struct CreateFunctionSheet: View {
     @State private var showUntrustedWarning = false
     @State private var pendingUntrustedCreate: (() -> Void)?
 
-    private let returnTypes = ["void", "text", "integer", "boolean", "trigger", "record", "setof record", "table"]
+    private let returnTypes = ["void", "text", "integer", "bigint", "boolean", "trigger", "record", "setof record", "table"]
     private let languages = ["sql", "plpgsql", "plpython3u"]
     private let volatilities = ["VOLATILE", "STABLE", "IMMUTABLE"]
 
@@ -117,67 +147,44 @@ struct CreateFunctionSheet: View {
         language.hasSuffix("u")
     }
 
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !schema.isEmpty
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Create Function in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Function name:", text: $name)
-                TextField("Parameters (e.g. p1 integer, p2 text):", text: $parameters)
+        CreateSheetFrame(
+            title: "New Function in \u{201C}\(schema)\u{201D}",
+            width: 560, height: 560, canCreate: canCreate,
+            onCancel: { dismiss() },
+            onCreate: { create() }
+        ) {
+            Section {
+                TextField("Name", text: $name)
                     .font(.system(.body, design: .monospaced))
-                Picker("Returns:", selection: $returnType) {
-                    ForEach(returnTypes, id: \.self) { Text($0).tag($0) }
+                TextField("Parameters", text: $parameters, prompt: Text("p1 integer, p2 text"))
+                    .font(.system(.body, design: .monospaced))
+                LabeledContent("Returns") {
+                    SuggestingTextField(label: "type", text: $returnType, suggestions: returnTypes)
                 }
-                Picker("Language:", selection: $language) {
+                Picker("Language", selection: $language) {
                     ForEach(languages, id: \.self) { Text($0).tag($0) }
                 }
-                if languageIsUntrusted {
-                    Label("\(language) is an untrusted language — functions run with superuser OS-level access. Only use for trusted code.",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-                Picker("Volatility:", selection: $volatility) {
+                Picker("Volatility", selection: $volatility) {
                     ForEach(volatilities, id: \.self) { Text($0).tag($0) }
                 }
-                VStack(alignment: .leading) {
-                    Text("Body:")
-                    TextEditor(text: $functionBody)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 140)
+            } footer: {
+                if languageIsUntrusted {
+                    Label(
+                        "\(language) is an untrusted language — functions run with superuser OS-level access.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(.orange)
                 }
             }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimmedName.isEmpty, !schema.isEmpty else { return }
-                    let params = parameters.trimmingCharacters(in: .whitespaces)
-                    guard isValidFunctionParams(params) else { return }
-                    let sql = "CREATE OR REPLACE FUNCTION \(quoteIdent(schema)).\(quoteIdent(trimmedName))(\(params)) RETURNS \(returnType) LANGUAGE \(language) \(volatility) AS $$\n\(functionBody)\n$$"
-                    let commit = {
-                        onCreate(sql)
-                        dismiss()
-                    }
-                    if languageIsUntrusted {
-                        pendingUntrustedCreate = commit
-                        showUntrustedWarning = true
-                    } else {
-                        commit()
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || schema.isEmpty)
+            Section {
+                SQLBodyField(label: "Body", text: $functionBody, minHeight: 150)
             }
-            .padding()
         }
-        .frame(width: 520)
-        .frame(minHeight: 500)
         .alert("Create untrusted function?", isPresented: $showUntrustedWarning, presenting: pendingUntrustedCreate) { confirm in
             Button("Cancel", role: .cancel) { pendingUntrustedCreate = nil }
             Button("Create", role: .destructive) {
@@ -186,6 +193,25 @@ struct CreateFunctionSheet: View {
             }
         } message: { _ in
             Text("\(language) functions execute with full operating-system access as the PostgreSQL superuser. Only proceed if you trust the code and authored it yourself.")
+        }
+    }
+
+    private func create() {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty, !schema.isEmpty else { return }
+        let params = parameters.trimmingCharacters(in: .whitespaces)
+        guard isValidFunctionParams(params) else { return }
+        let returns = returnType.trimmingCharacters(in: .whitespaces)
+        let sql = "CREATE OR REPLACE FUNCTION \(quoteIdent(schema)).\(quoteIdent(trimmedName))(\(params)) RETURNS \(returns) LANGUAGE \(language) \(volatility) AS $$\n\(functionBody)\n$$"
+        let commit = {
+            onCreate(sql)
+            dismiss()
+        }
+        if languageIsUntrusted {
+            pendingUntrustedCreate = commit
+            showUntrustedWarning = true
+        } else {
+            commit()
         }
     }
 }
@@ -205,45 +231,37 @@ struct CreateSequenceSheet: View {
     @State private var cache = "1"
     @State private var cycle = false
 
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !schema.isEmpty
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Create Sequence in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Sequence name:", text: $name)
-                TextField("Increment:", text: $increment)
-                TextField("Min value:", text: $minValue)
-                TextField("Max value:", text: $maxValue)
-                TextField("Start value:", text: $startValue)
-                TextField("Cache:", text: $cache)
-                Toggle("Cycle", isOn: $cycle)
+        CreateSheetFrame(
+            title: "New Sequence in \u{201C}\(schema)\u{201D}",
+            width: 440, height: 400, canCreate: canCreate,
+            onCancel: { dismiss() },
+            onCreate: {
+                let trimmedName = name.trimmingCharacters(in: .whitespaces)
+                var sql = "CREATE SEQUENCE \(quoteIdent(schema)).\(quoteIdent(trimmedName))"
+                if let inc = Int(increment.trimmingCharacters(in: .whitespaces)) { sql += " INCREMENT \(inc)" }
+                if let min = Int(minValue.trimmingCharacters(in: .whitespaces)) { sql += " MINVALUE \(min)" }
+                if let max = Int(maxValue.trimmingCharacters(in: .whitespaces)) { sql += " MAXVALUE \(max)" }
+                if let start = Int(startValue.trimmingCharacters(in: .whitespaces)) { sql += " START \(start)" }
+                if let c = Int(cache.trimmingCharacters(in: .whitespaces)) { sql += " CACHE \(c)" }
+                if cycle { sql += " CYCLE" }
+                onCreate(sql)
+                dismiss()
             }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimmedName.isEmpty, !schema.isEmpty else { return }
-                    var sql = "CREATE SEQUENCE \(quoteIdent(schema)).\(quoteIdent(trimmedName))"
-                    if let inc = Int(increment.trimmingCharacters(in: .whitespaces)) { sql += " INCREMENT \(inc)" }
-                    if let min = Int(minValue.trimmingCharacters(in: .whitespaces)) { sql += " MINVALUE \(min)" }
-                    if let max = Int(maxValue.trimmingCharacters(in: .whitespaces)) { sql += " MAXVALUE \(max)" }
-                    if let start = Int(startValue.trimmingCharacters(in: .whitespaces)) { sql += " START \(start)" }
-                    if let c = Int(cache.trimmingCharacters(in: .whitespaces)) { sql += " CACHE \(c)" }
-                    if cycle { sql += " CYCLE" }
-                    onCreate(sql)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || schema.isEmpty)
-            }
-            .padding()
+        ) {
+            TextField("Name", text: $name)
+                .font(.system(.body, design: .monospaced))
+            TextField("Increment", text: $increment)
+            TextField("Minimum", text: $minValue, prompt: Text("default"))
+            TextField("Maximum", text: $maxValue, prompt: Text("default"))
+            TextField("Start", text: $startValue, prompt: Text("default"))
+            TextField("Cache", text: $cache)
+            Toggle("Cycle when exhausted", isOn: $cycle)
         }
-        .frame(width: 420)
     }
 }
 
@@ -259,151 +277,120 @@ struct CreateTypeSheet: View {
         case composite = "Composite"
     }
 
-    @State private var name = ""
-    @State private var mode: TypeMode = .enum
-    @State private var enumLabels: [String] = [""]
-    @State private var compositeFields: [(name: String, type: String)] = [("", "text")]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text("Create Type in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Type name:", text: $name)
-                Picker("Mode:", selection: $mode) {
-                    ForEach(TypeMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-            }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-
-            if mode == .enum {
-                enumEditor
-            } else {
-                compositeEditor
-            }
-
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimmedName.isEmpty, !schema.isEmpty else { return }
-                    let sql: String
-                    if mode == .enum {
-                        let labels = enumLabels
-                            .map { $0.trimmingCharacters(in: .whitespaces) }
-                            .filter { !$0.isEmpty }
-                            .map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
-                            .joined(separator: ", ")
-                        sql = "CREATE TYPE \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS ENUM (\(labels))"
-                    } else {
-                        let validFields = compositeFields
-                            .filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
-                        for field in validFields {
-                            guard isValidTypeName(field.type.trimmingCharacters(in: .whitespaces)) else { return }
-                        }
-                        let fields = validFields
-                            .map { "\(quoteIdent($0.name.trimmingCharacters(in: .whitespaces))) \($0.type.trimmingCharacters(in: .whitespaces))" }
-                            .joined(separator: ", ")
-                        sql = "CREATE TYPE \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS (\(fields))"
-                    }
-                    onCreate(sql)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || schema.isEmpty)
-            }
-            .padding()
-        }
-        .frame(width: 480)
+    private struct CompositeField: Identifiable {
+        let id = UUID()
+        var name: String
+        var type: String
     }
 
-    private var enumEditor: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Enum Labels")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Button {
-                    enumLabels.append("")
-                } label: {
-                    Image(systemName: "plus")
+    private struct EnumLabel: Identifiable {
+        let id = UUID()
+        var value: String
+    }
+
+    @State private var name = ""
+    @State private var mode: TypeMode = .enum
+    @State private var enumLabels: [EnumLabel] = [EnumLabel(value: "")]
+    @State private var compositeFields: [CompositeField] = [CompositeField(name: "", type: "text")]
+
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !schema.isEmpty
+    }
+
+    var body: some View {
+        CreateSheetFrame(
+            title: "New Type in \u{201C}\(schema)\u{201D}",
+            width: 500, height: 460, canCreate: canCreate,
+            onCancel: { dismiss() },
+            onCreate: { create() }
+        ) {
+            Section {
+                TextField("Name", text: $name)
+                    .font(.system(.body, design: .monospaced))
+                Picker("Kind", selection: $mode) {
+                    ForEach(TypeMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                .buttonStyle(.borderless)
+                .pickerStyle(.segmented)
             }
-            .padding(.horizontal)
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(enumLabels.indices, id: \.self) { idx in
+
+            if mode == .enum {
+                Section {
+                    ForEach($enumLabels) { $label in
                         HStack {
-                            TextField("label", text: Binding(
-                                get: { enumLabels[idx] },
-                                set: { enumLabels[idx] = $0 }
-                            ))
+                            TextField("label", text: $label.value)
+                                .font(.system(.body, design: .monospaced))
                             Button {
-                                enumLabels.remove(at: idx)
+                                enumLabels.removeAll { $0.id == label.id }
                             } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
+                                Image(systemName: "minus.circle")
                             }
                             .buttonStyle(.borderless)
                             .disabled(enumLabels.count <= 1)
                         }
                     }
+                    Button {
+                        enumLabels.append(EnumLabel(value: ""))
+                    } label: {
+                        Label("Add Label", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                } header: {
+                    Text("Labels (in order)")
                 }
-                .padding(.horizontal)
-            }
-            .frame(minHeight: 80, maxHeight: 200)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var compositeEditor: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Fields")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Button {
-                    compositeFields.append(("", "text"))
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .buttonStyle(.borderless)
-            }
-            .padding(.horizontal)
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(compositeFields.indices, id: \.self) { idx in
+            } else {
+                Section {
+                    ForEach($compositeFields) { $field in
                         HStack {
-                            TextField("name", text: Binding(
-                                get: { compositeFields[idx].name },
-                                set: { compositeFields[idx].name = $0 }
-                            ))
-                            TextField("type", text: Binding(
-                                get: { compositeFields[idx].type },
-                                set: { compositeFields[idx].type = $0 }
-                            ))
-                            .font(.system(.body, design: .monospaced))
+                            TextField("name", text: $field.name)
+                                .font(.system(.body, design: .monospaced))
+                            SuggestingTextField(label: "type", text: $field.type, suggestions: PGTypeSuggestions.column)
+                                .frame(width: 170)
                             Button {
-                                compositeFields.remove(at: idx)
+                                compositeFields.removeAll { $0.id == field.id }
                             } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
+                                Image(systemName: "minus.circle")
                             }
                             .buttonStyle(.borderless)
                             .disabled(compositeFields.count <= 1)
                         }
                     }
+                    Button {
+                        compositeFields.append(CompositeField(name: "", type: "text"))
+                    } label: {
+                        Label("Add Field", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                } header: {
+                    Text("Fields")
                 }
-                .padding(.horizontal)
             }
-            .frame(minHeight: 80, maxHeight: 200)
         }
-        .padding(.vertical, 4)
+    }
+
+    private func create() {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty, !schema.isEmpty else { return }
+        let sql: String
+        if mode == .enum {
+            let labels = enumLabels
+                .map { $0.value.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
+                .joined(separator: ", ")
+            sql = "CREATE TYPE \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS ENUM (\(labels))"
+        } else {
+            let validFields = compositeFields
+                .filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+            for field in validFields {
+                guard isValidTypeName(field.type.trimmingCharacters(in: .whitespaces)) else { return }
+            }
+            let fields = validFields
+                .map { "\(quoteIdent($0.name.trimmingCharacters(in: .whitespaces))) \($0.type.trimmingCharacters(in: .whitespaces))" }
+                .joined(separator: ", ")
+            sql = "CREATE TYPE \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS (\(fields))"
+        }
+        onCreate(sql)
+        dismiss()
     }
 }
 
@@ -420,58 +407,47 @@ struct CreateDomainSheet: View {
     @State private var defaultValue = ""
     @State private var checkExpression = ""
 
-    private let commonBaseTypes = [
-        "text", "varchar(255)", "integer", "bigint", "smallint",
-        "boolean", "numeric", "numeric(10,2)", "real", "double precision",
-        "date", "timestamp", "timestamptz", "uuid", "jsonb",
-    ]
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && !baseType.trimmingCharacters(in: .whitespaces).isEmpty
+            && !schema.isEmpty
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Create Domain in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Domain name:", text: $name)
-                Picker("Base type:", selection: $baseType) {
-                    ForEach(commonBaseTypes, id: \.self) { Text($0).tag($0) }
+        CreateSheetFrame(
+            title: "New Domain in \u{201C}\(schema)\u{201D}",
+            width: 480, height: 360, canCreate: canCreate,
+            onCancel: { dismiss() },
+            onCreate: {
+                let trimmedName = name.trimmingCharacters(in: .whitespaces)
+                guard !trimmedName.isEmpty, !schema.isEmpty else { return }
+                var sql = "CREATE DOMAIN \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(baseType.trimmingCharacters(in: .whitespaces))"
+                let trimmedDefault = defaultValue.trimmingCharacters(in: .whitespaces)
+                if !trimmedDefault.isEmpty {
+                    guard isValidSQLExpression(trimmedDefault) else { return }
+                    sql += " DEFAULT \(trimmedDefault)"
                 }
-                Toggle("Nullable", isOn: $nullable)
-                TextField("Default value:", text: $defaultValue)
-                    .font(.system(.body, design: .monospaced))
-                TextField("CHECK expression:", text: $checkExpression)
-                    .font(.system(.body, design: .monospaced))
-            }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimmedName.isEmpty, !schema.isEmpty else { return }
-                    var sql = "CREATE DOMAIN \(quoteIdent(schema)).\(quoteIdent(trimmedName)) AS \(baseType)"
-                    let trimmedDefault = defaultValue.trimmingCharacters(in: .whitespaces)
-                    if !trimmedDefault.isEmpty {
-                        guard isValidSQLExpression(trimmedDefault) else { return }
-                        sql += " DEFAULT \(trimmedDefault)"
-                    }
-                    if !nullable { sql += " NOT NULL" }
-                    let trimmedCheck = checkExpression.trimmingCharacters(in: .whitespaces)
-                    if !trimmedCheck.isEmpty {
-                        guard isValidSQLExpression(trimmedCheck) else { return }
-                        sql += " CHECK (\(trimmedCheck))"
-                    }
-                    onCreate(sql)
-                    dismiss()
+                if !nullable { sql += " NOT NULL" }
+                let trimmedCheck = checkExpression.trimmingCharacters(in: .whitespaces)
+                if !trimmedCheck.isEmpty {
+                    guard isValidSQLExpression(trimmedCheck) else { return }
+                    sql += " CHECK (\(trimmedCheck))"
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || schema.isEmpty)
+                onCreate(sql)
+                dismiss()
             }
-            .padding()
+        ) {
+            TextField("Name", text: $name)
+                .font(.system(.body, design: .monospaced))
+            LabeledContent("Base type") {
+                SuggestingTextField(label: "type", text: $baseType, suggestions: PGTypeSuggestions.column)
+            }
+            Toggle("Allows NULL", isOn: $nullable)
+            TextField("Default", text: $defaultValue, prompt: Text("expression"))
+                .font(.system(.body, design: .monospaced))
+            TextField("Check", text: $checkExpression, prompt: Text("VALUE > 0"))
+                .font(.system(.body, design: .monospaced))
         }
-        .frame(width: 460)
     }
 }
 
@@ -483,39 +459,28 @@ struct GenericCreateSheet: View {
     let onCreate: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
-    @State private var name = ""
     @State private var sqlBody = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Create \(title) in \"\(schema)\"")
-                .font(.headline)
-                .padding()
-            Form {
-                TextField("Name (for reference):", text: $name)
-                VStack(alignment: .leading) {
-                    Text("Full CREATE statement:")
-                    TextEditor(text: $sqlBody)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 140)
-                }
+        CreateSheetFrame(
+            title: "New \(singular(title)) in \u{201C}\(schema)\u{201D}",
+            width: 520, height: 380,
+            canCreate: !sqlBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            onCancel: { dismiss() },
+            onCreate: {
+                onCreate(sqlBody)
+                dismiss()
             }
-            .formStyle(.grouped)
-            .padding(.horizontal)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    onCreate(sqlBody)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(sqlBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        ) {
+            Section {
+                SQLBodyField(label: "CREATE statement", text: $sqlBody, minHeight: 180)
+            } footer: {
+                Text("The statement runs as written; the schema is not added automatically.")
             }
-            .padding()
         }
-        .frame(width: 480)
-        .frame(minHeight: 350)
+    }
+
+    private func singular(_ category: String) -> String {
+        category.hasSuffix("s") ? String(category.dropLast()) : category
     }
 }

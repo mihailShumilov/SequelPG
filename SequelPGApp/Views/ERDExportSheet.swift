@@ -42,7 +42,7 @@ struct ERDExportSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Export Diagram")
-                .appDisplay(20)
+                .font(.headline)
 
             Picker("Format", selection: $format) {
                 ForEach(Format.allCases) { Text($0.rawValue).tag($0) }
@@ -51,12 +51,12 @@ struct ERDExportSheet: View {
             .labelsHidden()
 
             Text(format.detail)
-                .appMono(11, color: Theme.ink3)
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             if format == .png {
                 HStack(spacing: 10) {
                     Text("Scale")
-                        .appMono(12, color: Theme.ink2)
                     Picker("Scale", selection: $pngScale) {
                         Text("1×").tag(1.0)
                         Text("2×").tag(2.0)
@@ -69,11 +69,13 @@ struct ERDExportSheet: View {
             }
 
             Text("\(tableCount) \(tableCount == 1 ? "table" : "tables") · \(erdVM.selectedSchema ?? "schema")")
-                .appMono(11, color: Theme.ink4)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if let errorMessage {
                 Text(errorMessage)
-                    .appMono(11, color: Theme.rose)
+                    .font(.callout)
+                    .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -83,12 +85,12 @@ struct ERDExportSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Export…") { export() }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(tableCount == 0)
             }
         }
         .padding(24)
         .frame(width: 420)
-        .background(Theme.bg)
     }
 
     private func export() {
