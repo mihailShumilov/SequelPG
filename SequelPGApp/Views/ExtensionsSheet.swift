@@ -27,41 +27,50 @@ struct ExtensionsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Extensions").font(.headline)
+            HStack(spacing: 10) {
+                Text("Extensions")
+                    .font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding()
-
-            HStack {
-                TextField("Search extensions…", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                Button { Task { await reload() } } label: {
+                SearchField(text: $searchText, prompt: "Search extensions", controlSize: .regular)
+                    .frame(width: 220)
+                Button {
+                    Task { await reload() }
+                } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help("Refresh list")
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
 
             Divider()
 
             if isLoading {
-                ProgressView().padding()
-                Spacer()
-            } else if rows.isEmpty {
-                Text("No extensions found.")
-                    .foregroundStyle(.secondary)
+                ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if rows.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             } else {
                 List(rows) { ext in
                     row(ext)
                 }
-                .listStyle(.plain)
+                .listStyle(.inset)
             }
+
+            Divider()
+
+            HStack {
+                Text("\(installed.count) installed · \(available.count) available")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .frame(width: 560, height: 480)
+        .frame(width: 600, height: 500)
         .task { await reload() }
         .alert("Drop Extension?", isPresented: .init(
             get: { dropTarget != nil },
@@ -78,34 +87,33 @@ struct ExtensionsSheet: View {
                 }
             }
         } message: {
-            Text("Extension \"\(dropTarget?.name ?? "")\" will be dropped. Dependent objects will be removed via CASCADE.")
+            Text("Extension \u{201C}\(dropTarget?.name ?? "")\u{201D} will be dropped. Dependent objects will be removed via CASCADE.")
         }
     }
 
     @ViewBuilder
     private func row(_ ext: ExtensionInfo) -> some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: ext.isInstalled ? "checkmark.circle.fill" : "circle.dashed")
                 .foregroundStyle(ext.isInstalled ? Color.green : Color.secondary)
-                .font(.body)
                 .frame(width: 20)
+                .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(ext.name).font(.callout.weight(.medium))
-                    if let schema = ext.schema, ext.isInstalled {
-                        Text("schema: \(schema)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(ext.name)
+                        .font(.system(.body, design: .monospaced).weight(.medium))
                     if let installed = ext.installedVersion {
                         Text("v\(installed)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else if let available = ext.defaultVersion {
-                        Text("available v\(available)")
+                        Text("v\(available) available")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                    if let schema = ext.schema, ext.isInstalled {
+                        Tag(schema, color: .secondary)
                     }
                 }
                 if let comment = ext.comment, !comment.isEmpty {
@@ -119,9 +127,8 @@ struct ExtensionsSheet: View {
             Spacer()
 
             if ext.isInstalled {
-                Button("Drop") { dropTarget = ext }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.red)
+                Button("Drop…") { dropTarget = ext }
+                    .controlSize(.small)
             } else {
                 Button("Install") {
                     Task {

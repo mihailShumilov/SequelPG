@@ -21,7 +21,7 @@ struct QueryPlanView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     summaryHeader(overview)
-                    DottedRule()
+                    Divider()
                         .padding(.horizontal, 22)
                         .padding(.vertical, 10)
                     nodeRow(plan.root, depth: 0, isLastChild: true, ancestorEdges: [])
@@ -63,12 +63,13 @@ struct QueryPlanView: View {
     @ViewBuilder
     private func summaryHeader(_ overview: PlanNarrator.Overview) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(plan.didAnalyze ? "i. — what actually happened" : "i. — what would happen")
+            Text(plan.didAnalyze ? "What actually happened" : "What would happen")
                 .appSectionLabel()
             Text(overview.headline)
-                .appDisplay(26)
+                .appDisplay(20)
             Text(overview.timing)
-                .appMono(11.5, color: Theme.ink3)
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .padding(.top, 2)
         }
         .padding(.horizontal, 22)
@@ -98,8 +99,7 @@ struct QueryPlanView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         nodeKindPill(node.kind)
                         Text(narration.title)
-                            .font(Theme.display(size: 18))
-                            .foregroundStyle(Theme.ink)
+                            .font(.headline)
                         Spacer(minLength: 0)
                         if !node.children.isEmpty {
                             Button {
@@ -315,7 +315,7 @@ struct QueryPlanView: View {
     @ViewBuilder
     private func triggerSection() -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("ii. — triggers")
+            Text("Triggers")
                 .appSectionLabel()
                 .padding(.top, 14)
             ForEach(plan.triggers) { trigger in
@@ -345,15 +345,15 @@ struct QueryPlanView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("step detail")
+                    Text("Step detail")
                         .appSectionLabel()
                     Text(narration.title)
-                        .appDisplay(22)
+                        .appDisplay(16)
                     Text(node.nodeType)
                         .appMono(11, color: Theme.ink4)
                 }
 
-                DottedRule()
+                Divider()
 
                 Text(narration.summary)
                     .font(.system(size: 13))
@@ -368,12 +368,12 @@ struct QueryPlanView: View {
                     }
                 }
 
-                DottedRule()
+                Divider()
 
                 detailGroup("By the numbers", rows: numericDetails(for: node))
 
                 if !node.details.isEmpty {
-                    DottedRule()
+                    Divider()
                     detailGroup("PostgreSQL details", rows: node.details.map { ($0.key, $0.value) })
                 }
             }
@@ -465,30 +465,11 @@ struct QueryPlanView: View {
 
 /// Empty-state shown in the EXPLAIN tab before the user has run an Explain.
 struct QueryPlanEmptyView: View {
-    let isConnected: Bool
-
     var body: some View {
-        VStack(spacing: 14) {
-            Text("vi. — no plan yet")
-                .appSectionLabel()
-            Text("How would Postgres run this?")
-                .appDisplay(28)
-            Text("Click Explain to preview the plan without running the query,\nor Analyze to run it and report what actually happened.")
-                .appBody()
-                .foregroundStyle(Theme.ink3)
-                .multilineTextAlignment(.center)
-            HStack(spacing: 8) {
-                AppKbd(key: "Explain")
-                Text("free — does not execute the query")
-                    .appMono(11, color: Theme.ink3)
-            }
-            HStack(spacing: 8) {
-                AppKbd(key: "Analyze")
-                Text("actually runs the query and times each step")
-                    .appMono(11, color: Theme.ink3)
-            }
+        ContentUnavailableView {
+            Label("No Plan Yet", systemImage: "list.bullet.indent")
+        } description: {
+            Text("Explain (⌥⌘E) previews how PostgreSQL would run the query without executing it. Analyze (⌥⇧⌘E) runs it and times every step.")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.bg)
     }
 }

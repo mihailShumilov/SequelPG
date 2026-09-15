@@ -1,6 +1,9 @@
 import AppKit
 import SwiftUI
 
+/// SQL editor on top, results below. The toolbar holds the run/explain actions
+/// (also in the Query menu with their shortcuts); the results pane switches
+/// between the data grid, the message transcript, and the EXPLAIN visualizer.
 struct QueryTabView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(QueryViewModel.self) var queryVM
@@ -9,14 +12,12 @@ struct QueryTabView: View {
     @Environment(EditorPreference.self) var editorPreference
 
     var body: some View {
-        @Bindable var queryVM = queryVM
-        @Bindable var tableVM = tableVM
         VSplitView {
             editorArea
-                .frame(minHeight: 100)
+                .frame(minHeight: 120)
 
             resultsArea
-                .frame(minHeight: 100)
+                .frame(minHeight: 120)
         }
         .alert(
             "Delete Row?",
@@ -51,8 +52,15 @@ struct QueryTabView: View {
                 Task { await appVM.executeCascadeDelete() }
             }
         } message: {
-            Text(appVM.cascadeDeleteContext?.errorMessage ?? "This row is referenced by other tables. Delete all referencing rows too?")
+            Text(appVM.cascadeDeleteContext?.errorMessage
+                ?? "This row is referenced by other tables. Delete all referencing rows too?")
         }
+    }
+
+    // MARK: - Editor
+
+    private var queryIsEmpty: Bool {
+        queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var editorArea: some View {
@@ -60,104 +68,73 @@ struct QueryTabView: View {
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
                 if queryVM.isExecuting {
-                    // Swaps in for Run while a query is in flight. ⌘. is the
-                    // macOS-standard cancel chord.
-                    QueryActionButton(
-                        title: "Stop", systemImage: "stop.fill", isPrimary: true,
-                        disabled: false
-                    ) {
+                    Button {
                         appVM.cancelRunningQuery()
+                    } label: {
+                        Label("Stop", systemImage: "stop.fill")
+                            .frame(minWidth: 44)
                     }
-                    .keyboardShortcut(".", modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+                    .help("Cancel the running statement (⌘.)")
                 } else {
-                    QueryActionButton(
-                        title: "Run", systemImage: "play.fill", isPrimary: true,
-                        disabled: !appVM.isConnected
-                    ) {
+                    Button {
                         appVM.runQueryAction(queryVM.queryText)
+                    } label: {
+                        Label("Run", systemImage: "play.fill")
+                            .frame(minWidth: 44)
                     }
-                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(queryIsEmpty)
+                    .help("Run the query (⌘↩)")
                 }
 
-                // Explain (no execute) — safe to press on any query, including
-                // DML. Renders the planner's predicted shape.
-                QueryActionButton(
-                    title: "Explain", systemImage: "list.bullet.indent",
-                    disabled: queryVM.isExecuting || !appVM.isConnected ||
-                        queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) {
+                Button {
                     appVM.runExplainAction(queryVM.queryText, analyze: false)
+                } label: {
+                    Label("Explain", systemImage: "list.bullet.indent")
                 }
+                .disabled(queryVM.isExecuting || queryIsEmpty)
+                .help("Show the planner's predicted plan without running the query (⌥⌘E)")
 
-                // Analyze — actually runs the query. Hold ⌥ for a finer "yes
-                // I know this writes" affordance later; for v1 the user is
-                // trusted to know what their query does.
-                QueryActionButton(
-                    title: "Analyze", systemImage: "stopwatch",
-                    disabled: queryVM.isExecuting || !appVM.isConnected ||
-                        queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) {
+                Button {
                     appVM.runExplainAction(queryVM.queryText, analyze: true)
+                } label: {
+                    Label("Analyze", systemImage: "stopwatch")
                 }
+                .disabled(queryVM.isExecuting || queryIsEmpty)
+                .help("Run the query and report what actually happened (⌥⇧⌘E)")
 
-                QueryActionButton(title: "Clear", systemImage: "trash", disabled: false) {
-                    queryVM.queryText = ""
-                    queryVM.result = nil
-                    queryVM.plan = nil
-                    queryVM.activeResultsTab = .results
-                    queryVM.errorMessage = nil
-                }
+                Divider().frame(height: 14)
 
-                QueryActionButton(
-                    title: "Beautify", systemImage: "wand.and.stars",
-                    disabled: queryVM.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) {
+                Button {
                     queryVM.beautify()
+                } label: {
+                    Label("Beautify", systemImage: "wand.and.stars")
                 }
+                .disabled(queryIsEmpty)
+                .help("Reformat the SQL (⇧⌘F)")
+
+                Button {
+                    appVM.clearQuery()
+                } label: {
+                    Label("Clear", systemImage: "trash")
+                }
+                .disabled(queryIsEmpty && queryVM.result == nil && queryVM.plan == nil)
+                .help("Clear the editor and results (⌘K)")
 
                 Spacer(minLength: 8)
-
-                // Meta affordances: keyboard hint + connection status dot.
-                // Pinned with `.fixedSize` and `.lineLimit(1)` so the toolbar
-                // can't enter a layout-feedback loop where a wrapping label
-                // forces the buttons next to it to compress to a 1-char column.
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        AppKbd(key: "⌘")
-                        AppKbd(key: "↵")
-                        Text("to run")
-                            .appMono(11, color: Theme.ink3)
-                            .padding(.leading, 2)
-                    }
-                    Text("·")
-                        .appMono(11, color: Theme.ink4)
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(appVM.isConnected ? Theme.accent : Theme.ink4)
-                            .frame(width: 7, height: 7)
-                            .overlay(
-                                Circle()
-                                    .stroke(Theme.accent.opacity(appVM.isConnected ? 0.25 : 0), lineWidth: 3)
-                            )
-                        Text(appVM.connectedProfileName ?? "disconnected")
-                            .appMono(11, color: Theme.ink3)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: 200, alignment: .leading)
-                    }
-                }
-                .fixedSize(horizontal: true, vertical: false)
 
                 if queryVM.isExecuting {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(Theme.bg)
+            .controlSize(.small)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.bar)
 
-            Rectangle().fill(Theme.line).frame(height: 1)
+            Divider()
 
             SQLEditorView(
                 text: $queryVM.queryText,
@@ -166,290 +143,227 @@ struct QueryTabView: View {
                     tables: navigatorVM.allLoadedTables,
                     columns: tableVM.columns
                 ),
-                autocompleteWhileTyping: editorPreference.autocompleteWhileTyping
+                autocompleteWhileTyping: editorPreference.autocompleteWhileTyping,
+                font: editorPreference.editorFont
             )
         }
     }
+
+    // MARK: - Results
 
     private var resultsArea: some View {
+        @Bindable var queryVM = queryVM
         @Bindable var tableVM = tableVM
         return VStack(spacing: 0) {
-            // Results-panel header — tabs for Results / Messages / EXPLAIN, plus
-            // a meta row on the right with status, row count, and exec time.
-            // The header shows whenever there's *anything* to show (a result,
-            // a plan, or an error), not just after a row-returning query.
-            let hasAnyContent = queryVM.sortedResult != nil || queryVM.plan != nil || queryVM.errorMessage != nil
-            if hasAnyContent {
-                HStack(spacing: 14) {
-                    HStack(spacing: 14) {
-                        ResultsTab(label: "Results", isActive: queryVM.activeResultsTab == .results) {
-                            queryVM.activeResultsTab = .results
-                        }
-                        ResultsTab(label: "Messages", isActive: queryVM.activeResultsTab == .messages) {
-                            queryVM.activeResultsTab = .messages
-                        }
-                        ResultsTab(label: "EXPLAIN", isActive: queryVM.activeResultsTab == .explain) {
-                            queryVM.activeResultsTab = .explain
-                        }
-                    }
-                    Spacer()
-                    resultsMetaRow
+            HStack {
+                Picker("Results", selection: $queryVM.activeResultsTab) {
+                    Text("Results").tag(ResultsTabKind.results)
+                    Text("Messages").tag(ResultsTabKind.messages)
+                    Text("Explain").tag(ResultsTabKind.explain)
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8)
-                .frame(height: 36)
-                .background(Theme.bg2)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(Theme.line).frame(height: 1)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                Spacer()
+            }
+            .controlSize(.small)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.bar)
+
+            Divider()
+
+            if let error = queryVM.errorMessage, queryVM.activeResultsTab != .messages {
+                InlineBanner(kind: .error, message: error) {
+                    queryVM.errorMessage = nil
                 }
             }
 
-            if let error = queryVM.errorMessage {
-                errorBanner(error)
-            }
-
-            if queryVM.isExecuting, queryVM.sortedResult == nil, queryVM.plan == nil {
-                // While a statement runs with no prior result to show, fill the
-                // pane with an explicit running state. Without this the whole
-                // results area is blank during execution — it reads as broken.
-                queryRunningState
-            } else if queryVM.activeResultsTab == .explain {
-                if let plan = queryVM.plan {
+            switch queryVM.activeResultsTab {
+            case .messages:
+                QueryMessagesView(
+                    result: queryVM.result,
+                    plan: queryVM.plan,
+                    errorMessage: queryVM.errorMessage,
+                    isExecuting: queryVM.isExecuting
+                )
+            case .explain:
+                if queryVM.isExecuting, queryVM.plan == nil {
+                    runningState
+                } else if let plan = queryVM.plan {
                     QueryPlanView(plan: plan)
-                } else if queryVM.errorMessage == nil {
-                    QueryPlanEmptyView(isConnected: appVM.isConnected)
-                }
-            } else if let result = queryVM.sortedResult {
-                if result.columns.isEmpty {
-                    VStack {
-                        Text("Query executed successfully.")
-                            .font(.headline)
-                        Text("Execution time: \(String(format: "%.3f", result.executionTime))s")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    VStack(spacing: 0) {
-                        ResultsGridView(
-                            result: result,
-                            columns: queryVM.editableColumns,
-                            isEditable: queryVM.editableTableContext != nil,
-                            onRowSelected: { rowIdx in
-                                appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
-                            },
-                            onCellEdited: { row, col, text in
-                                Task { await appVM.updateQueryCell(rowIndex: row, columnIndex: col, newText: text) }
-                            },
-                            sortColumn: queryVM.sortColumn,
-                            sortAscending: queryVM.sortAscending,
-                            onColumnHeaderTapped: { column in
-                                appVM.toggleQuerySort(column: column)
-                            },
-                            onDeleteRow: appVM.canDeleteQueryRow ? { rowIdx in
-                                queryVM.deleteConfirmationRowIndex = rowIdx
-                            } : nil,
-                            selectedRowIndex: $tableVM.selectedRowIndex
-                        )
-
-                        Rectangle().fill(Theme.line).frame(height: 1)
-
-                        HStack(spacing: 12) {
-                            Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
-                                .appMono(11, color: Theme.ink3)
-                            if result.isTruncated {
-                                Text("capped at 2000")
-                                    .appMono(11, color: Theme.amber)
-                            }
-                            Spacer()
-                            ResultExportButton(result: result, defaultFileName: "query-result")
-                            Text("\(Int(result.executionTime * 1000)) ms")
-                                .appMono(11, color: Theme.ink3)
+                    QueryPlanEmptyView()
+                }
+            case .results:
+                if queryVM.isExecuting, queryVM.sortedResult == nil {
+                    runningState
+                } else if let result = queryVM.sortedResult {
+                    if result.columns.isEmpty {
+                        ContentUnavailableView {
+                            Label("Command Completed", systemImage: "checkmark.circle")
+                        } description: {
+                            Text(commandSummary(result))
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
-                        .frame(height: 30)
-                        .background(Theme.bg2)
+                    } else {
+                        VStack(spacing: 0) {
+                            ResultsGridView(
+                                result: result,
+                                columns: queryVM.editableColumns,
+                                isEditable: queryVM.editableTableContext != nil,
+                                onRowSelected: { rowIdx in
+                                    appVM.selectRow(index: rowIdx, columns: result.columns, values: result.rows[rowIdx])
+                                },
+                                onCellEdited: { row, col, text in
+                                    Task { await appVM.updateQueryCell(rowIndex: row, columnIndex: col, newText: text) }
+                                },
+                                sortColumn: queryVM.sortColumn,
+                                sortAscending: queryVM.sortAscending,
+                                onColumnHeaderTapped: { column in
+                                    appVM.toggleQuerySort(column: column)
+                                },
+                                onDeleteRow: appVM.canDeleteQueryRow ? { rowIdx in
+                                    queryVM.deleteConfirmationRowIndex = rowIdx
+                                } : nil,
+                                selectedRowIndex: $tableVM.selectedRowIndex
+                            )
+
+                            BottomBar {
+                                Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                                if result.isTruncated {
+                                    Label("Showing the first \(AppViewModel.maxQueryRows.formatted()) rows", systemImage: "exclamationmark.triangle")
+                                        .foregroundStyle(.orange)
+                                }
+                                if queryVM.editableTableContext != nil {
+                                    Text("Editable — double-click a cell")
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                ResultExportButton(result: result, defaultFileName: "query-result")
+                                Text("\(Int(result.executionTime * 1000)) ms")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label("No Results", systemImage: "play.circle")
+                    } description: {
+                        Text("Run a query (⌘↩) to see its rows here. Explain and Analyze show the plan in the Explain tab.")
                     }
                 }
-            } else {
-                VStack(spacing: 14) {
-                    Text("v. — empty")
-                        .appSectionLabel()
-                    Text("A fresh query.")
-                        .appDisplay(32)
-                    Text("Type SQL above, or pick a table from the navigator.\nCmd+Enter runs the statement under the caret.")
-                        .appBody()
-                        .foregroundStyle(Theme.ink3)
-                        .multilineTextAlignment(.center)
-                    HStack(spacing: 10) {
-                        AppKbd(key: "⌘")
-                        AppKbd(key: "↵")
-                        Text("execute")
-                            .appMono(11, color: Theme.ink3)
-                            .padding(.leading, 2)
-                        Text("·").appMono(11, color: Theme.ink4)
-                        AppKbd(key: "⌘")
-                        AppKbd(key: "⇧")
-                        AppKbd(key: "F")
-                        Text("beautify")
-                            .appMono(11, color: Theme.ink3)
-                            .padding(.leading, 2)
-                    }
-                    .padding(.top, 6)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.bg)
             }
         }
         .background(Theme.bg)
     }
 
-    /// Shown in the results pane while a statement is executing and there's
-    /// nothing prior to display. Replaces the blank area that otherwise made
-    /// the app look stalled mid-query.
-    private var queryRunningState: some View {
-        VStack(spacing: 16) {
+    private func commandSummary(_ result: QueryResult) -> String {
+        var parts: [String] = []
+        if let affected = result.rowsAffected {
+            parts.append("\(affected) row\(affected == 1 ? "" : "s") affected")
+        }
+        parts.append("\(Int(result.executionTime * 1000)) ms")
+        return parts.joined(separator: " · ")
+    }
+
+    /// Shown while a statement is executing and there's nothing prior to display.
+    private var runningState: some View {
+        VStack(spacing: 12) {
             ProgressView()
                 .controlSize(.large)
-                .tint(Theme.accent)
-            VStack(spacing: 6) {
-                Text("Running query…")
-                    .appDisplay(24)
-                Text("Executing against \(appVM.connectedProfileName ?? "the database").")
-                    .appBody()
-                    .foregroundStyle(Theme.ink3)
-            }
+            Text("Running query…")
+                .font(.headline)
+            Text("Executing against \(appVM.connectedProfileName ?? "the database"). Press ⌘. to stop.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.bg)
-    }
-
-    /// Right-side meta strip for the results header — context shifts with the
-    /// active tab: row/exec stats for the data grid, plan totals for EXPLAIN,
-    /// or a quiet "no plan yet" hint when nothing has been computed.
-    @ViewBuilder
-    private var resultsMetaRow: some View {
-        HStack(spacing: 12) {
-            if queryVM.activeResultsTab == .explain {
-                if let plan = queryVM.plan {
-                    let label = plan.didAnalyze ? "analyzed" : "explained"
-                    HStack(spacing: 5) {
-                        Text("●").foregroundStyle(Theme.accent).font(.system(size: 8))
-                        Text(label).appMono(11, color: Theme.ink3)
-                    }
-                    if let exec = plan.executionTime {
-                        Text("\(Int(exec)) ms execution").appMono(11, color: Theme.ink3)
-                    } else {
-                        Text("plan only").appMono(11, color: Theme.ink3)
-                    }
-                }
-            } else if let result = queryVM.sortedResult, !result.columns.isEmpty {
-                HStack(spacing: 5) {
-                    Text("●").foregroundStyle(Theme.accent).font(.system(size: 8))
-                    Text("success").appMono(11, color: Theme.ink3)
-                }
-                Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
-                    .appMono(11, color: Theme.ink3)
-                Text("\(Int(result.executionTime * 1000)) ms")
-                    .appMono(11, color: Theme.ink3)
-            }
-        }
-    }
-
-    private func errorBanner(_ message: String) -> some View {
-        @Bindable var queryVM = queryVM
-        return HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Theme.rose)
-            Text(message)
-                .font(Theme.mono(size: 11.5))
-                .foregroundStyle(Theme.rose)
-                .lineLimit(2)
-            Spacer()
-            Button("Dismiss") {
-                queryVM.errorMessage = nil
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.ink3)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Theme.rose.opacity(0.08))
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.line).frame(height: 1)
-        }
     }
 }
 
-/// Underlined tab strip used at the top of the Query results panel. Mirrors
-/// the `.results-head .tabs .t` pattern from the web design — active tab gets
-/// a 2px lime underline. Tapping a tab fires the supplied closure.
-private struct ResultsTab: View {
-    let label: String
-    let isActive: Bool
-    var onTap: () -> Void = {}
+/// Transcript of the last execution: status, row counts, timing, and the
+/// full error text (unclipped, selectable).
+private struct QueryMessagesView: View {
+    let result: QueryResult?
+    let plan: QueryPlan?
+    let errorMessage: String?
+    let isExecuting: Bool
 
     var body: some View {
-        Button(action: onTap) {
-            Text(label)
-                .font(Theme.mono(size: 11.5, weight: isActive ? .medium : .regular))
-                .foregroundStyle(isActive ? Theme.ink : Theme.ink3)
-                .padding(.vertical, 4)
-                .overlay(alignment: .bottom) {
-                    if isActive {
-                        Rectangle()
-                            .fill(Theme.accent)
-                            .frame(height: 2)
-                            .offset(y: 10)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if isExecuting {
+                    Label("Executing…", systemImage: "hourglass")
+                }
+                if let errorMessage {
+                    Label {
+                        Text(errorMessage)
+                            .textSelection(.enabled)
+                    } icon: {
+                        Image(systemName: "xmark.octagon.fill")
+                            .foregroundStyle(.red)
                     }
                 }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// Editorial toolbar button used in the Query tab's action row. Renders as
-/// either a pill-outline secondary button or — with `isPrimary` — a solid lime
-/// chip for the dominant "Run" affordance.
-private struct QueryActionButton: View {
-    let title: String
-    let systemImage: String
-    var isPrimary: Bool = false
-    var disabled: Bool = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 10, weight: isPrimary ? .bold : .regular))
-                Text(title)
-                    .font(Theme.mono(size: 11.5, weight: isPrimary ? .semibold : .regular))
-                    .lineLimit(1)
-            }
-            .fixedSize(horizontal: true, vertical: false)
-            .foregroundStyle(isPrimary ? Theme.onAccent : Theme.ink2)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Group {
-                    if isPrimary {
-                        Theme.accent
+                if let result {
+                    if result.columns.isEmpty {
+                        Label {
+                            Text(commandLine(result))
+                        } icon: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
                     } else {
-                        Color.clear
+                        Label {
+                            Text(selectLine(result))
+                        } icon: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
                     }
                 }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(isPrimary ? Theme.accent : Theme.line2, lineWidth: 1)
-            )
-            .clipShape(.rect(cornerRadius: 5))
-            .opacity(disabled ? 0.45 : 1)
+                if let plan {
+                    Label {
+                        Text(planLine(plan))
+                    } icon: {
+                        Image(systemName: "list.bullet.indent")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !isExecuting, errorMessage == nil, result == nil, plan == nil {
+                    Text("No messages yet. Run a query to see its status here.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(.callout, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
         }
-        .buttonStyle(.plain)
-        .disabled(disabled)
+    }
+
+    private func commandLine(_ result: QueryResult) -> String {
+        var line = "Command completed"
+        if let affected = result.rowsAffected {
+            line += " — \(affected) row\(affected == 1 ? "" : "s") affected"
+        }
+        return line + " in \(Int(result.executionTime * 1000)) ms."
+    }
+
+    private func selectLine(_ result: QueryResult) -> String {
+        var line = "Returned \(result.rowCount) row\(result.rowCount == 1 ? "" : "s")"
+        if result.isTruncated {
+            line += " (capped at \(AppViewModel.maxQueryRows))"
+        }
+        return line + " in \(Int(result.executionTime * 1000)) ms."
+    }
+
+    private func planLine(_ plan: QueryPlan) -> String {
+        if plan.didAnalyze, let exec = plan.executionTime {
+            return "EXPLAIN ANALYZE completed — execution \(Int(exec)) ms."
+        }
+        return plan.didAnalyze ? "EXPLAIN ANALYZE completed." : "EXPLAIN completed (plan only, query not executed)."
     }
 }
 
@@ -474,8 +388,7 @@ private enum FieldEditorKindResolved {
     case array
     case boolean
     /// Plain text: may degrade to `.longText` per cell on the cell's own
-    /// length / multi-line content. Carried here so cells don't need to
-    /// re-call `dataType.lowercased()` to figure it out.
+    /// length / multi-line content.
     case plainOrLong
 
     func resolved(forValue value: String) -> FieldEditorKind {
@@ -508,7 +421,7 @@ private enum FieldEditorKindResolved {
     }
 }
 
-/// Native macOS Table-based grid for displaying query results with dynamic columns.
+/// Native macOS table-based grid for displaying query results with dynamic columns.
 struct ResultsGridView: View {
     let result: QueryResult
     var columns: [ColumnInfo]
@@ -519,10 +432,6 @@ struct ResultsGridView: View {
     var sortAscending: Bool
     var onColumnHeaderTapped: ((String) -> Void)?
     var onDeleteRow: ((Int) -> Void)?
-    var isInsertingRow: Bool
-    var insertRowValues: Binding<[String: String]>?
-    var onInsertCommit: (() -> Void)?
-    var onInsertCancel: (() -> Void)?
     /// Resolves a column name to the FK constraint it participates in, if any.
     /// Drives the inline arrow affordance, the "Jump to <table>" context-menu
     /// item, and Cmd-click navigation. Pass nil to disable FK navigation
@@ -532,15 +441,8 @@ struct ResultsGridView: View {
     /// or the context-menu item). Receives the displayed row and column index.
     var onFKJump: ((Int, Int) -> Void)?
     @Binding var selectedRowIndex: Int?
-    @FocusState private var isFocused: Bool
-    @FocusState private var editFieldFocused: Bool
-    @FocusState private var insertFieldFocused: Bool
-    @State private var editingCell: (row: Int, col: Int)?
-    @State private var editingText: String = ""
-    @State private var originalEditText: String = ""
     @State private var fieldEditorCell: (row: Int, col: Int)?
     private let columnMinWidth: CGFloat = 100
-    private let columnsByName: [String: ColumnInfo]
     /// Per-column derived metadata. Indexed by display column position (i.e.
     /// the same index passed to `cellView(rowIdx:colIdx:)`). Computed once at
     /// init so each cell render is a single subscript instead of repeated
@@ -558,10 +460,6 @@ struct ResultsGridView: View {
         onColumnHeaderTapped: ((String) -> Void)? = nil,
         onDeleteRow: ((Int) -> Void)? = nil,
         selectedRowIndex: Binding<Int?> = .constant(nil),
-        isInsertingRow: Bool = false,
-        insertRowValues: Binding<[String: String]>? = nil,
-        onInsertCommit: (() -> Void)? = nil,
-        onInsertCancel: (() -> Void)? = nil,
         foreignKeyForColumn: ((String) -> ConstraintInfo?)? = nil,
         onFKJump: ((Int, Int) -> Void)? = nil
     ) {
@@ -574,16 +472,11 @@ struct ResultsGridView: View {
         self.sortAscending = sortAscending
         self.onColumnHeaderTapped = onColumnHeaderTapped
         self.onDeleteRow = onDeleteRow
-        self._selectedRowIndex = selectedRowIndex
-        self.isInsertingRow = isInsertingRow
-        self.insertRowValues = insertRowValues
-        self.onInsertCommit = onInsertCommit
-        self.onInsertCancel = onInsertCancel
+        _selectedRowIndex = selectedRowIndex
         self.foreignKeyForColumn = foreignKeyForColumn
         self.onFKJump = onFKJump
         let byName = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
-        self.columnsByName = byName
-        self.columnMeta = result.columns.enumerated().map { (idx, name) in
+        columnMeta = result.columns.enumerated().map { idx, name in
             let info = byName[name]
             let headerTitle: String
             if let info {
@@ -604,51 +497,44 @@ struct ResultsGridView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            DataGridView(
-                rowCount: result.rows.count,
-                resultRevision: result.revision,
-                columns: columnMeta.map { meta in
-                    DataGridView.Column(
-                        id: meta.id,
-                        title: meta.headerTitle,
-                        rawName: meta.name,
-                        minWidth: columnMinWidth
-                    )
-                },
-                selectedRowIndex: $selectedRowIndex,
-                sortColumnName: sortColumn,
-                sortAscending: sortAscending,
-                onSelectionChanged: { idx in
-                    if let idx { onRowSelected?(idx) }
-                },
-                onColumnHeaderClicked: { colName in
-                    onColumnHeaderTapped?(colName)
-                },
-                onDoubleClick: { rowIdx, colIdx in
-                    handleCellDoubleClick(row: rowIdx, col: colIdx)
-                },
-                onDeleteSelected: {
-                    if let onDeleteRow, let idx = selectedRowIndex {
-                        onDeleteRow(idx)
-                    }
-                },
-                contextMenuItems: { rowIdx in
-                    buildContextMenuItems(rowIdx: rowIdx)
-                },
-                renderCell: { rowIdx, colIdx in
-                    AnyView(cellView(rowIdx: rowIdx, colIdx: colIdx))
-                },
-                onCmdClick: { rowIdx, colIdx in
-                    handleCmdClick(row: rowIdx, col: colIdx)
+        DataGridView(
+            rowCount: result.rows.count,
+            resultRevision: result.revision,
+            columns: columnMeta.map { meta in
+                DataGridView.Column(
+                    id: meta.id,
+                    title: meta.headerTitle,
+                    rawName: meta.name,
+                    minWidth: columnMinWidth
+                )
+            },
+            selectedRowIndex: $selectedRowIndex,
+            sortColumnName: sortColumn,
+            sortAscending: sortAscending,
+            onSelectionChanged: { idx in
+                if let idx { onRowSelected?(idx) }
+            },
+            onColumnHeaderClicked: { colName in
+                onColumnHeaderTapped?(colName)
+            },
+            onDoubleClick: { rowIdx, colIdx in
+                handleCellDoubleClick(row: rowIdx, col: colIdx)
+            },
+            onDeleteSelected: {
+                if let onDeleteRow, let idx = selectedRowIndex {
+                    onDeleteRow(idx)
                 }
-            )
-
-            if isInsertingRow, let binding = insertRowValues {
-                Divider()
-                insertRowView(binding: binding)
+            },
+            contextMenuItems: { rowIdx in
+                buildContextMenuItems(rowIdx: rowIdx)
+            },
+            renderCell: { rowIdx, colIdx in
+                AnyView(cellView(rowIdx: rowIdx, colIdx: colIdx))
+            },
+            onCmdClick: { rowIdx, colIdx in
+                handleCmdClick(row: rowIdx, col: colIdx)
             }
-        }
+        )
         // Single sheet hosting the rich field editor. Lifted out of the cell
         // view so we don't pay the per-cell popover allocation that froze
         // SwiftUI when there were dozens of columns visible.
@@ -660,7 +546,7 @@ struct ResultsGridView: View {
                editing.row < result.rows.count,
                editing.col < result.rows[editing.row].count
             {
-                fieldEditorPopover(rowIdx: editing.row, colIdx: editing.col, cell: result.rows[editing.row][editing.col])
+                fieldEditorSheet(rowIdx: editing.row, colIdx: editing.col, cell: result.rows[editing.row][editing.col])
             }
         }
     }
@@ -673,26 +559,29 @@ struct ResultsGridView: View {
               row < result.rows.count, col < result.columns.count
         else { return false }
         let colName = result.columns[col]
-        guard let _ = foreignKeyForColumn?(colName) else { return false }
+        guard foreignKeyForColumn?(colName) != nil else { return false }
         let cell = result.rows[row][col]
         guard !cell.isNull else { return false }
         onFKJump(row, col)
         return true
     }
 
-    /// Builds the row's context menu, prepending a "Jump to <ref_table>" item
-    /// when the right-clicked column is a non-null FK source.
+    /// Builds the row's context menu: copy, FK jumps, edit, delete.
     private func buildContextMenuItems(rowIdx: Int) -> [DataGridView.MenuItem] {
         var items: [DataGridView.MenuItem] = []
-        if let onFKJump,
-           rowIdx < result.rows.count
-        {
+        guard rowIdx < result.rows.count else { return items }
+
+        items.append(DataGridView.MenuItem(title: "Copy Row as Tab-Separated", isDestructive: false) {
+            let line = result.rows[rowIdx].map { $0.isNull ? "" : $0.displayString }.joined(separator: "\t")
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(line, forType: .string)
+        })
+
+        if let onFKJump {
             // The DataGridView coordinator passes a row index but not a column
             // — its menuNeedsUpdate uses tv.clickedRow only. So we walk the
             // row's cells and offer a Jump item for each FK column that has a
-            // non-null value. That keeps the right-click surface comprehensive
-            // even though NSTableView doesn't expose the clicked column to the
-            // menu builder.
+            // non-null value.
             for colIdx in 0 ..< min(result.columns.count, result.rows[rowIdx].count) {
                 let colName = result.columns[colIdx]
                 guard let fk = foreignKeyForColumn?(colName) else { continue }
@@ -706,7 +595,7 @@ struct ResultsGridView: View {
             }
         }
         if let onDeleteRow {
-            items.append(DataGridView.MenuItem(title: "Delete Row", isDestructive: true) {
+            items.append(DataGridView.MenuItem(title: "Delete Row…", isDestructive: true) {
                 onDeleteRow(rowIdx)
             })
         }
@@ -715,104 +604,53 @@ struct ResultsGridView: View {
 
     private func handleCellDoubleClick(row: Int, col: Int) {
         guard isEditable, row < result.rows.count, col < result.rows[row].count else { return }
-        if editingCell != nil { commitEdit() }
-        // All edits route through the field-editor sheet now that cells don't
-        // capture mouse input (so they couldn't host an inline TextField that
-        // takes focus on click anyway).
+        // All edits route through the field-editor sheet: cells don't capture
+        // mouse input (so first-click selection works), so they can't host an
+        // inline TextField anyway.
         fieldEditorCell = (row: row, col: col)
-    }
-
-    /// Returns the FieldEditorKind for a column index, or .plain if no column info.
-    private func editorKind(for colIdx: Int, cell: CellValue) -> FieldEditorKind {
-        guard colIdx < columnMeta.count else { return .plain }
-        let value = cell.isNull ? "" : cell.displayString
-        return columnMeta[colIdx].editorKind.resolved(forValue: value)
-    }
-
-    /// Whether this column should use the rich popover editor instead of inline TextField.
-    private func needsRichEditor(kind: FieldEditorKind) -> Bool {
-        switch kind {
-        case .json, .array, .boolean, .longText: return true
-        case .plain: return false
-        }
     }
 
     @ViewBuilder
     private func cellView(rowIdx: Int, colIdx: Int) -> some View {
-        // Guard against stale row/column IDs that the Table may request
+        // Guard against stale row/column IDs that the table may request
         // after the result changes (e.g., when switching tabs).
         if rowIdx < result.rows.count, colIdx < result.rows[rowIdx].count, colIdx < columnMeta.count {
             let cell = result.rows[rowIdx][colIdx]
             let meta = columnMeta[colIdx]
             let kind = meta.editorKind.resolved(forValue: cell.isNull ? "" : cell.displayString)
             let renderKind = CellRenderKind.from(column: meta.info, cell: cell)
-            if let editing = editingCell, editing.row == rowIdx, editing.col == colIdx {
-                TextField("NULL", text: $editingText)
-                    .textFieldStyle(.plain)
-                    .font(.system(.body, design: .monospaced))
-                    .focused($editFieldFocused)
-                    .onSubmit {
-                        commitEdit()
-                    }
-                    .onExitCommand {
-                        cancelEdit()
-                    }
-                    .onChange(of: editFieldFocused) { _, focused in
-                        if !focused {
-                            commitEdit()
-                        }
-                    }
-            } else {
-                let fkInfo = meta.foreignKey
-                HStack(spacing: 4) {
-                    if renderKind.alignment == .trailing { Spacer(minLength: 0) }
-                    CellTypeBadge(kind: kind)
-                    cellContentView(cell: cell, renderKind: renderKind)
-                    if renderKind.alignment == .leading { Spacer(minLength: 0) }
-                    // FK affordance. HostingCellView returns nil from hitTest
-                    // (so first-click selection works) which means SwiftUI
-                    // gestures can't fire here — the icon is a visual
-                    // affordance only. Activation routes through Cmd-click on
-                    // the cell or the right-click "Jump to <table>" menu item.
-                    if let fkInfo, !cell.isNull, fkInfo.referencedTable != nil {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .help("Foreign key → \(fkInfo.referencedTable ?? ""). Cmd-click or right-click to follow.")
-                    }
+            let fkInfo = meta.foreignKey
+            HStack(spacing: 4) {
+                if renderKind.alignment == .trailing { Spacer(minLength: 0) }
+                CellTypeBadge(kind: kind)
+                cellContentView(cell: cell, renderKind: renderKind)
+                if renderKind.alignment == .leading { Spacer(minLength: 0) }
+                // FK affordance. The hosting cell returns nil from hitTest so
+                // SwiftUI gestures can't fire here — the icon is visual only.
+                // Activation routes through Cmd-click or the context menu.
+                if let fkInfo, !cell.isNull, fkInfo.referencedTable != nil {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .help("Foreign key → \(fkInfo.referencedTable ?? ""). Cmd-click or right-click to follow.")
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .frame(maxWidth: .infinity, alignment: renderKind.alignment == .trailing ? .trailing : .leading)
-                // Field editor presentation lives on the parent body (sheet),
-                // not per cell. Putting a .popover on every cell — each living
-                // inside its own NSHostingView under our AppKit table — caused
-                // SwiftUI to create a fresh NSPopover per cell on every reload,
-                // overflowing NSWindow's live-window count and freezing the UI.
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: renderKind.alignment == .trailing ? .trailing : .leading)
         } else {
             Text("")
         }
     }
 
-    /// Returns the ColumnInfo for a column index by name, if available.
-    /// Kept for callers that look up by index; cell rendering reads `columnMeta`
-    /// directly so it doesn't pay the dictionary-lookup cost per cell.
-    private func columnInfo(for colIdx: Int) -> ColumnInfo? {
-        guard colIdx < columnMeta.count else { return nil }
-        return columnMeta[colIdx].info
-    }
-
     /// Renders the cell's text using a typography appropriate to its category:
-    /// muted italic for NULL, monospaced for IDs / numbers / dates / network /
-    /// JSON, sans-serif for plain text, and a small dot indicator for booleans.
+    /// dim for NULL, monospaced for values, and a dot indicator for booleans.
     @ViewBuilder
     private func cellContentView(cell: CellValue, renderKind: CellRenderKind) -> some View {
         switch renderKind {
         case .null:
             // ‹NULL› with angle brackets distinguishes the meta-value from a
-            // literal text cell whose contents happen to be "NULL". No italic
-            // — the dim color carries the affordance.
+            // literal text cell whose contents happen to be "NULL".
             Text("‹NULL›")
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.tertiary)
@@ -823,35 +661,19 @@ struct ResultsGridView: View {
                     .fill(isTrue ? Color.green : Color.gray.opacity(0.45))
                     .frame(width: 7, height: 7)
                 Text(isTrue ? "true" : "false")
-                    .font(.system(.body))
+                    .font(.system(.body, design: .monospaced))
             }
-        case .number:
-            Text(cell.displayString)
-                .font(.system(.body, design: .monospaced))
-                .lineLimit(1)
         case .uuid:
             Text(cell.displayString)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-        case .network:
-            Text(cell.displayString)
-                .font(.system(.body, design: .monospaced))
-                .lineLimit(1)
-        case .date, .timestamp:
-            Text(cell.displayString)
-                .font(.system(.body, design: .monospaced))
-                .lineLimit(1)
-        case .json:
-            Text(cell.displayString)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
         case .binary:
             Text(cell.displayString)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.tertiary)
-        case .text:
+                .lineLimit(1)
+        case .number, .network, .date, .timestamp, .json, .text:
             Text(cell.displayString)
                 .font(.system(.body, design: .monospaced))
                 .lineLimit(1)
@@ -859,7 +681,7 @@ struct ResultsGridView: View {
     }
 
     @ViewBuilder
-    private func fieldEditorPopover(rowIdx: Int, colIdx: Int, cell: CellValue) -> some View {
+    private func fieldEditorSheet(rowIdx: Int, colIdx: Int, cell: CellValue) -> some View {
         let meta = colIdx < columnMeta.count ? columnMeta[colIdx] : nil
         let colName = meta?.name ?? "Column"
         let info = meta?.info
@@ -877,78 +699,12 @@ struct ResultsGridView: View {
             }
         )
     }
-
-    private func startEditing(row: Int, col: Int, cell: CellValue) {
-        let text = cell.isNull ? "" : cell.displayString
-        editingText = text
-        originalEditText = text
-        editingCell = (row: row, col: col)
-        editFieldFocused = true
-    }
-
-    private func commitEdit() {
-        guard let editing = editingCell else { return }
-        let changed = editingText != originalEditText
-        let row = editing.row
-        let col = editing.col
-        editingCell = nil
-        let text = editingText
-        editingText = ""
-        originalEditText = ""
-        if changed {
-            onCellEdited?(row, col, text)
-        }
-    }
-
-    private func cancelEdit() {
-        editingCell = nil
-        editingText = ""
-        originalEditText = ""
-    }
-
-    @ViewBuilder
-    private func insertRowView(binding: Binding<[String: String]>) -> some View {
-        HStack(spacing: 0) {
-            ForEach(0 ..< result.columns.count, id: \.self) { colIdx in
-                let colName = result.columns[colIdx]
-                let colInfo = columnsByName[colName]
-                let placeholder = colInfo.map { info -> String in
-                    var parts: [String] = [info.dataType]
-                    if info.isNullable { parts.append("nullable") }
-                    if info.columnDefault != nil { parts.append("has default") }
-                    return parts.joined(separator: ", ")
-                } ?? colName
-
-                TextField(placeholder, text: Binding(
-                    get: { binding.wrappedValue[colName] ?? "" },
-                    set: { binding.wrappedValue[colName] = $0 }
-                ))
-                .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
-                .frame(minWidth: columnMinWidth, maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .focused($insertFieldFocused)
-
-                if colIdx < result.columns.count - 1 {
-                    Divider()
-                }
-            }
-        }
-        .background(Color.blue.opacity(0.08))
-        .onExitCommand {
-            onInsertCancel?()
-        }
-    }
 }
 
 // MARK: - Cell Render Classification
 
 /// Classifies a cell for *display* (alignment, typography, color), as opposed
 /// to `FieldEditorKind`, which classifies it for choosing an *editor* widget.
-/// Display kinds carry more granularity (numbers, dates, UUIDs, etc.) because
-/// they each warrant distinct visual treatment even though they all share the
-/// same plain inline editor.
 enum CellRenderKind {
     case null, boolean, number, uuid, date, timestamp, json, binary, network, text
 
@@ -1062,8 +818,6 @@ struct DataGridView: NSViewRepresentable {
     var renderCell: (Int, Int) -> AnyView
     /// Cmd-click handler. Returns true to consume the event (suppressing the
     /// default multi-select toggle), false to fall through to normal handling.
-    /// Callers use this for context-sensitive actions like "jump to FK target":
-    /// they return true only when the clicked cell actually has an action.
     var onCmdClick: ((Int, Int) -> Bool)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -1080,7 +834,7 @@ struct DataGridView: NSViewRepresentable {
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.gridStyleMask = [.solidVerticalGridLineMask]
         tableView.gridColor = NSColor.separatorColor
-        tableView.style = .inset
+        tableView.style = .fullWidth
         tableView.allowsEmptySelection = true
         // Multi-selection enabled — Shift-click extends to a contiguous range,
         // Cmd-click toggles individual rows in/out of the selection.
@@ -1151,8 +905,7 @@ struct DataGridView: NSViewRepresentable {
 
         // Sync selection from the binding into the table. The flag suppresses
         // the resulting tableViewSelectionDidChange callback so we don't write
-        // back into the SwiftUI binding during a view update (which is what
-        // produced the "Modifying state during view update" warnings).
+        // back into the SwiftUI binding during a view update.
         let desiredSelection = selectedRowIndex.flatMap { ($0 >= 0 && $0 < rowCount) ? IndexSet(integer: $0) : nil } ?? IndexSet()
         if tableView.selectedRowIndexes != desiredSelection {
             coordinator.isSyncingFromSwiftUI = true
@@ -1167,7 +920,9 @@ struct DataGridView: NSViewRepresentable {
                 tableView.setIndicatorImage(nil, in: col)
             }
             if let name = sortColumnName,
-               let col = tableView.tableColumns.first(where: { ($0.headerCell as? NSTableHeaderCell)?.stringValue.hasPrefix(name) == true || coordinator.rawName(forColumnId: Int($0.identifier.rawValue) ?? -1) == name })
+               let col = tableView.tableColumns.first(where: {
+                   coordinator.rawName(forColumnId: Int($0.identifier.rawValue) ?? -1) == name
+               })
             {
                 let indicator = NSImage(named: sortAscending ? "NSAscendingSortIndicator" : "NSDescendingSortIndicator")
                 tableView.setIndicatorImage(indicator, in: col)
@@ -1286,7 +1041,11 @@ struct DataGridView: NSViewRepresentable {
                 let menuItem = NSMenuItem(title: item.title, action: #selector(menuItemClicked(_:)), keyEquivalent: "")
                 menuItem.target = self
                 menuItem.representedObject = item.action
-                if item.isDestructive { menuItem.attributedTitle = NSAttributedString(string: item.title, attributes: [.foregroundColor: NSColor.systemRed]) }
+                if item.isDestructive {
+                    menuItem.attributedTitle = NSAttributedString(
+                        string: item.title, attributes: [.foregroundColor: NSColor.systemRed]
+                    )
+                }
                 menu.addItem(menuItem)
             }
         }
@@ -1304,13 +1063,12 @@ struct DataGridView: NSViewRepresentable {
     /// Hit-testing returns nil so mouse events bypass the SwiftUI subtree and
     /// reach the underlying NSTableView — that's what makes single-click row
     /// selection work on the *first* click. SwiftUI cells are display-only;
-    /// in-place editing happens via the field-editor sheet, not by interacting
-    /// with widgets inside the cell.
+    /// in-place editing happens via the field-editor sheet.
     private final class HostingCellView: NSTableCellView {
         private var hosting: NSHostingView<AnyView>
 
         init(rootView: AnyView) {
-            self.hosting = NSHostingView(rootView: rootView)
+            hosting = NSHostingView(rootView: rootView)
             super.init(frame: .zero)
             hosting.translatesAutoresizingMaskIntoConstraints = false
             addSubview(hosting)
@@ -1322,6 +1080,7 @@ struct DataGridView: NSViewRepresentable {
             ])
         }
 
+        @available(*, unavailable)
         required init?(coder: NSCoder) { fatalError("not used") }
 
         func update(rootView: AnyView) {
@@ -1330,8 +1089,8 @@ struct DataGridView: NSViewRepresentable {
 
         // Catch the click at the cell level — if we let it fall through to
         // the inner NSHostingView, SwiftUI's gesture machinery absorbs the
-        // mouseDown without doing anything useful (we have no gestures on
-        // the cell content), and the table never gets a chance to select.
+        // mouseDown without doing anything useful, and the table never gets
+        // a chance to select.
         override func hitTest(_ point: NSPoint) -> NSView? {
             frame.contains(point) ? self : nil
         }
@@ -1361,9 +1120,7 @@ struct DataGridView: NSViewRepresentable {
 
     /// NSTableView subclass that accepts the first mouse click as a real
     /// click — both becomes-first-responder AND selects the row in one
-    /// gesture. The default behavior swallows the first click when the view
-    /// isn't already first responder, which is the "have to click twice"
-    /// problem.
+    /// gesture.
     final class FocusableTableView: NSTableView {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override var acceptsFirstResponder: Bool { true }
@@ -1391,7 +1148,7 @@ struct DataGridView: NSViewRepresentable {
         // row is selected, matching SwiftUI Table's onDeleteCommand behavior.
         override func keyDown(with event: NSEvent) {
             let chars = event.charactersIgnoringModifiers ?? ""
-            if (chars == "\u{7F}" || chars == "\u{8}") && selectedRow >= 0 {
+            if chars == "\u{7F}" || chars == "\u{8}", selectedRow >= 0 {
                 if let coord = delegate as? Coordinator {
                     coord.parent.onDeleteSelected()
                     return

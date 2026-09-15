@@ -1,124 +1,94 @@
 import SwiftUI
 
+/// Source/DDL of the selected object with syntax highlighting. Tables
+/// reconstruct their CREATE TABLE; views, functions, types, and the rest show
+/// their catalog definition.
 struct ObjectDefinitionView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(NavigatorViewModel.self) var navigatorVM
-    @Environment(TableViewModel.self) var tableVM
+    @Environment(EditorPreference.self) var editorPreference
 
     @State private var ddlText: String = ""
     @State private var isLoading = false
-    @State private var loadedObjectId: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar — editorial header on the left, action chips on the right.
-            HStack(alignment: .top) {
-                if let obj = navigatorVM.selectedObject {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("i. — definition")
-                            .appSectionLabel()
-                        Text("\(obj.schema) · \(obj.type.rawValue)")
-                            .appMono(10.5, color: Theme.ink4)
-                            .tracking(1.5)
-                            .textCase(.uppercase)
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Image(systemName: objectIcon(for: obj.type))
-                                .foregroundStyle(Theme.ink3)
-                                .font(.system(size: 14))
-                            Text(obj.name)
-                                .appDisplay(30)
-                        }
+            if let obj = navigatorVM.selectedObject {
+                header(for: obj)
+                Divider()
+
+                if isLoading {
+                    ProgressView("Loading definition…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if ddlText.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Definition", systemImage: "doc.text")
+                    } description: {
+                        Text("PostgreSQL did not return a definition for this object.")
                     }
                 } else {
-                    Text("Definition")
-                        .appSectionLabel()
+                    SQLSyntaxView(text: ddlText, font: editorPreference.editorFont)
                 }
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Button {
-                        Task { await loadDDL() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.ink3)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 5)
-                                    .strokeBorder(Theme.line2, lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Refresh definition")
-                    .disabled(isLoading)
-
-                    if let obj = navigatorVM.selectedObject, appVM.isRunnable(obj) {
-                        Button {
-                            appVM.functionRunTarget = obj
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 10))
-                                Text(obj.type == .procedure ? "Call…" : "Run…")
-                                    .font(Theme.mono(size: 11, weight: .medium))
-                            }
-                            .foregroundStyle(Theme.ink2)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 5)
-                                    .strokeBorder(Theme.line2, lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .help(obj.type == .procedure ? "Call this procedure" : "Run this function")
-                    }
-
-                    Button {
-                        editInQuery()
-                    } label: {
-                        Text("Edit in Query →")
-                            .font(Theme.mono(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.onAccent)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Theme.accent)
-                            .clipShape(.rect(cornerRadius: 5))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(ddlText.isEmpty || isLoading)
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 16)
-            .background(Theme.bg)
-
-            Rectangle().fill(Theme.line).frame(height: 1)
-
-            // DDL content
-            if isLoading {
-                VStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Loading definition…")
-                        .appMono(11, color: Theme.ink3)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.bg)
-            } else if ddlText.isEmpty {
-                Text("Select an object to view its definition.")
-                    .appDisplay(20, color: Theme.ink3)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.bg)
             } else {
-                SQLSyntaxView(text: ddlText)
+                ContentUnavailableView {
+                    Label("No Object Selected", systemImage: "doc.text")
+                } description: {
+                    Text("Choose a table, view, function, or any other object in the sidebar to see its definition.")
+                }
             }
         }
         .background(Theme.bg)
         .task(id: navigatorVM.selectedObject?.id) {
             await loadDDL()
         }
+    }
+
+    private func header(for obj: DBObject) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: obj.type.symbolName)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(obj.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(obj.type.displayName) in \(obj.schema)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Button {
+                    Task { await loadDDL() }
+                } label: {
+                    Label("Reload", systemImage: "arrow.clockwise")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading)
+                .help("Reload the definition")
+
+                if appVM.isRunnable(obj) {
+                    Button {
+                        appVM.functionRunTarget = obj
+                    } label: {
+                        Label(obj.type == .procedure ? "Call…" : "Run…", systemImage: "play.fill")
+                    }
+                    .help(obj.type == .procedure ? "Call this procedure" : "Run this function")
+                }
+
+                Button("Open in Query Editor") {
+                    editInQuery()
+                }
+                .disabled(ddlText.isEmpty || isLoading)
+                .help("Copy the definition into the SQL editor")
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     private func loadDDL() async {
@@ -138,27 +108,5 @@ struct ObjectDefinitionView: View {
     private func editInQuery() {
         appVM.queryVM.queryText = ddlText
         appVM.selectedTab = .query
-    }
-
-    private func objectIcon(for type: DBObjectType) -> String {
-        switch type {
-        case .function: return "function"
-        case .procedure: return "gearshape"
-        case .view: return "eye"
-        case .materializedView: return "square.stack.3d.up"
-        case .sequence: return "number"
-        case .type: return "t.square"
-        case .domain: return "shield"
-        case .aggregate: return "sum"
-        case .triggerFunction: return "bolt"
-        case .collation: return "textformat.abc"
-        case .foreignTable: return "externaldrive"
-        case .ftsConfiguration: return "doc.text.magnifyingglass"
-        case .ftsDictionary: return "character.book.closed"
-        case .ftsParser: return "text.viewfinder"
-        case .ftsTemplate: return "doc.on.doc"
-        case .operator: return "plus.forwardslash.minus"
-        case .table: return "tablecells"
-        }
     }
 }

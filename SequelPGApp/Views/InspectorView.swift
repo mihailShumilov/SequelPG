@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Trailing inspector: facts about the selected object and, when a row is
+/// selected in the Content or Query grid, every column of that row with a
+/// type-aware value preview and in-place editing.
 struct InspectorView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(TableViewModel.self) var tableVM
@@ -11,166 +14,68 @@ struct InspectorView: View {
     @FocusState private var editFieldFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Inspector")
-                    .appDisplay(20)
-                Spacer()
-                Text("ii.")
-                    .appMono(11, color: Theme.ink4)
-            }
-            .padding(.bottom, 8)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Theme.line).frame(height: 1)
-            }
-
-            if let name = tableVM.selectedObjectName {
-                inspectorRow(label: "Object", value: name)
-                inspectorRow(label: "Approx. Rows", value: "\(tableVM.approximateRowCount)")
-                inspectorRow(label: "Columns", value: "\(tableVM.selectedObjectColumnCount)")
+        Group {
+            if tableVM.selectedObjectName == nil, tableVM.selectedRowData == nil {
+                ContentUnavailableView {
+                    Label("No Selection", systemImage: "info.circle")
+                } description: {
+                    Text("Select an object in the sidebar, or a row in a results grid, to inspect it.")
+                }
             } else {
-                Text("No object selected")
-                    .appMono(11, color: Theme.ink4)
-            }
-
-            if let rowData = tableVM.selectedRowData,
-               let rowIndex = tableVM.selectedRowIndex {
-                DottedRule()
-
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Row Detail")
-                        .appDisplay(20)
-                    Spacer()
-                    Text("#\(rowIndex + 1)")
-                        .appMono(11, color: Theme.ink4)
-                    if inspectorCanDelete {
-                        Button {
-                            showDeleteConfirmation = true
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(Theme.rose)
-                                .font(.system(size: 11))
+                Form {
+                    if let name = tableVM.selectedObjectName {
+                        Section("Object") {
+                            LabeledContent("Name") {
+                                Text(name)
+                                    .font(.system(.body, design: .monospaced))
+                                    .textSelection(.enabled)
+                            }
+                            LabeledContent("Rows", value: "≈ \(tableVM.approximateRowCount.formatted())")
+                            LabeledContent("Columns", value: "\(tableVM.selectedObjectColumnCount)")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Delete row")
-                        .help("Delete this row")
                     }
-                    Button {
-                        appVM.clearSelectedRow()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Theme.ink3)
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dismiss row detail")
-                }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
-                            let column = item.column
-                            let value = item.value
-                            let colInfo = columnInfoIndex[column]
-                            let kind = inspectorEditorKind(colInfo: colInfo, value: value)
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Text(column)
-                                        .font(Theme.mono(size: 11))
-                                        .foregroundStyle(Theme.ink3)
-                                        .tracking(0.5)
-                                    if let dt = colInfo?.dataType {
-                                        Text(dt)
-                                            .font(Theme.mono(size: 9, weight: .medium))
-                                            .tracking(0.8)
-                                            .textCase(.uppercase)
-                                            .padding(.horizontal, 5)
-                                            .padding(.vertical, 1)
-                                            .background(inspectorBadgeColor(kind).opacity(0.14))
-                                            .foregroundStyle(inspectorBadgeColor(kind))
-                                            .clipShape(.rect(cornerRadius: 3))
+                    if let rowData = tableVM.selectedRowData, let rowIndex = tableVM.selectedRowIndex {
+                        Section {
+                            ForEach(Array(rowData.enumerated()), id: \.element.column) { _, item in
+                                rowField(column: item.column, value: item.value)
+                            }
+                        } header: {
+                            HStack {
+                                Text("Row \(rowIndex + 1)")
+                                Spacer()
+                                if inspectorCanDelete {
+                                    Button {
+                                        showDeleteConfirmation = true
+                                    } label: {
+                                        Image(systemName: "trash")
                                     }
-                                    Spacer()
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Delete row")
+                                    .help("Delete this row")
                                 }
-
-                                if editingColumn == column {
-                                    TextField("", text: $editingText)
-                                        .textFieldStyle(.roundedBorder)
-                                        .font(.system(.body, design: .monospaced))
-                                        .focused($editFieldFocused)
-                                        .onSubmit {
-                                            commitInspectorEdit(column: column)
-                                        }
-                                        .onExitCommand {
-                                            cancelInspectorEdit()
-                                        }
-                                } else if appVM.isInspectorEditable {
-                                    inspectorValueView(value: value, kind: kind)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture(count: 2) {
-                                            if needsRichInspectorEditor(kind: kind) {
-                                                fieldEditorColumn = column
-                                            } else {
-                                                editingText = value.isNull ? "NULL" : value.displayString
-                                                editingColumn = column
-                                                editFieldFocused = true
-                                            }
-                                        }
-                                        .popover(
-                                            isPresented: Binding(
-                                                get: { fieldEditorColumn == column },
-                                                set: { if !$0 { fieldEditorColumn = nil } }
-                                            ),
-                                            arrowEdge: .leading
-                                        ) {
-                                            FieldEditorView(
-                                                columnName: column,
-                                                dataType: colInfo?.dataType ?? "text",
-                                                isNullable: colInfo?.isNullable ?? true,
-                                                initialValue: value,
-                                                onSave: { newText in
-                                                    fieldEditorColumn = nil
-                                                    Task {
-                                                        await appVM.updateInspectorCell(
-                                                            columnName: column, newText: newText
-                                                        )
-                                                    }
-                                                },
-                                                onCancel: {
-                                                    fieldEditorColumn = nil
-                                                }
-                                            )
-                                        }
-                                } else {
-                                    inspectorValueView(value: value, kind: kind)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                Button {
+                                    appVM.clearSelectedRow()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
                                 }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Dismiss row detail")
+                                .help("Deselect the row")
                             }
-                            if column != rowData.last?.column {
-                                DottedRule()
-                                    .padding(.vertical, 2)
+                        } footer: {
+                            if appVM.isInspectorEditable {
+                                Text("Double-click a value to edit it.")
                             }
                         }
                     }
                 }
+                .formStyle(.grouped)
             }
-
-            Spacer()
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.bg2)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Theme.line).frame(width: 1)
         }
         // Rebuild the O(1) column lookup only when the columns array actually
-        // changes. The previous implementation was a computed property, which
-        // SwiftUI re-evaluated on every body pass — and Inspector's body fires
-        // for many unrelated `tableVM` mutations (selection, page, sort), so
-        // the dictionary was being rebuilt dozens of times per second on a
-        // wide table.
+        // changes; the Inspector body fires for many unrelated `tableVM`
+        // mutations (selection, page, sort).
         .onAppear { rebuildColumnIndexIfNeeded() }
         .onChange(of: tableVM.columns.count) { _, _ in rebuildColumnIndexIfNeeded() }
         .onChange(of: tableVM.selectedObjectName) { _, _ in rebuildColumnIndexIfNeeded() }
@@ -184,29 +89,81 @@ struct InspectorView: View {
         }
     }
 
-    /// Single key-value row used by the table-stats block at the top of the
-    /// Inspector. Mirrors the `.insp-row` from the web design — monospaced label
-    /// on the left, monospaced value on the right, baseline-aligned.
+    // MARK: - Row field
+
     @ViewBuilder
-    private func inspectorRow(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .font(Theme.mono(size: 11))
-                .foregroundStyle(Theme.ink4)
-                .tracking(0.4)
-            Spacer(minLength: 8)
-            Text(value)
-                .font(Theme.mono(size: 12))
-                .foregroundStyle(Theme.ink)
+    private func rowField(column: String, value: CellValue) -> some View {
+        let colInfo = columnInfoIndex[column]
+        let kind = inspectorEditorKind(colInfo: colInfo, value: value)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(column)
+                    .font(.system(.callout, design: .monospaced).weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let dt = colInfo?.dataType {
+                    Tag(ColumnInfo.shortTypeName(dataType: dt, udtName: colInfo?.udtName), color: kind.badgeColor)
+                }
+                Spacer()
+            }
+
+            if editingColumn == column {
+                TextField("", text: $editingText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .focused($editFieldFocused)
+                    .onSubmit {
+                        commitInspectorEdit(column: column)
+                    }
+                    .onExitCommand {
+                        cancelInspectorEdit()
+                    }
+            } else if appVM.isInspectorEditable {
+                inspectorValueView(value: value, kind: kind)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        if needsRichInspectorEditor(kind: kind) {
+                            fieldEditorColumn = column
+                        } else {
+                            editingText = value.isNull ? "NULL" : value.displayString
+                            editingColumn = column
+                            editFieldFocused = true
+                        }
+                    }
+                    .popover(
+                        isPresented: Binding(
+                            get: { fieldEditorColumn == column },
+                            set: { if !$0 { fieldEditorColumn = nil } }
+                        ),
+                        arrowEdge: .leading
+                    ) {
+                        FieldEditorView(
+                            columnName: column,
+                            dataType: colInfo?.dataType ?? "text",
+                            isNullable: colInfo?.isNullable ?? true,
+                            initialValue: value,
+                            onSave: { newText in
+                                fieldEditorColumn = nil
+                                Task {
+                                    await appVM.updateInspectorCell(columnName: column, newText: newText)
+                                }
+                            },
+                            onCancel: {
+                                fieldEditorColumn = nil
+                            }
+                        )
+                    }
+            } else {
+                inspectorValueView(value: value, kind: kind)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
     }
 
     private func rebuildColumnIndexIfNeeded() {
-        // Reseed only when the columns set really changed. Tracking the count
-        // and the active object name catches add/drop column DDL and tab
-        // switches; a true content rebuild of the dictionary still runs only
-        // when the column array's identity differs from the stored snapshot.
         let cols = tableVM.columns
         if columnInfoIndex.count == cols.count,
            cols.allSatisfy({ columnInfoIndex[$0.name]?.dataType == $0.dataType })
@@ -252,10 +209,6 @@ struct InspectorView: View {
         }
     }
 
-    private func inspectorBadgeColor(_ kind: FieldEditorKind) -> Color {
-        kind.badgeColor
-    }
-
     @ViewBuilder
     private func inspectorValueView(value: CellValue, kind: FieldEditorKind) -> some View {
         switch kind {
@@ -266,28 +219,23 @@ struct InspectorView: View {
         case .boolean:
             boolPreview(value: value)
         default:
-            Text(value.displayString)
+            Text(value.isNull ? "NULL" : value.displayString)
                 .font(.system(.body, design: .monospaced))
-                .foregroundStyle(value.isNull ? .secondary : .primary)
+                .foregroundStyle(value.isNull ? .tertiary : .primary)
+                .lineLimit(6)
         }
     }
 
     @ViewBuilder
     private func jsonPreview(value: CellValue) -> some View {
         nullOr(value) {
-            let preview = prettyJSONPreview(value.displayString, maxLines: 4)
+            let preview = prettyJSONPreview(value.displayString, maxLines: 6)
             Text(preview)
                 .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.primary)
-                .lineLimit(4)
+                .lineLimit(6)
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.purple.opacity(0.05))
-                .cornerRadius(4)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.purple.opacity(0.15), lineWidth: 1)
-                )
+                .background(Theme.panel2, in: RoundedRectangle(cornerRadius: 5))
         }
     }
 
@@ -302,15 +250,15 @@ struct InspectorView: View {
             } else {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { idx, item in
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Text("\(idx)")
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.tertiary)
                                 .frame(width: 16, alignment: .trailing)
                             if item.isNull {
                                 Text("NULL")
                                     .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(.tertiary)
                             } else {
                                 Text(item.value)
                                     .font(.system(.caption, design: .monospaced))
@@ -319,19 +267,14 @@ struct InspectorView: View {
                         }
                     }
                     if items.count > 5 {
-                        Text("... +\(items.count - 5) more")
+                        Text("… \(items.count - 5) more")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.blue.opacity(0.05))
-                .cornerRadius(4)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.blue.opacity(0.15), lineWidth: 1)
-                )
+                .background(Theme.panel2, in: RoundedRectangle(cornerRadius: 5))
             }
         }
     }
@@ -342,13 +285,9 @@ struct InspectorView: View {
             let isTrue = value.displayString.lowercased() == "true"
                 || value.displayString == "t"
                 || value.displayString == "1"
-            HStack(spacing: 6) {
-                Image(systemName: isTrue ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(isTrue ? .green : .red)
-                Text(isTrue ? "true" : "false")
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(isTrue ? .green : .red)
-            }
+            Label(isTrue ? "true" : "false", systemImage: isTrue ? "checkmark.circle.fill" : "xmark.circle")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(isTrue ? Color.green : Color.secondary)
         }
     }
 
@@ -358,7 +297,7 @@ struct InspectorView: View {
         if value.isNull {
             Text("NULL")
                 .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
         } else {
             content()
         }
@@ -379,7 +318,7 @@ struct InspectorView: View {
         {
             let lines = str.components(separatedBy: "\n")
             value = lines.count > maxLines
-                ? lines.prefix(maxLines).joined(separator: "\n") + "\n..."
+                ? lines.prefix(maxLines).joined(separator: "\n") + "\n…"
                 : str
         } else {
             value = raw

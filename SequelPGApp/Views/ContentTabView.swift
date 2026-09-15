@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Rows of the selected table or view: optional filter bar, the data grid,
+/// and a bottom bar with insert/delete, filter toggle, page size, paging,
+/// export, and the approximate row count.
 struct ContentTabView: View {
     @Environment(AppViewModel.self) var appVM
     @Environment(TableViewModel.self) var tableVM
@@ -7,15 +10,11 @@ struct ContentTabView: View {
 
     @State private var showSQLPreview = false
 
-    /// Cached background — keeps the spinner backdrop / filter bar on the
-    /// theme's secondary panel tone instead of the system control color.
-    private static let chromeBackground = Theme.bg2
-
     var body: some View {
         @Bindable var tableVM = tableVM
         VStack(spacing: 0) {
-            // Filter bar (toggle with Cmd+F)
-            if tableVM.showFilterBar {
+            // Filter bar (toggle with ⌘F)
+            if tableVM.showFilterBar, navigatorVM.selectedObject?.type.hasQueryableContent == true {
                 filterBar
                 Divider()
             }
@@ -41,17 +40,6 @@ struct ContentTabView: View {
                             tableVM.deleteConfirmationRowIndex = rowIdx
                         } : nil,
                         selectedRowIndex: $tableVM.selectedRowIndex,
-                        isInsertingRow: tableVM.isInsertingRow,
-                        insertRowValues: Binding(
-                            get: { tableVM.newRowValues },
-                            set: { tableVM.newRowValues = $0 }
-                        ),
-                        onInsertCommit: {
-                            Task { await appVM.commitInsertRow() }
-                        },
-                        onInsertCancel: {
-                            appVM.cancelInsertRow()
-                        },
                         foreignKeyForColumn: { columnName in
                             tableVM.foreignKey(forColumn: columnName)
                         },
@@ -63,46 +51,37 @@ struct ContentTabView: View {
                         }
                     )
                 } else if let obj = navigatorVM.selectedObject, !obj.type.hasQueryableContent {
-                    VStack(spacing: 12) {
-                        Text(obj.name)
-                            .appDisplay(32)
-                        Text("Has no rows to browse — open the Definition tab for this \(obj.type.rawValue).")
-                            .appBody()
-                            .foregroundStyle(Theme.ink3)
-                            .multilineTextAlignment(.center)
+                    ContentUnavailableView {
+                        Label(obj.name, systemImage: obj.type.symbolName)
+                    } description: {
+                        Text("A \(obj.type.displayName.lowercased()) has no rows to browse. Open the Definition tab to see its source.")
+                    } actions: {
+                        Button("Show Definition") { appVM.selectedTab = .definition }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.bg)
                 } else if navigatorVM.selectedObject == nil {
-                    VStack(spacing: 14) {
-                        Text("v. — content")
-                            .appSectionLabel()
-                        Text("Pick a table.")
-                            .appDisplay(32)
-                        Text("Choose any table from the navigator to start browsing rows.")
-                            .appBody()
-                            .foregroundStyle(Theme.ink3)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 320)
+                    ContentUnavailableView {
+                        Label("No Table Selected", systemImage: "tablecells")
+                    } description: {
+                        Text("Choose a table or view in the sidebar to browse its rows.")
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.bg)
                 }
 
                 // Full-screen spinner only appears on the initial load. Once a
                 // result has been rendered, subsequent reloads keep the grid
                 // mounted so it doesn't blink in/out — feedback comes from the
-                // small inline spinner in the pagination bar instead.
+                // small inline spinner in the bottom bar instead.
                 if tableVM.isLoadingContent, tableVM.contentResult == nil {
-                    ProgressView("Loading...")
+                    ProgressView("Loading rows…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Self.chromeBackground)
+                        .background(Theme.bg)
                 }
             }
 
-            Divider()
-            paginationBar
+            if navigatorVM.selectedObject?.type.hasQueryableContent == true {
+                bottomBar
+            }
         }
+        .background(Theme.bg)
         .task {
             if let obj = navigatorVM.selectedObject,
                obj.type.hasQueryableContent,
@@ -124,8 +103,13 @@ struct ContentTabView: View {
                 appVM.reloadContentPage()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleFilterBar)) { _ in
-            tableVM.showFilterBar.toggle()
+        .sheet(isPresented: Binding(
+            get: { tableVM.isInsertingRow },
+            set: { if !$0 { appVM.cancelInsertRow() } }
+        )) {
+            InsertRowSheet()
+                .environment(appVM)
+                .environment(tableVM)
         }
         .alert(
             "Delete Row?",
@@ -160,19 +144,19 @@ struct ContentTabView: View {
                 Task { await appVM.executeCascadeDelete() }
             }
         } message: {
-            Text(appVM.cascadeDeleteContext?.errorMessage ?? "This row is referenced by other tables. Delete all referencing rows too?")
+            Text(appVM.cascadeDeleteContext?.errorMessage
+                ?? "This row is referenced by other tables. Delete all referencing rows too?")
         }
         .popover(isPresented: $showSQLPreview) {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Filter SQL")
                     .font(.headline)
                 Text(appVM.previewFilterSQL())
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
-                    .padding(.top, 4)
             }
             .padding()
-            .frame(minWidth: 300)
+            .frame(minWidth: 320)
         }
     }
 
@@ -181,108 +165,114 @@ struct ContentTabView: View {
     private var filterBar: some View {
         @Bindable var tableVM = tableVM
         // Materialize the column-name list once per filter-bar render rather
-        // than rebuilding it inside every filter row's Picker. For a 100-col
-        // table with 3 filters that was 300 Picker items rebuilt per redraw.
+        // than rebuilding it inside every filter row's Picker.
         let columnNames = tableVM.columns.map(\.name)
+        let hasUsableFilter = tableVM.filters.contains {
+            $0.op == .isNull || $0.op == .isNotNull || !$0.value.trimmingCharacters(in: .whitespaces).isEmpty
+        }
         return VStack(spacing: 6) {
             ForEach($tableVM.filters) { $filter in
                 filterRow(filter: $filter, columnNames: columnNames)
             }
 
             HStack(spacing: 8) {
-                Button("Clear Filter") {
+                Button("Clear") {
                     appVM.clearContentFilters()
                 }
-                .disabled(tableVM.activeFilterSQL == nil && tableVM.filters.allSatisfy { $0.value.isEmpty && $0.op != .isNull && $0.op != .isNotNull })
+                .disabled(tableVM.activeFilterSQL == nil && !hasUsableFilter)
 
-                Button("SQL Preview") {
+                Button("Show SQL") {
                     showSQLPreview.toggle()
                 }
+                .disabled(!hasUsableFilter)
 
                 Spacer()
 
                 if tableVM.activeFilterSQL != nil {
-                    Text("Filter active")
+                    Label("Filter applied", systemImage: "line.3.horizontal.decrease.circle.fill")
+                        .foregroundStyle(Color.accentColor)
                         .font(.caption)
-                        .foregroundStyle(.orange)
                 }
 
-                Button("Apply Filter") {
+                Button("Apply") {
                     appVM.applyContentFilters()
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
+                .disabled(!hasUsableFilter && tableVM.activeFilterSQL == nil)
             }
         }
-        .padding(.horizontal, 12)
+        .controlSize(.small)
+        .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Self.chromeBackground)
+        .background(.bar)
     }
 
     private func filterRow(filter: Binding<ContentFilter>, columnNames: [String]) -> some View {
         HStack(spacing: 6) {
-            // Column picker — column names are passed in from `filterBar` so
-            // they're materialized once per redraw rather than per filter row.
-            Picker("", selection: filter.column) {
+            Picker("Column", selection: filter.column) {
                 Text("Any Column").tag("")
                 ForEach(columnNames, id: \.self) { name in
                     Text(name).tag(name)
                 }
             }
-            .frame(width: 140)
+            .labelsHidden()
+            .frame(width: 150)
 
-            // Operator picker
-            Picker("", selection: filter.op) {
+            Picker("Operator", selection: filter.op) {
                 ForEach(FilterOperator.allCases, id: \.self) { op in
                     Text(op.rawValue).tag(op)
                 }
             }
+            .labelsHidden()
             .frame(width: 130)
 
             // Value field (hidden for is null / is not null)
             if filter.wrappedValue.op.needsValue {
-                TextField("Value...", text: filter.value)
+                TextField("Value", text: filter.value)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         appVM.applyContentFilters()
                     }
+            } else {
+                Spacer()
             }
 
-            // Add/remove buttons
             Button {
                 tableVM.filters.append(ContentFilter())
             } label: {
                 Image(systemName: "plus")
             }
             .buttonStyle(.borderless)
+            .help("Add a condition")
             .accessibilityLabel("Add filter")
 
-            if tableVM.filters.count > 1 {
-                Button {
-                    tableVM.filters.removeAll { $0.id == filter.id }
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Remove filter")
+            Button {
+                tableVM.filters.removeAll { $0.id == filter.id }
+            } label: {
+                Image(systemName: "minus")
             }
+            .buttonStyle(.borderless)
+            .disabled(tableVM.filters.count <= 1)
+            .help("Remove this condition")
+            .accessibilityLabel("Remove filter")
         }
     }
 
-    // MARK: - Pagination Bar
+    // MARK: - Bottom Bar
 
-    private var paginationBar: some View {
+    private var bottomBar: some View {
         @Bindable var tableVM = tableVM
-        return HStack {
+        let filterActive = tableVM.activeFilterSQL != nil
+        return BottomBar {
             Button {
                 appVM.startInsertRow()
             } label: {
                 Image(systemName: "plus")
-                    .frame(width: 16, height: 16)
             }
-            .accessibilityLabel("Insert row")
             .disabled(!appVM.canInsertContentRow || tableVM.isInsertingRow)
-            .help("Insert a new row")
+            .help(appVM.canInsertContentRow ? "Insert a new row" : "Rows can only be inserted into tables")
+            .accessibilityLabel("Insert row")
 
             Button {
                 if let idx = tableVM.selectedRowIndex {
@@ -290,50 +280,33 @@ struct ContentTabView: View {
                 }
             } label: {
                 Image(systemName: "minus")
-                    .frame(width: 16, height: 16)
             }
+            .disabled(tableVM.selectedRowIndex == nil || !appVM.canDeleteContentRow || tableVM.isInsertingRow)
+            .help(appVM.canDeleteContentRow
+                ? "Delete the selected row"
+                : "Rows can only be deleted from tables with a primary key")
             .accessibilityLabel("Delete row")
-            .disabled(tableVM.selectedRowIndex == nil || !appVM.canDeleteContentRow || appVM.cascadeDeleteContext != nil || tableVM.isInsertingRow)
-            .help("Delete the selected row")
 
-            if tableVM.isInsertingRow {
-                Divider()
-                    .frame(height: 16)
+            Divider().frame(height: 14)
 
-                Button("Save") {
-                    Task { await appVM.commitInsertRow() }
-                }
-                .keyboardShortcut(.return, modifiers: .command)
-
-                Button("Cancel", role: .cancel) {
-                    appVM.cancelInsertRow()
-                }
-                .keyboardShortcut(.escape, modifiers: [])
-            }
-
-            Divider()
-                .frame(height: 16)
-
-            // Filter toggle
             Button {
                 tableVM.showFilterBar.toggle()
             } label: {
-                Image(systemName: tableVM.activeFilterSQL != nil ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                    .foregroundStyle(tableVM.activeFilterSQL != nil ? .orange : .primary)
+                Image(systemName: filterActive
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle")
+                    .foregroundStyle(filterActive ? Color.accentColor : Color.primary)
             }
-            .buttonStyle(.borderless)
+            .help("Filter rows (⌘F)")
             .accessibilityLabel("Toggle filter bar")
-            .help("Filter rows (Cmd+F)")
 
-            Divider()
-                .frame(height: 16)
-
-            Picker("Rows:", selection: $tableVM.pageSize) {
+            Picker("Rows per page", selection: $tableVM.pageSize) {
                 ForEach(tableVM.pageSizeOptions, id: \.self) { size in
-                    Text("\(size)").tag(size)
+                    Text("\(size) rows").tag(size)
                 }
             }
-            .frame(width: 130)
+            .labelsHidden()
+            .fixedSize()
             .disabled(tableVM.isInsertingRow)
             .onChange(of: tableVM.pageSize) { _, _ in
                 tableVM.currentPage = 0
@@ -350,8 +323,9 @@ struct ContentTabView: View {
             } label: {
                 Image(systemName: "chevron.left")
             }
-            .accessibilityLabel("Previous page")
             .disabled(tableVM.currentPage <= 0 || tableVM.isInsertingRow)
+            .help("Previous page")
+            .accessibilityLabel("Previous page")
 
             PageJumpField(
                 page: tableVM.currentPage + 1,
@@ -372,18 +346,17 @@ struct ContentTabView: View {
             } label: {
                 Image(systemName: "chevron.right")
             }
-            .accessibilityLabel("Next page")
             .disabled(tableVM.currentPage >= tableVM.totalPages - 1 || tableVM.isInsertingRow)
+            .help("Next page")
+            .accessibilityLabel("Next page")
 
             Spacer()
 
             // Inline reload indicator — shown when a reload is in flight while
-            // an existing result is still on screen. Replaces the old behavior
-            // of swapping the entire grid for a centered spinner.
+            // an existing result is still on screen.
             if tableVM.isLoadingContent, tableVM.contentResult != nil {
                 ProgressView()
                     .controlSize(.small)
-                    .padding(.trailing, 4)
                     .accessibilityLabel("Reloading rows")
             }
 
@@ -392,24 +365,16 @@ struct ContentTabView: View {
                 defaultFileName: tableVM.selectedObjectName ?? "table"
             )
 
-            Text("≈ \(tableVM.approximateRowCount) rows")
-                .font(Theme.mono(size: 11))
-                .foregroundStyle(Theme.ink3)
+            Text("≈ \(tableVM.approximateRowCount.formatted()) rows")
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
                 .accessibilityLabel("Approximately \(tableVM.approximateRowCount) rows")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .frame(height: 32)
-        .background(Theme.bg2)
-        .overlay(alignment: .top) {
-            Rectangle().fill(Theme.line).frame(height: 1)
-        }
+        .buttonStyle(.borderless)
     }
 }
 
-/// Editable page number that commits on Enter or blur. The surrounding HStack
-/// previously showed a read-only "Page N of M" label, forcing users to click
-/// pagination arrows hundreds of times in large result sets.
+/// Editable page number that commits on Enter or blur.
 private struct PageJumpField: View {
     let page: Int
     let total: Int
@@ -424,7 +389,7 @@ private struct PageJumpField: View {
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.center)
                 .monospacedDigit()
-                .frame(width: 52)
+                .frame(width: 48)
                 .focused($focused)
                 .accessibilityLabel("Page number. Currently \(page) of \(total). Enter a number and press return to jump.")
                 .onChange(of: page, initial: true) { _, newValue in
@@ -444,5 +409,103 @@ private struct PageJumpField: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Form for inserting a new row: one field per column with the type, NULL-
+/// ability, and default shown as hints. Empty fields are omitted from the
+/// INSERT so the database applies its default (or NULL); typing `NULL`
+/// sends an explicit null.
+struct InsertRowSheet: View {
+    @Environment(AppViewModel.self) private var appVM
+    @Environment(TableViewModel.self) private var tableVM
+
+    private var requiredMissing: [String] {
+        tableVM.columns
+            .filter { !$0.isNullable && $0.columnDefault == nil && !$0.isIdentity }
+            .filter { (tableVM.newRowValues[$0.name] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(\.name)
+    }
+
+    var body: some View {
+        @Bindable var tableVM = tableVM
+        VStack(spacing: 0) {
+            HStack {
+                Text("Insert Row into \u{201C}\(tableVM.selectedObjectName ?? "table")\u{201D}")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 6)
+
+            Form {
+                Section {
+                    ForEach(tableVM.columns) { column in
+                        LabeledContent {
+                            TextField(
+                                column.name,
+                                text: Binding(
+                                    get: { tableVM.newRowValues[column.name] ?? "" },
+                                    set: { tableVM.newRowValues[column.name] = $0 }
+                                ),
+                                prompt: Text(placeholder(for: column))
+                            )
+                            .labelsHidden()
+                            .font(.system(.body, design: .monospaced))
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(column.name)
+                                        .font(.system(.body, design: .monospaced))
+                                    if column.isPrimaryKey {
+                                        Image(systemName: "key.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(Theme.amber)
+                                    }
+                                }
+                                Text(hint(for: column))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } footer: {
+                    Text("Leave a field empty to use the column default (or NULL). Type NULL for an explicit null.")
+                }
+            }
+            .formStyle(.grouped)
+
+            Divider()
+
+            SheetButtonBar(
+                confirmTitle: "Insert",
+                confirmDisabled: !requiredMissing.isEmpty,
+                onCancel: { appVM.cancelInsertRow() },
+                onConfirm: { Task { await appVM.commitInsertRow() } }
+            ) {
+                if !requiredMissing.isEmpty {
+                    Label("Required: \(requiredMissing.joined(separator: ", "))", systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .frame(width: 560)
+        .frame(minHeight: 320, idealHeight: min(200 + CGFloat(tableVM.columns.count) * 52, 720), maxHeight: 760)
+    }
+
+    private func placeholder(for column: ColumnInfo) -> String {
+        if column.isIdentity { return "generated" }
+        if let def = column.columnDefault, !def.isEmpty { return "default: \(def)" }
+        return column.isNullable ? "NULL" : "required"
+    }
+
+    private func hint(for column: ColumnInfo) -> String {
+        var parts = [ColumnInfo.shortTypeName(dataType: column.dataType, udtName: column.udtName)]
+        if !column.isNullable { parts.append("not null") }
+        return parts.joined(separator: " · ")
     }
 }

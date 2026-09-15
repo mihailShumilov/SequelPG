@@ -6,6 +6,9 @@ import SwiftUI
 /// Selection, copy, and scrolling are enabled; editing and completion are not.
 struct SQLSyntaxView: NSViewRepresentable {
     let text: String
+    /// Editor font from Settings ▸ Editor; shared with the SQL editor so DDL
+    /// and queries read identically.
+    var font: NSFont = EditorFontFamily.system.nsFont(size: CGFloat(EditorPreference.defaultFontSize))
 
     func makeNSView(context _: Context) -> NSScrollView {
         let textStorage = SQLTextStorage()
@@ -21,11 +24,10 @@ struct SQLSyntaxView: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = false
-        // Prefer the bundled JetBrains Mono face when present, fall back to the
-        // system monospaced font otherwise.
-        let jbm = NSFont(name: "JetBrainsMono-Regular", size: 13)
-            ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        textView.font = jbm
+        textView.font = font
+        textStorage.updateFont(font)
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
         textView.textColor = Theme.inkNS
         textView.backgroundColor = Theme.bgNS
         textView.drawsBackground = true
@@ -59,6 +61,10 @@ struct SQLSyntaxView: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView,
               let storage = textView.textStorage as? SQLTextStorage
         else { return }
+        if textView.font != font {
+            textView.font = font
+            storage.updateFont(font)
+        }
         if storage.string != text {
             storage.replaceCharacters(
                 in: NSRange(location: 0, length: storage.length),

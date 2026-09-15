@@ -27,56 +27,68 @@ struct FunctionLibrarySheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("SQL Function Library").font(.headline)
+            HStack(spacing: 10) {
+                Text("SQL Function Library")
+                    .font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding()
-
-            HStack {
-                TextField("Search…", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-
-                Picker("Category:", selection: $selectedCategory) {
-                    Text("All").tag(SQLFunctionLibrary.Category?.none)
+                Picker("Category", selection: $selectedCategory) {
+                    Text("All Categories").tag(SQLFunctionLibrary.Category?.none)
                     ForEach(SQLFunctionLibrary.Category.allCases) { cat in
                         Text(cat.rawValue).tag(SQLFunctionLibrary.Category?.some(cat))
                     }
                 }
-                .frame(width: 200)
+                .labelsHidden()
+                .frame(width: 170)
+                SearchField(text: $searchText, prompt: "Search functions", controlSize: .regular)
+                    .frame(width: 200)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
 
             Divider()
 
-            List(filtered) { entry in
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.signature)
-                            .font(.system(.callout, design: .monospaced))
-                        Text(entry.summary)
+            if filtered.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            } else {
+                List(filtered) { entry in
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.signature)
+                                .font(.system(.callout, design: .monospaced))
+                                .textSelection(.enabled)
+                            Text(entry.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(entry.category.rawValue)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
+                        Button("Insert") {
+                            insertIntoEditor(entry.signature)
+                        }
+                        .controlSize(.small)
+                        .help("Insert this signature into the query editor")
                     }
-                    Spacer()
-                    Text(entry.category.rawValue)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        insertIntoEditor(entry.signature)
-                    } label: {
-                        Image(systemName: "arrow.right.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Insert into editor")
+                    .padding(.vertical, 3)
                 }
-                .padding(.vertical, 3)
+                .listStyle(.inset)
             }
-            .listStyle(.plain)
+
+            Divider()
+
+            HStack {
+                Text("\(filtered.count) function\(filtered.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .frame(width: 600, height: 500)
+        .frame(width: 640, height: 520)
     }
 
     private func insertIntoEditor(_ signature: String) {

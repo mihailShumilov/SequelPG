@@ -50,9 +50,9 @@ struct ExportSheet: View {
         HStack {
             Text("Export Database").font(.headline)
             Spacer()
-            Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
         }
-        .padding()
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Options
@@ -109,7 +109,7 @@ struct ExportSheet: View {
                         if vm.selectedSchemas.isEmpty {
                             Text("Select at least one schema to export.")
                                 .font(.caption)
-                                .foregroundStyle(Theme.amber)
+                                .foregroundStyle(.orange)
                         }
                     }
                 }
@@ -199,7 +199,7 @@ struct ExportSheet: View {
             if let error = vm.errorMessage {
                 Text(error)
                     .font(Theme.mono(size: 11))
-                    .foregroundStyle(Theme.rose)
+                    .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -227,12 +227,15 @@ struct ExportSheet: View {
                 }
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             } else {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button("Export…") { presentSavePanel() }
                     .buttonStyle(.borderedProminent)
                     .disabled(vm.toolMissing || !canExport)
             }
         }
-        .padding()
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Actions

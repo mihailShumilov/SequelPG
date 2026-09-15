@@ -11,7 +11,7 @@ struct DiagramTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Rectangle().fill(Theme.line).frame(height: 1)
+            Divider()
             content
         }
         .task { await initialLoad() }
@@ -68,9 +68,9 @@ struct DiagramTabView: View {
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Theme.bg)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.bar)
     }
 
     private var zoomControls: some View {
@@ -78,7 +78,8 @@ struct DiagramTabView: View {
             Button { setZoom(erdVM.scale - 0.1) } label: { Image(systemName: "minus.magnifyingglass") }
                 .help("Zoom out")
             Text("\(Int((erdVM.scale * 100).rounded()))%")
-                .appMono(11, color: Theme.ink3)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
                 .frame(width: 42)
             Button { setZoom(erdVM.scale + 0.1) } label: { Image(systemName: "plus.magnifyingglass") }
                 .help("Zoom in")
@@ -104,31 +105,23 @@ struct DiagramTabView: View {
                     .controlSize(.small)
             }
         } else if let error = erdVM.errorMessage {
-            centered {
-                VStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 24))
-                        .foregroundStyle(Theme.amber)
-                    Text(error)
-                        .appMono(12, color: Theme.ink2)
-                        .multilineTextAlignment(.center)
-                    Button("Retry") { reload() }
-                }
-                .frame(maxWidth: 360)
+            ContentUnavailableView {
+                Label("Could Not Load Diagram", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Retry") { reload() }
             }
         } else if erdVM.diagram == nil || erdVM.visibleNodes.isEmpty {
-            centered {
-                VStack(spacing: 10) {
-                    Image(systemName: "point.3.connected.trianglepath.dotted")
-                        .font(.system(size: 26))
-                        .foregroundStyle(Theme.ink4)
-                    Text(emptyMessage)
-                        .appMono(12, color: Theme.ink3)
-                    if erdVM.hasHiddenNodes {
-                        Button("Show All Tables") {
-                            erdVM.showAllNodes()
-                            appVM.saveDiagramLayout()
-                        }
+            ContentUnavailableView {
+                Label(erdVM.hasHiddenNodes ? "All Tables Hidden" : "Nothing to Diagram", systemImage: "point.3.connected.trianglepath.dotted")
+            } description: {
+                Text(emptyMessage)
+            } actions: {
+                if erdVM.hasHiddenNodes {
+                    Button("Show All Tables") {
+                        erdVM.showAllNodes()
+                        appVM.saveDiagramLayout()
                     }
                 }
             }

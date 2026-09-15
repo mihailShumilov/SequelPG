@@ -19,43 +19,50 @@ struct IndexCreateSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Create Index on \"\(schema).\(table)\"")
+            Text("New Index on \u{201C}\(schema).\(table)\u{201D}")
                 .font(.headline)
-                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+
             Form {
-                TextField("Index name (optional):", text: $name)
-                Toggle("UNIQUE", isOn: $unique)
-                Picker("Method:", selection: $method) {
-                    ForEach(methods, id: \.self) { Text($0).tag($0) }
+                Section {
+                    TextField("Name", text: $name, prompt: Text("Optional — PostgreSQL picks one"))
+                        .font(.system(.body, design: .monospaced))
+                    Picker("Method", selection: $method) {
+                        ForEach(methods, id: \.self) { Text($0).tag($0) }
+                    }
+                    Toggle("Unique", isOn: $unique)
                 }
-                Section("Columns (in order):") {
+                Section {
                     ForEach(availableColumns, id: \.self) { col in
-                        Toggle(col, isOn: Binding(
+                        Toggle(isOn: Binding(
                             get: { selectedColumns.contains(col) },
                             set: { isOn in
-                                if isOn { selectedColumns.insert(col) }
-                                else { selectedColumns.remove(col) }
+                                if isOn { selectedColumns.insert(col) } else { selectedColumns.remove(col) }
                             }
-                        ))
+                        )) {
+                            Text(col).font(.system(.body, design: .monospaced))
+                        }
                     }
+                } header: {
+                    Text("Columns")
+                } footer: {
+                    Text("Columns are indexed in table order. Use the query editor for expression or partial indexes.")
                 }
             }
             .formStyle(.grouped)
-            .padding(.horizontal)
 
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    commitCreate()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(selectedColumns.isEmpty)
+            Divider()
+
+            SheetButtonBar(confirmTitle: "Create", confirmDisabled: selectedColumns.isEmpty) {
+                dismiss()
+            } onConfirm: {
+                commitCreate()
             }
-            .padding()
         }
-        .frame(width: 460, height: 460)
+        .frame(width: 460)
+        .frame(minHeight: 380, idealHeight: min(300 + CGFloat(availableColumns.count) * 28, 640))
     }
 
     private func commitCreate() {

@@ -1,78 +1,78 @@
 import AppKit
 import SwiftUI
 
-/// Visual design system for SequelPG — a developer-tool aesthetic. Warm
-/// charcoal canvas in dark mode, warm cream canvas in light mode, phosphor-lime
-/// accent in both, JetBrains Mono throughout (bold for display headlines,
-/// regular for technical content), SF Pro for UI chrome. No serif and no italic
-/// anywhere — the typographic hierarchy comes from size and weight, which
-/// reads cleaner in a tool meant for code.
+/// Visual vocabulary for SequelPG. The chrome — windows, sidebar, toolbars,
+/// lists, sheets, buttons, labels — uses the system's semantic colors and
+/// SF Pro so the app looks and behaves like any other macOS application and
+/// respects the user's accent-color and appearance settings. Monospaced type
+/// and the syntax palette below are reserved for *data and code*: SQL, DDL,
+/// identifiers, cell values, type names.
 ///
-/// Colors are built with `NSColor(name:dynamicProvider:)` so a single token
-/// resolves to the dark or light variant based on the host view's effective
-/// appearance. SwiftUI `Color(nsColor:)` and AppKit drawing both honor the
-/// dynamic resolution.
+/// Colors are exposed both as SwiftUI `Color` and as `NSColor` so AppKit-backed
+/// views (the SQL editor, the results grid) resolve to the same values.
 enum Theme {
-    // MARK: - Palette (mirrors --app-* tokens in the web design)
+    // MARK: - Semantic surfaces (system-backed)
 
-    static let bg = swiftUI(bgNS)
-    static let bg2 = swiftUI(bg2NS)
-    static let panel = swiftUI(panelNS)
-    static let panel2 = swiftUI(panel2NS)
-    static let line = swiftUI(lineNS)
-    static let line2 = swiftUI(line2NS)
+    /// Content canvas: editors, result grids, definition text.
+    static let bg = Color(nsColor: bgNS)
+    /// Window chrome: bars, panels, the sidebar's fallback.
+    static let bg2 = Color(nsColor: bg2NS)
+    /// Raised panel inside content (cards, popup lists).
+    static let panel = Color(nsColor: panelNS)
+    /// Slightly recessed panel (card headers, secondary strips).
+    static let panel2 = Color(nsColor: panel2NS)
+    static let line = Color(nsColor: lineNS)
+    static let line2 = Color(nsColor: line2NS)
 
-    static let ink = swiftUI(inkNS)
-    static let ink2 = swiftUI(ink2NS)
-    static let ink3 = swiftUI(ink3NS)
-    static let ink4 = swiftUI(ink4NS)
+    static let ink = Color(nsColor: inkNS)
+    static let ink2 = Color(nsColor: ink2NS)
+    static let ink3 = Color(nsColor: ink3NS)
+    static let ink4 = Color(nsColor: ink4NS)
 
-    static let accent = swiftUI(accentNS)
-    static let accentDim = swiftUI(accentDimNS)
+    static let accent = Color.accentColor
+    static let accentDim = Color.accentColor.opacity(0.7)
+    /// Foreground on top of an accent fill.
+    static let onAccent = Color.white
 
-    // Editorial color tokens — used for syntax highlighting and type pills.
-    static let rose = swiftUI(roseNS)
-    static let blue = swiftUI(blueNS)
-    static let violet = swiftUI(violetNS)
-    static let amber = swiftUI(amberNS)
-    static let mauve = swiftUI(mauveNS)
-    static let cyan = swiftUI(cyanNS)
+    // MARK: - Data/code palette (syntax highlighting, type pills, ERD)
 
-    /// Foreground color to use on top of `accent` fills (lime is bright — needs
-    /// near-black ink for legibility).
-    static let onAccent = swiftUI(onAccentNS)
+    static let rose = Color(nsColor: roseNS)
+    static let blue = Color(nsColor: blueNS)
+    static let violet = Color(nsColor: violetNS)
+    static let amber = Color(nsColor: amberNS)
+    static let mauve = Color(nsColor: mauveNS)
+    static let cyan = Color(nsColor: cyanNS)
 
-    // MARK: - NSColor bridges (for AppKit views: NSTableView, NSTextView, etc.)
+    // MARK: - NSColor bridges
 
-    static let bgNS = dynamic("app.bg", dark: 0x14_13_0F, light: 0xFA_F6_EC)
-    static let bg2NS = dynamic("app.bg2", dark: 0x1A_19_16, light: 0xF1_EC_DE)
-    static let panelNS = dynamic("app.panel", dark: 0x1D_1C_19, light: 0xEC_E5_D4)
-    static let panel2NS = dynamic("app.panel2", dark: 0x23_21_20, light: 0xE2_DA_C7)
-    static let lineNS = dynamic("app.line", dark: 0x2A_29_25, light: 0xD3_CC_B6)
-    static let line2NS = dynamic("app.line2", dark: 0x36_34_2F, light: 0xBE_B5_9C)
+    static let bgNS = NSColor.textBackgroundColor
+    static let bg2NS = NSColor.windowBackgroundColor
+    static let panelNS = NSColor.controlBackgroundColor
+    static let panel2NS = NSColor.underPageBackgroundColor
+    static let lineNS = NSColor.separatorColor
+    static let line2NS = NSColor.gridColor
 
-    static let inkNS = dynamic("app.ink", dark: 0xF0_EC_E2, light: 0x1A_18_12)
-    static let ink2NS = dynamic("app.ink2", dark: 0xC8_C2_B3, light: 0x40_3C_33)
-    static let ink3NS = dynamic("app.ink3", dark: 0x8C_86_76, light: 0x6F_69_59)
-    static let ink4NS = dynamic("app.ink4", dark: 0x5E_5A_4F, light: 0xA0_99_87)
+    static let inkNS = NSColor.labelColor
+    static let ink2NS = NSColor.secondaryLabelColor
+    static let ink3NS = NSColor.secondaryLabelColor
+    static let ink4NS = NSColor.tertiaryLabelColor
 
-    static let accentNS = dynamic("app.accent", dark: 0xB9_F2_5A, light: 0x73_A8_22)
-    static let accentDimNS = dynamic("app.accentDim", dark: 0x94_C9_48, light: 0x5B_85_1A)
+    static let accentNS = NSColor.controlAccentColor
 
-    static let roseNS = dynamic("app.rose", dark: 0xEF_9B_8A, light: 0xC6_5D_3F)
+    static let roseNS = dynamic("app.rose", dark: 0xEF_9B_8A, light: 0xB8_4A_2E)
     static let blueNS = dynamic("app.blue", dark: 0x9E_C5_FF, light: 0x2F_5F_B7)
     static let violetNS = dynamic("app.violet", dark: 0xC5_A7_FF, light: 0x6A_4A_C8)
-    static let amberNS = dynamic("app.amber", dark: 0xFF_D4_79, light: 0xB0_82_18)
+    static let amberNS = dynamic("app.amber", dark: 0xFF_D4_79, light: 0x9E_74_0F)
     static let mauveNS = dynamic("app.mauve", dark: 0xD4_A3_FF, light: 0x84_4F_C0)
     static let cyanNS = dynamic("app.cyan", dark: 0x80_D4_D6, light: 0x1F_7B_7D)
-
-    static let onAccentNS = dynamic("app.onAccent", dark: 0x0F_0F_0E, light: 0x10_14_06)
 
     // MARK: - Dynamic color helpers
 
     private static func dynamic(_ name: String, dark: Int, light: Int) -> NSColor {
         NSColor(name: NSColor.Name(name)) { appearance in
-            let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .accessibilityHighContrastDarkAqua, .accessibilityHighContrastVibrantDark]) != nil
+            let isDark = appearance.bestMatch(from: [
+                .darkAqua, .vibrantDark, .accessibilityHighContrastDarkAqua, .accessibilityHighContrastVibrantDark,
+            ]) != nil
             return color(fromHex: isDark ? dark : light)
         }
     }
@@ -84,43 +84,22 @@ enum Theme {
         return NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
     }
 
-    private static func swiftUI(_ ns: NSColor) -> Color { Color(nsColor: ns) }
-
     // MARK: - Fonts
-    //
-    // Custom font PostScript names. When the bundled .ttf files are present
-    // Font.custom() picks them up; otherwise SwiftUI silently falls back to the
-    // system font for that face, so the app keeps rendering. Inter is already
-    // covered by `-apple-system` (SF Pro), so we don't bundle it.
 
-    enum FontName {
-        static let monoRegular = "JetBrainsMono-Regular"
-        static let monoMedium = "JetBrainsMono-Medium"
-        static let monoBold = "JetBrainsMono-Bold"
-    }
-
+    /// Monospaced font for identifiers, values, and SQL fragments shown inside
+    /// otherwise-proportional UI. Uses the system monospaced face (SF Mono).
     static func mono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        let name: String
-        switch weight {
-        case .medium, .semibold: name = FontName.monoMedium
-        case .bold, .heavy, .black: name = FontName.monoBold
-        default: name = FontName.monoRegular
-        }
-        return .custom(name, size: size).weight(weight)
+        .system(size: size, weight: weight, design: .monospaced)
     }
 
-    /// Display headline font — JetBrains Mono Bold. Used for object names,
-    /// section titles, and empty-state headlines. Replaces the earlier
-    /// Instrument Serif italic; a developer tool reads better with a
-    /// consistent monospace identity than with an editorial serif.
+    /// Emphasised proportional font for object titles and empty-state headlines.
     static func display(size: CGFloat) -> Font {
-        .custom(FontName.monoBold, size: size).weight(.bold)
+        .system(size: size, weight: .semibold)
     }
 
-    /// Registers bundled `.ttf` files at runtime. Called once from the app entry
-    /// point. The build also sets `INFOPLIST_KEY_ATSApplicationFontsPath` so the
-    /// fonts are available without this call; running both is harmless and means
-    /// we still get the fonts in unit tests / preview hosts that bypass Info.plist.
+    /// Registers the bundled JetBrains Mono faces so the editor-font preference
+    /// can offer them. The build also sets `INFOPLIST_KEY_ATSApplicationFontsPath`;
+    /// registering again is harmless and keeps previews/tests working.
     static func registerBundledFonts() {
         let fontNames = [
             "JetBrainsMono-Regular",
@@ -132,8 +111,6 @@ enum Theme {
                 ?? Bundle.main.url(forResource: name, withExtension: "ttf")
             else { continue }
             var error: Unmanaged<CFError>?
-            // Ignore failures from "already registered" — re-registering on hot reload
-            // is a no-op but returns false.
             _ = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
         }
     }
@@ -151,9 +128,6 @@ extension Theme {
         if dt == "json" || dt == "jsonb" || udt == "json" || udt == "jsonb" { return amber }
         if dt.contains("timestamp") || dt.contains("time") || dt == "date" { return cyan }
         if udt == "user-defined" || dt == "user-defined" { return mauve }
-        // Heuristic: PG built-ins typically have lowercase short names without
-        // an underscore prefix. User-defined types in this app commonly look
-        // like `address_t`, `email_address`, `order_status`, etc.
         if udt.isEmpty || ["uuid", "text", "varchar", "char", "int2", "int4", "int8", "bool", "boolean",
                            "smallint", "integer", "bigint", "numeric", "decimal", "real",
                            "double precision", "float4", "float8", "bytea", "money"].contains(dt) {
@@ -166,38 +140,29 @@ extension Theme {
 // MARK: - Reusable view modifiers
 
 extension View {
-    /// Inter / SF Pro 13pt body text in the warm off-white ink color. Used for
-    /// the default UI chrome — labels, list rows, button text — wherever the
-    /// design uses the `--app-font-ui` token.
+    /// Standard 13pt body text in the primary label color.
     func appBody(_ size: CGFloat = 13) -> some View {
         font(.system(size: size))
-            .foregroundStyle(Theme.ink)
+            .foregroundStyle(.primary)
     }
 
-    /// JetBrains Mono for technical content: identifiers, SQL keywords, types,
-    /// counts. Matches the `--app-font-mono` token from the web design.
-    func appMono(_ size: CGFloat = 12, weight: Font.Weight = .regular, color: Color = Theme.ink2) -> some View {
+    /// Monospaced text for identifiers, values, and SQL fragments.
+    func appMono(_ size: CGFloat = 12, weight: Font.Weight = .regular, color: Color = .secondary) -> some View {
         font(Theme.mono(size: size, weight: weight))
             .foregroundStyle(color)
     }
 
-    /// Display headline — JetBrains Mono Bold. Used sparingly for object
-    /// names, section titles, and empty-state headlines. Same family as the
-    /// body mono so the whole UI reads as a single typographic system; size
-    /// and weight do the work that an editorial serif used to.
-    func appDisplay(_ size: CGFloat = 22, color: Color = Theme.ink) -> some View {
+    /// Emphasised title for object headers and empty states.
+    func appDisplay(_ size: CGFloat = 20, color: Color = .primary) -> some View {
         font(Theme.display(size: size))
             .foregroundStyle(color)
     }
 
-    /// Section header label: tiny uppercase mono text. Mirrors the `.sb-sec`,
-    /// `.cf-section-h`, `.struct-sub-h` titles in the web CSS — a quiet structural
-    /// cue that doesn't compete with content.
+    /// Quiet uppercase section caption (like Finder's sidebar group titles).
     func appSectionLabel() -> some View {
-        font(Theme.mono(size: 10, weight: .regular))
-            .tracking(1.5)
+        font(.caption.weight(.semibold))
             .textCase(.uppercase)
-            .foregroundStyle(Theme.ink3)
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -205,7 +170,7 @@ extension View {
 
 /// A small uppercase tag with a colored tint, used for things like "BTREE",
 /// "PRIMARY", "PARTIAL" next to index names, or "uuid", "user-defined" next to
-/// column names in headers.
+/// column names.
 struct Tag: View {
     let text: String
     let color: Color
@@ -217,48 +182,19 @@ struct Tag: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.mono(size: 9, weight: .medium))
-            .tracking(0.8)
+            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
             .textCase(.uppercase)
             .padding(.horizontal, 5)
-            .padding(.vertical, 1)
+            .padding(.vertical, 1.5)
             .background(color.opacity(0.14))
             .foregroundStyle(color)
             .clipShape(.rect(cornerRadius: 3))
     }
 }
 
-/// Section header for editorial structure — italic display title with an optional
-/// roman-numeral cue (i, ii, iii…) and right-aligned metadata. Used at the top
-/// of the Structure tab and the Definition tab, and for the Inspector's "Row
-/// Detail" / "Inspector" headers.
-struct EditorialSectionHeader: View {
-    let title: String
-    var numeral: String? = nil
-    var kicker: String? = nil
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
-            if let numeral {
-                Text(numeral)
-                    .appMono(11, color: Theme.ink4)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                if let kicker {
-                    Text(kicker)
-                        .appSectionLabel()
-                }
-                Text(title)
-                    .appDisplay(28)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-}
-
-/// Sub-section heading inside Structure / Inspector — a single line with a
-/// monospaced "— Title" prefix, a count, and an optional trailing "+" button.
-struct SubSectionHeader<Trailing: View>: View {
+/// Section title used inside content panes (Structure, Inspector, EXPLAIN).
+/// Headline on the left, optional count, optional trailing control.
+struct SectionHeader<Trailing: View>: View {
     let title: String
     let count: Int?
     @ViewBuilder let trailing: () -> Trailing
@@ -270,58 +206,216 @@ struct SubSectionHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("— \(title)")
-                .font(Theme.mono(size: 11, weight: .regular))
-                .tracking(1.6)
-                .textCase(.uppercase)
-                .foregroundStyle(Theme.ink2)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.headline)
             if let count {
                 Text("\(count)")
-                    .appMono(11, color: Theme.ink4)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             trailing()
         }
-        .padding(.bottom, 8)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.line).frame(height: 1)
+    }
+}
+
+/// Compact status strip pinned to the bottom of a content pane (Finder-style).
+/// Hosts small controls and read-only status text on a bar material.
+struct BottomBar<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 10) {
+            content()
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+    }
+}
+
+/// Inline, non-modal message banner (errors, warnings, notes) that sits at the
+/// top of a pane instead of interrupting with an alert.
+struct InlineBanner: View {
+    enum Kind {
+        case error, warning, info
+
+        var color: Color {
+            switch self {
+            case .error: return .red
+            case .warning: return .orange
+            case .info: return .accentColor
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .error: return "xmark.octagon.fill"
+            case .warning: return "exclamationmark.triangle.fill"
+            case .info: return "info.circle.fill"
+            }
+        }
+    }
+
+    let kind: Kind
+    let message: String
+    var onDismiss: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: kind.icon)
+                .foregroundStyle(kind.color)
+            Text(message)
+                .font(.callout)
+                .textSelection(.enabled)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if let onDismiss {
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(kind.color.opacity(0.1))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+/// Standard bottom-right button row for sheets: optional leading content, then
+/// Cancel and a prominent default action.
+struct SheetButtonBar<Leading: View>: View {
+    let cancelTitle: String
+    let confirmTitle: String
+    let confirmDisabled: Bool
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+    @ViewBuilder let leading: () -> Leading
+
+    init(
+        cancelTitle: String = "Cancel",
+        confirmTitle: String,
+        confirmDisabled: Bool = false,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping () -> Void,
+        @ViewBuilder leading: @escaping () -> Leading = { EmptyView() }
+    ) {
+        self.cancelTitle = cancelTitle
+        self.confirmTitle = confirmTitle
+        self.confirmDisabled = confirmDisabled
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        self.leading = leading
+    }
+
+    var body: some View {
+        HStack {
+            leading()
+            Spacer()
+            Button(cancelTitle, action: onCancel)
+                .keyboardShortcut(.cancelAction)
+            Button(confirmTitle, action: onConfirm)
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .disabled(confirmDisabled)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+    }
+}
+
+/// Text field with a menu of suggested values. Used wherever a PostgreSQL
+/// type name (or similar free-form identifier) is entered: the user can pick
+/// a common value or type any custom one.
+struct SuggestingTextField: View {
+    let label: String
+    @Binding var text: String
+    let suggestions: [String]
+    var monospaced: Bool = true
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField(label, text: $text)
+                .font(monospaced ? .system(.body, design: .monospaced) : .body)
+            Menu {
+                ForEach(suggestions, id: \.self) { value in
+                    Button(value) { text = value }
+                }
+            } label: {
+                Image(systemName: "chevron.up.chevron.down")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Choose a common value")
         }
     }
 }
 
-/// Decorative keyboard-cap glyph — `⌘`, `↵`, `F`, etc. — used in empty-state
-/// hints and the Run-query toolbar's "⌘↵ to run" affordance.
-struct AppKbd: View {
-    let key: String
-    var body: some View {
-        Text(key)
-            .font(Theme.mono(size: 11, weight: .regular))
-            .foregroundStyle(Theme.ink2)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 1)
-            .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Theme.panel2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(Theme.line2, lineWidth: 1)
-                    )
-            )
-    }
+/// Common PostgreSQL column type names offered by `SuggestingTextField`.
+enum PGTypeSuggestions {
+    static let column = [
+        "text", "varchar(255)", "integer", "bigint", "smallint",
+        "boolean", "numeric", "numeric(10,2)", "real", "double precision",
+        "date", "timestamp", "timestamptz", "time", "timetz", "interval",
+        "uuid", "jsonb", "json", "bytea", "serial", "bigserial",
+    ]
 }
 
-/// Dashed dotted rule — used between Inspector sections, replacing the macOS
-/// default solid Divider where the design calls for the lighter editorial cue.
-struct DottedRule: View {
-    var body: some View {
-        Rectangle()
-            .fill(Color.clear)
-            .frame(height: 1)
-            .overlay(
-                Rectangle()
-                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                    .foregroundStyle(Theme.line)
-            )
+// MARK: - Native search field
+
+/// `NSSearchField` bridge: rounded search-style field with the system
+/// magnifier, clear button, and Escape-to-clear. Used for sidebar and list
+/// filtering where SwiftUI's `.searchable` placement isn't appropriate.
+struct SearchField: NSViewRepresentable {
+    @Binding var text: String
+    var prompt: String = "Filter"
+    var controlSize: NSControl.ControlSize = .small
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = prompt
+        field.controlSize = controlSize
+        field.font = .systemFont(ofSize: NSFont.systemFontSize(for: controlSize))
+        field.sendsSearchStringImmediately = true
+        field.sendsWholeSearchString = false
+        field.delegate = context.coordinator
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.text = $text
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSSearchField else { return }
+            if text.wrappedValue != field.stringValue {
+                text.wrappedValue = field.stringValue
+            }
+        }
     }
 }

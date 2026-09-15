@@ -1,57 +1,73 @@
 import AppKit
 import SwiftUI
 
-/// SwiftUI Settings scene (`⌘,`). Houses the Appearance picker and the
-/// PostgreSQL client-tools location — extend with new tabs as more land.
+/// SwiftUI Settings scene (`⌘,`): General (appearance), Editor (completion,
+/// timeout, font), and Tools (PostgreSQL client binaries).
 struct SettingsView: View {
-    @Environment(ThemePreference.self) private var themePreference
-
     var body: some View {
         TabView {
             GeneralSettingsPane()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            EditorSettingsPane()
+                .tabItem { Label("Editor", systemImage: "text.cursor") }
+            ToolsSettingsPane()
+                .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
         }
-        .frame(width: 480, height: 360)
+        .frame(width: 520)
     }
 }
 
 private struct GeneralSettingsPane: View {
     @Environment(ThemePreference.self) private var themePreference
-    @Environment(EditorPreference.self) private var editorPreference
-
-    /// Mirrors `PGToolchain.configuredDirectory` (UserDefaults-backed). Local
-    /// state because the toolchain isn't an `@Observable` model.
-    @State private var toolsDirectory: String = PGToolchain.configuredDirectory ?? ""
-    @State private var detectedDump: String?
-    @State private var detectedPsql: String?
 
     var body: some View {
         @Bindable var pref = themePreference
-        @Bindable var editorPref = editorPreference
         Form {
-            Section {
-                Picker("Appearance", selection: $pref.mode) {
-                    ForEach(ThemeMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
+            Picker("Appearance", selection: $pref.mode) {
+                ForEach(ThemeMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text("Auto follows the system appearance and switches live between Light and Dark.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .formStyle(.grouped)
+        .frame(height: 140)
+    }
+}
+
+private struct EditorSettingsPane: View {
+    @Environment(EditorPreference.self) private var editorPreference
+
+    var body: some View {
+        @Bindable var pref = editorPreference
+        Form {
+            Section("Font") {
+                Picker("Family", selection: $pref.fontFamily) {
+                    ForEach(EditorFontFamily.allCases) { family in
+                        Text(family.label).tag(family)
                     }
                 }
-                .pickerStyle(.segmented)
-                Text("Auto follows your macOS appearance setting and switches when the system toggles between Light and Dark.")
-                    .font(.caption)
+                Stepper(value: $pref.fontSize, in: EditorPreference.fontSizeRange) {
+                    LabeledContent("Size", value: "\(pref.fontSize) pt")
+                }
+                Text("SELECT id, created_at FROM orders WHERE total > 100;")
+                    .font(Font(pref.editorFont))
+                    .lineLimit(1)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } header: {
-                Text("Theme").font(.headline)
             }
 
-            Section {
-                Toggle("Suggest completions while typing", isOn: $editorPref.autocompleteWhileTyping)
-                Text("Pops the autocomplete list automatically as you type in the SQL editor. Turn this off to type without interruption — you can still request completions on demand by pressing Escape.")
+            Section("Completion") {
+                Toggle("Suggest completions while typing", isOn: $pref.autocompleteWhileTyping)
+                Text("Turn this off to type without interruption — completions are still available on demand with Escape or ⌃Space.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                Picker("Query timeout", selection: $editorPref.queryTimeoutSeconds) {
+            Section("Execution") {
+                Picker("Query timeout", selection: $pref.queryTimeoutSeconds) {
                     Text("5 seconds").tag(5)
                     Text("10 seconds").tag(10)
                     Text("30 seconds").tag(30)
@@ -59,18 +75,28 @@ private struct GeneralSettingsPane: View {
                     Text("5 minutes").tag(300)
                     Text("No limit").tag(0)
                 }
-                Text("Queries that run longer than this are stopped automatically. With “No limit”, a query runs until it finishes or you press Stop.")
+                Text("Queries running longer than this are stopped automatically. With “No limit”, a query runs until it finishes or you press Stop (⌘.).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } header: {
-                Text("SQL Editor").font(.headline)
             }
+        }
+        .formStyle(.grouped)
+        .frame(height: 420)
+    }
+}
 
+private struct ToolsSettingsPane: View {
+    /// Mirrors `PGToolchain.configuredDirectory` (UserDefaults-backed). Local
+    /// state because the toolchain isn't an `@Observable` model.
+    @State private var toolsDirectory: String = PGToolchain.configuredDirectory ?? ""
+    @State private var detectedDump: String?
+    @State private var detectedPsql: String?
+
+    var body: some View {
+        Form {
             Section {
                 HStack {
                     TextField("Directory", text: $toolsDirectory, prompt: Text("Auto-detect"))
-                        .textFieldStyle(.roundedBorder)
                         .onChange(of: toolsDirectory) { _, newValue in
                             PGToolchain.configuredDirectory = newValue
                             refreshDetection()
@@ -79,32 +105,33 @@ private struct GeneralSettingsPane: View {
                 }
                 detectionRow(tool: "pg_dump", path: detectedDump)
                 detectionRow(tool: "psql", path: detectedPsql)
-                Text("Used for database export and SQL import. Leave blank to auto-detect Postgres.app, Homebrew, and standard installs.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             } header: {
-                Text("PostgreSQL Client Tools").font(.headline)
+                Text("PostgreSQL Client Tools")
+            } footer: {
+                Text("Used for Export Database and Import SQL File. Leave the directory empty to auto-detect Postgres.app, Homebrew, and the EDB installer.")
             }
         }
         .formStyle(.grouped)
-        .padding(.vertical, 4)
+        .frame(height: 240)
         .task { refreshDetection() }
     }
 
     @ViewBuilder
     private func detectionRow(tool: String, path: String?) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: path == nil ? "xmark.circle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(path == nil ? Theme.rose : Color.green)
-                .accessibilityHidden(true)
-            Text(tool).font(Theme.mono(size: 11))
-            Spacer()
-            Text(path ?? "not found")
-                .font(.caption2)
+        LabeledContent {
+            Text(path ?? "Not found")
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .textSelection(.enabled)
+        } label: {
+            Label {
+                Text(tool).font(.system(.body, design: .monospaced))
+            } icon: {
+                Image(systemName: path == nil ? "xmark.circle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(path == nil ? Color.red : Color.green)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(tool): \(path ?? "not found")")
