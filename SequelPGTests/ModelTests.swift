@@ -235,10 +235,30 @@ final class PostgresArrayTextTests: XCTestCase {
         XCTAssertFalse(items[0].isNull)
     }
 
+    func testParseIgnoresWhitespaceAroundQuotedElements() {
+        let items = parsePostgresArray("{ \"a\" , b}")
+        XCTAssertEqual(items.map(\.value), ["a", "b"])
+    }
+
+    func testParseEscapedQuoteAndBackslashInsideQuotes() {
+        let items = parsePostgresArray("{\"a\\\"b\",\"c\\\\d\"}")
+        XCTAssertEqual(items.map(\.value), ["a\"b", "c\\d"])
+    }
+
+    func testParseUnquotedNullIsCaseInsensitiveAndTrimmed() {
+        let items = parsePostgresArray("{ NuLl , x }")
+        XCTAssertEqual(items.map(\.isNull), [true, false])
+        XCTAssertEqual(items[1].value, "x")
+    }
+
+    func testSerializeQuotesVerticalTabAndFormFeed() {
+        XCTAssertEqual(serializePostgresArray([ArrayItem(value: "\u{0B}x\u{0C}")]), "{\"\u{0B}x\u{0C}\"}")
+    }
+
     // MARK: - Round trip
 
     func testRoundTripPreservesTrickyValues() {
-        let values = ["a\nb", "tab\there", " padded ", "NULL", "", "q\"uote", "back\\slash", "{brace}", "a,b"]
+        let values = ["a\nb", "tab\there", " padded ", "NULL", "", "q\"uote", "back\\slash", "{brace}", "a,b", "\u{0C}ff"]
         let parsed = parsePostgresArray(serializePostgresArray(values.map { ArrayItem(value: $0) }))
         XCTAssertEqual(parsed.map(\.value), values)
         XCTAssertTrue(parsed.allSatisfy { !$0.isNull })

@@ -19,106 +19,41 @@ extension AppViewModel {
     ]
 
     /// Drops any database object with confirmation already handled by the caller.
+    /// Functions, procedures, aggregates, and operators are resolved and dropped
+    /// by `DatabaseClient.dropOverloadableObject`, which matches the navigator
+    /// name against pg_catalog so overloads and hostile names can't misfire.
     func dropObject(_ object: DBObject) async {
-        let dropSQL: String
+        let db = navigatorVM.connectedDatabase
+        var dropSQL: String?
         do {
-            guard let sql = try await buildDropSQL(for: object) else {
-                errorMessage = "Cannot drop \(object.name): this object type can't be dropped from the navigator."
-                return
+            if let keyword = Self.simpleDropKeyword[object.type] {
+                let sql = "DROP \(keyword) \(quoteIdent(object.schema)).\(quoteIdent(object.name)) CASCADE"
+                dropSQL = sql
+                _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
+            } else {
+                dropSQL = try await dbClient.dropOverloadableObject(object, timeout: Self.defaultQueryTimeout)
             }
-            dropSQL = sql
         } catch {
+            if let dropSQL {
+                queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: false, errorMessage: error.localizedDescription)
+            }
             errorMessage = error.localizedDescription
             return
         }
 
-        do {
-            _ = try await dbClient.runQuery(dropSQL, maxRows: 0, timeout: Self.defaultQueryTimeout)
+        if let dropSQL {
             queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: true)
-            await dbClient.invalidateCache()
+        }
+        await dbClient.invalidateCache()
+        // The user may have moved on while the DROP ran: only clear a selection
+        // that still points at the dropped object, and only reload the tree if
+        // it still shows the database the object lived in.
+        if navigatorVM.selectedObject == object {
             navigatorVM.selectedObject = nil
-            let db = navigatorVM.connectedDatabase
-            navigatorVM.invalidateSchema(db: db, schema: object.schema)
+        }
+        navigatorVM.invalidateSchema(db: db, schema: object.schema)
+        if navigatorVM.connectedDatabase == db {
             await loadSchemaObjects(db: db, schema: object.schema)
-        } catch {
-            queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: false, errorMessage: error.localizedDescription)
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    /// Builds the DROP statement for `object`, or `nil` for unsupported types.
-    ///
-    /// Overloadable objects (routines, aggregates, operators) are resolved on the
-    /// server: the navigator name is matched against pg_catalog as a quoted
-    /// literal, and the server renders the drop target with `%I` / `format_type`.
-    /// No catalog-derived text is parsed or spliced into SQL on the client, so a
-    /// hostile object or type name can't escape the statement.
-    private func buildDropSQL(for object: DBObject) async throws -> String? {
-        if let keyword = Self.simpleDropKeyword[object.type] {
-            return "DROP \(keyword) \(quoteIdent(object.schema)).\(quoteIdent(object.name)) CASCADE"
-        }
-        let keyword: String
-        switch object.type {
-        case .function, .triggerFunction: keyword = "FUNCTION"
-        case .procedure: keyword = "PROCEDURE"
-        case .aggregate: keyword = "AGGREGATE"
-        case .operator: keyword = "OPERATOR"
-        default: return nil
-        }
-        let target = try await resolveDropTarget(Self.dropTargetLookupSQL(for: object), object: object)
-        return "DROP \(keyword) \(target) CASCADE"
-    }
-
-    /// Catalog query returning the server-rendered drop target for an
-    /// overloadable object — one row per catalog entry matching its navigator name.
-    static func dropTargetLookupSQL(for object: DBObject) -> String {
-        let schema = quoteLiteral(.text(object.schema))
-        let name = quoteLiteral(.text(object.name))
-        if object.type == .operator {
-            return """
-                SELECT format('%I.%s (%s, %s)', n.nspname, o.oprname,
-                    COALESCE(format_type(NULLIF(o.oprleft, 0), NULL), 'NONE'),
-                    COALESCE(format_type(NULLIF(o.oprright, 0), NULL), 'NONE'))
-                FROM pg_operator o
-                JOIN pg_namespace n ON o.oprnamespace = n.oid
-                WHERE n.nspname = \(schema) AND \(CatalogSignature.operator) = \(name)
-                """
-        }
-        // Functions are listed with their signature; procedures, aggregates,
-        // and trigger functions by bare name.
-        let match = object.name.hasSuffix(")") ? CatalogSignature.routine : "p.proname"
-        // DROP AGGREGATE spells a zero-argument signature as (*).
-        let args = object.type == .aggregate
-            ? "CASE WHEN p.pronargs = 0 THEN '*' ELSE oidvectortypes(p.proargtypes) END"
-            : "oidvectortypes(p.proargtypes)"
-        let isAggregate = "EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid)"
-        return """
-            SELECT format('%I.%I(%s)', n.nspname, p.proname, \(args))
-            FROM pg_proc p
-            JOIN pg_namespace n ON p.pronamespace = n.oid
-            WHERE n.nspname = \(schema) AND \(match) = \(name)
-              AND \(object.type == .aggregate ? "" : "NOT ")\(isAggregate)
-            """
-    }
-
-    /// Runs a drop-target lookup and requires exactly one match, so a stale or
-    /// overloaded navigator entry can never drop the wrong object.
-    private func resolveDropTarget(_ lookupSQL: String, object: DBObject) async throws -> String {
-        let result = try await dbClient.runQuery(lookupSQL, maxRows: 2, timeout: Self.defaultQueryTimeout)
-        switch result.rows.count {
-        case 0:
-            throw AppError.validationFailed([
-                "\(object.name) no longer exists in schema \(object.schema). Refresh the navigator.",
-            ])
-        case 1:
-            guard case let .text(target) = result.rows[0].first else {
-                throw AppError.validationFailed(["Cannot drop \(object.name): object metadata is invalid."])
-            }
-            return target
-        default:
-            throw AppError.validationFailed([
-                "\(object.name) has several overloads. Drop the one you mean from the Query tab with its argument types.",
-            ])
         }
     }
 

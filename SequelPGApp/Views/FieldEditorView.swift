@@ -247,7 +247,8 @@ struct FieldEditorView: View {
                                 .foregroundStyle(.tertiary)
                                 .font(.caption)
 
-                            TextField("Value", text: $item.value)
+                            TextField("Value", text: $item.value, axis: .vertical)
+                                .lineLimit(1 ... 6)
                                 .textFieldStyle(.plain)
                                 .font(.system(.body, design: .monospaced))
 
@@ -606,6 +607,10 @@ func parsePostgresArray(_ raw: String) -> [ArrayItem] {
         case "\\":
             escaped = true
         case "\"":
+            // Whitespace before an opening quote is layout, not content.
+            if !inQuotes, current.unicodeScalars.allSatisfy(isArrayWhitespace) {
+                current.removeAll(keepingCapacity: true)
+            }
             inQuotes.toggle()
             wasQuoted = true
         case ",":
@@ -617,6 +622,8 @@ func parsePostgresArray(_ raw: String) -> [ArrayItem] {
                 wasQuoted = false
             }
         default:
+            // So is whitespace after the closing quote.
+            if wasQuoted, !inQuotes, isArrayWhitespace(scalar) { continue }
             current.unicodeScalars.append(scalar)
         }
     }
@@ -628,11 +635,19 @@ func parsePostgresArray(_ raw: String) -> [ArrayItem] {
 /// are significant. Unquoted elements are trimmed, and `NULL` in any case is null.
 private func makeArrayItem(_ raw: String, quoted: Bool) -> ArrayItem {
     if quoted { return ArrayItem(value: raw) }
-    let trimmed = raw.trimmingCharacters(in: .whitespaces)
-    if trimmed.uppercased() == "NULL" {
+    let trimmed = raw.trimmingCharacters(in: arrayWhitespace)
+    if trimmed.utf8.count == 4, trimmed.caseInsensitiveCompare("NULL") == .orderedSame {
         return ArrayItem(value: "", isNull: true)
     }
     return ArrayItem(value: trimmed)
+}
+
+/// The characters PostgreSQL's array parser skips around unquoted elements
+/// (`array_isspace`: space, \t, \n, \r, \v, \f).
+private let arrayWhitespace = CharacterSet(charactersIn: " \t\n\r\u{0B}\u{0C}")
+
+private func isArrayWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+    arrayWhitespace.contains(scalar)
 }
 
 /// Serializes array items back to PostgreSQL text format.
@@ -643,10 +658,10 @@ func serializePostgresArray(_ items: [ArrayItem]) -> String {
         // Quote if contains special characters. Control characters stay raw
         // inside the quotes: the array parser treats `\` as "take the next
         // character literally", so `\n` would be stored as `n`.
-        let needsQuoting = val.isEmpty || val.contains(",") || val.contains("\"")
-            || val.contains("\\") || val.contains("{") || val.contains("}")
-            || val.contains(" ") || val.contains("\n") || val.contains("\r")
-            || val.contains("\t") || val.uppercased() == "NULL"
+        let needsQuoting = val.isEmpty || val.uppercased() == "NULL"
+            || val.unicodeScalars.contains { scalar in
+                isArrayWhitespace(scalar) || ",\"\\{}".unicodeScalars.contains(scalar)
+            }
         if needsQuoting {
             let escaped = val
                 .replacingOccurrences(of: "\\", with: "\\\\")

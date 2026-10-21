@@ -92,7 +92,7 @@ struct NavigatorView: View {
                 Task { await appVM.dropObject(target) }
             }
         } message: { obj in
-            Text("\u{201C}\(obj.name)\u{201D} will be permanently dropped.")
+            Text("\u{201C}\(obj.name)\u{201D} will be permanently dropped, along with any objects that depend on it.")
         }
         .alert(
             "Run \(maintenanceTarget?.op.rawValue ?? "Operation")?",
@@ -369,6 +369,9 @@ struct NavigatorView: View {
             DisclosureGroup(isExpanded: binding) {
                 ForEach(objects) { obj in
                     Label(obj.name, systemImage: category.icon)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(obj.name)
                         .tag(obj)
                         .contextMenu {
                             if appVM.isRunnable(obj) {

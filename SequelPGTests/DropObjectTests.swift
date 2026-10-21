@@ -3,146 +3,174 @@ import XCTest
 
 // MARK: - Drop Object Tests
 
-/// Tests for AppViewModel.dropObject:
-/// - simple object types are dropped with quoted identifiers
-/// - overloadable objects (routines, aggregates, operators) are resolved by a
-///   catalog lookup and dropped with the server-rendered target verbatim
-/// - zero or multiple lookup matches abort without issuing a DROP
+/// Tests for AppViewModel.dropObject and the catalog lookup behind
+/// DatabaseClient.dropOverloadableObject:
+/// - simple object types are dropped with quoted identifiers via runQuery
+/// - routines, aggregates, and operators go through dropOverloadableObject
+/// - success logs history, refreshes the navigator, and clears only a stale selection
+/// - failures surface the error without refreshing
+/// - the lookup query binds names as parameters and filters by object kind
 @MainActor
 final class DropObjectTests: AppViewModelTestCase {
 
-    // MARK: - Helpers (file-specific)
-
-    private func result(_ targets: [String]) -> QueryResult {
-        QueryResult(
-            columns: ["format"],
-            rows: targets.map { [.text($0)] },
-            executionTime: 0.01,
-            rowsAffected: nil,
-            isTruncated: false
-        )
-    }
-
-    /// Answers catalog lookups with `targets` and every other statement with an empty result.
-    private func stubLookup(returning targets: [String]) async {
-        let lookup = result(targets)
-        let empty = result([])
-        await mockDB.setRunQueryHandler { sql in
-            sql.hasPrefix("SELECT format(") ? lookup : empty
-        }
-    }
-
-    private func dropStatements() async -> [String] {
-        await mockDB.getAllRunQuerySQLs().filter { $0.hasPrefix("DROP ") }
-    }
-
     // MARK: - Simple types
 
-    func testDropTableQuotesSchemaAndName() async {
+    func testDropTableQuotesSchemaAndNameAndLogsHistory() async {
         await makeConnectedVM()
 
         await vm.dropObject(DBObject(schema: "My Schema", name: "odd\"name", type: .table))
 
-        let drops = await dropStatements()
-        XCTAssertEqual(drops, ["DROP TABLE \"My Schema\".\"odd\"\"name\" CASCADE"])
+        let expected = "DROP TABLE \"My Schema\".\"odd\"\"name\" CASCADE"
+        let sqls = await mockDB.getAllRunQuerySQLs()
+        XCTAssertEqual(sqls, [expected])
         XCTAssertNil(vm.errorMessage)
+        let entry = vm.queryHistoryVM.entries.first { $0.sql == expected }
+        XCTAssertEqual(entry?.success, true)
+        XCTAssertEqual(entry?.source, .system)
+    }
+
+    func testDropTableFailureLogsHistoryAndSetsError() async {
+        await makeConnectedVM()
+        await mockDB.setRunQueryHandler { _ in throw AppError.queryFailed("permission denied") }
+
+        await vm.dropObject(DBObject(schema: "app", name: "t", type: .table))
+
+        XCTAssertTrue(vm.errorMessage?.contains("permission denied") ?? false)
+        let entry = vm.queryHistoryVM.entries.first { $0.sql.hasPrefix("DROP TABLE") }
+        XCTAssertEqual(entry?.success, false)
     }
 
     // MARK: - Overloadable types
 
-    func testDropFunctionUsesServerRenderedTarget() async {
+    func testOverloadableTypesUseDropOverloadableObject() async {
         await makeConnectedVM()
-        let target = "app.\"MyFn\"(integer, \"app\".\"weird) CASCADE; --\")"
-        await stubLookup(returning: [target])
+        let objects = [
+            DBObject(schema: "app", name: "f(integer)", type: .function),
+            DBObject(schema: "app", name: "trg", type: .triggerFunction),
+            DBObject(schema: "app", name: "do_work", type: .procedure),
+            DBObject(schema: "app", name: "mysum", type: .aggregate),
+            DBObject(schema: "app", name: "===(text, text)", type: .operator),
+        ]
 
-        await vm.dropObject(DBObject(schema: "app", name: "MyFn(integer, app.\"weird) CASCADE; --\")", type: .function))
+        for object in objects {
+            await vm.dropObject(object)
+        }
 
-        let drops = await dropStatements()
-        XCTAssertEqual(drops, ["DROP FUNCTION \(target) CASCADE"])
+        let dropped = await mockDB.getDroppedOverloadableObjects()
+        XCTAssertEqual(dropped, objects)
+        let sqls = await mockDB.getAllRunQuerySQLs()
+        XCTAssertFalse(sqls.contains { $0.hasPrefix("DROP") }, "overloadable drops must not go through runQuery")
         XCTAssertNil(vm.errorMessage)
     }
 
-    func testFunctionLookupMatchesFullSignatureAsEscapedLiteral() {
-        let object = DBObject(schema: "app", name: "f(text, \"x'; DROP TABLE users; --\\\")", type: .function)
-
-        let sql = AppViewModel.dropTargetLookupSQL(for: object)
-
-        XCTAssertTrue(sql.contains("\(CatalogSignature.routine) = E'f(text, \"x''; DROP TABLE users; --\\\\\")'"))
-        XCTAssertTrue(sql.contains("n.nspname = E'app'"))
-        XCTAssertTrue(sql.contains("NOT EXISTS (SELECT 1 FROM pg_aggregate"))
-    }
-
-    func testProcedureLookupMatchesBareName() {
-        let sql = AppViewModel.dropTargetLookupSQL(for: DBObject(schema: "app", name: "do_work", type: .procedure))
-
-        XCTAssertTrue(sql.contains("p.proname = E'do_work'"))
-        XCTAssertFalse(sql.contains("oidvectortypes(p.proargtypes) || ')' ="))
-    }
-
-    func testAggregateLookupSelectsAggregatesAndStarForZeroArgs() {
-        let sql = AppViewModel.dropTargetLookupSQL(for: DBObject(schema: "app", name: "mysum", type: .aggregate))
-
-        XCTAssertTrue(sql.contains("AND EXISTS (SELECT 1 FROM pg_aggregate"))
-        XCTAssertFalse(sql.contains("NOT EXISTS"))
-        XCTAssertTrue(sql.contains("WHEN p.pronargs = 0 THEN '*'"))
-    }
-
-    func testDropAggregateUsesAggregateKeyword() async {
+    func testOverloadableDropLogsTheExecutedStatement() async {
         await makeConnectedVM()
-        await stubLookup(returning: ["app.mysum(integer)"])
+        await mockDB.setDropOverloadableHandler { _ in "DROP OPERATOR app.=== (text, text) CASCADE" }
 
-        await vm.dropObject(DBObject(schema: "app", name: "mysum", type: .aggregate))
+        await vm.dropObject(DBObject(schema: "app", name: "===(text, text)", type: .operator))
 
-        let drops = await dropStatements()
-        XCTAssertEqual(drops, ["DROP AGGREGATE app.mysum(integer) CASCADE"])
+        let entry = vm.queryHistoryVM.entries.first { $0.sql.hasPrefix("DROP OPERATOR") }
+        XCTAssertEqual(entry?.sql, "DROP OPERATOR app.=== (text, text) CASCADE")
+        XCTAssertEqual(entry?.success, true)
     }
 
-    func testDropOperatorMatchesSignatureAndUsesArgumentTypes() async {
+    func testOverloadableDropFailureSetsErrorAndSkipsRefresh() async {
         await makeConnectedVM()
-        await stubLookup(returning: ["app.=== (text, text)"])
-        let object = DBObject(schema: "app", name: "===(text, text)", type: .operator)
-
-        await vm.dropObject(object)
-
-        let lookup = AppViewModel.dropTargetLookupSQL(for: object)
-        XCTAssertTrue(lookup.contains("\(CatalogSignature.operator) = E'===(text, text)'"))
-        let drops = await dropStatements()
-        XCTAssertEqual(drops, ["DROP OPERATOR app.=== (text, text) CASCADE"])
-        XCTAssertNil(vm.errorMessage)
-    }
-
-    // MARK: - Lookup failures
-
-    func testDropAbortsWhenObjectNoLongerExists() async {
-        await makeConnectedVM()
-        await stubLookup(returning: [])
-
-        await vm.dropObject(DBObject(schema: "app", name: "gone(integer)", type: .function))
-
-        let drops = await dropStatements()
-        XCTAssertTrue(drops.isEmpty)
-        XCTAssertTrue(vm.errorMessage?.contains("no longer exists") ?? false)
-    }
-
-    func testDropAbortsWhenNameMatchesSeveralOverloads() async {
-        await makeConnectedVM()
-        await stubLookup(returning: ["app.agg(integer)", "app.agg(text)"])
+        await mockDB.setDropOverloadableHandler { _ in
+            throw AppError.validationFailed(["agg has several overloads."])
+        }
 
         await vm.dropObject(DBObject(schema: "app", name: "agg", type: .aggregate))
 
-        let drops = await dropStatements()
-        XCTAssertTrue(drops.isEmpty)
-        XCTAssertTrue(vm.errorMessage?.contains("several overloads") ?? false)
+        XCTAssertEqual(vm.errorMessage, "agg has several overloads.")
+        let invalidations = await mockDB.invalidateCacheCallCount
+        XCTAssertEqual(invalidations, 0)
     }
 
-    func testDropReportsLookupError() async {
+    // MARK: - Refresh after drop
+
+    func testDropClearsSelectionOnlyWhenItIsTheDroppedObject() async {
         await makeConnectedVM()
-        await mockDB.setRunQueryHandler { _ in throw AppError.queryFailed("permission denied") }
+        let dropped = DBObject(schema: "app", name: "t", type: .table)
+        let other = DBObject(schema: "app", name: "other", type: .table)
 
-        await vm.dropObject(DBObject(schema: "app", name: "f()", type: .function))
+        vm.navigatorVM.selectedObject = dropped
+        await vm.dropObject(dropped)
+        XCTAssertNil(vm.navigatorVM.selectedObject)
 
-        let drops = await dropStatements()
-        XCTAssertTrue(drops.isEmpty)
-        XCTAssertTrue(vm.errorMessage?.contains("permission denied") ?? false)
+        vm.navigatorVM.selectedObject = other
+        await vm.dropObject(dropped)
+        XCTAssertEqual(vm.navigatorVM.selectedObject, other)
+    }
+
+    func testDropInvalidatesCacheAfterSuccess() async {
+        await makeConnectedVM()
+
+        await vm.dropObject(DBObject(schema: "app", name: "t", type: .view))
+
+        let invalidations = await mockDB.invalidateCacheCallCount
+        XCTAssertEqual(invalidations, 1)
+    }
+
+    // MARK: - Lookup query
+
+    private func lookup(_ name: String, _ type: DBObjectType, version: Int = 18) -> String? {
+        DatabaseClient.dropTargetLookupQuery(
+            for: DBObject(schema: "app", name: name, type: type), serverVersion: version
+        )?.sql
+    }
+
+    func testLookupBindsSchemaAndNameAsParameters() {
+        let query = DatabaseClient.dropTargetLookupQuery(
+            for: DBObject(schema: "app", name: "f(text)'; DROP TABLE users; --", type: .function),
+            serverVersion: 18
+        )
+
+        XCTAssertEqual(query?.binds.count, 2)
+        XCTAssertFalse(query?.sql.contains("DROP TABLE users") ?? true)
+    }
+
+    func testFunctionLookupMatchesSignatureAndExcludesTriggerFunctions() throws {
+        let sql = try XCTUnwrap(lookup("f(integer)", .function))
+        XCTAssertTrue(sql.contains("\(CatalogSignature.routine) = $2"))
+        XCTAssertTrue(sql.contains("p.prokind = 'f'"))
+        XCTAssertTrue(sql.contains("NOT p.prorettype = 'pg_catalog.trigger'"))
+    }
+
+    func testFunctionLookupBeforePG11UsesLegacyKindColumns() throws {
+        let sql = try XCTUnwrap(lookup("f(integer)", .function, version: 10))
+        XCTAssertFalse(sql.contains("prokind"))
+        XCTAssertTrue(sql.contains("NOT p.proisagg AND NOT p.proiswindow"))
+    }
+
+    func testTriggerFunctionLookupMatchesBareNameAndTriggerReturnType() throws {
+        let sql = try XCTUnwrap(lookup("audit", .triggerFunction))
+        XCTAssertTrue(sql.contains("p.proname = $2"))
+        XCTAssertTrue(sql.contains("AND p.prorettype = 'pg_catalog.trigger'"))
+    }
+
+    func testProcedureLookupRequiresPG11() throws {
+        let sql = try XCTUnwrap(lookup("do_work", .procedure))
+        XCTAssertTrue(sql.contains("p.prokind = 'p'"))
+        XCTAssertNil(lookup("do_work", .procedure, version: 10))
+    }
+
+    func testAggregateLookupFiltersAggregatesAndSpellsZeroArgsAsStar() throws {
+        let sql = try XCTUnwrap(lookup("mysum", .aggregate))
+        XCTAssertTrue(sql.contains("p.prokind = 'a'"))
+        XCTAssertTrue(sql.contains("WHEN p.pronargs = 0 THEN '*'"))
+        XCTAssertTrue(try XCTUnwrap(lookup("mysum", .aggregate, version: 10)).contains("p.proisagg"))
+    }
+
+    func testOperatorLookupMatchesSignature() throws {
+        let sql = try XCTUnwrap(lookup("===(text, text)", .operator))
+        XCTAssertTrue(sql.contains("\(CatalogSignature.operator) = $2"))
+        XCTAssertTrue(sql.contains("FROM pg_operator o"))
+    }
+
+    func testNonOverloadableTypesHaveNoLookupOrKeyword() {
+        XCTAssertNil(lookup("t", .table))
+        XCTAssertNil(DatabaseClient.dropKeyword(for: .table))
+        XCTAssertEqual(DatabaseClient.dropKeyword(for: .triggerFunction), "FUNCTION")
     }
 }
