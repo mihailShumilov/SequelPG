@@ -74,15 +74,31 @@ Tests are in `SequelPGTests/` and use mock implementations of `PostgresClientPro
 
 Reach for these proactively when the task fits:
 
+Project agents live in `.claude/agents/`; each keeps versioned memory in `.claude/agent-memory/<agent>/`.
+
+- **unit-test-generator** — writes XCTest suites with the project's mocks and registers new test files in `project.pbxproj`. Run after new ViewModel methods, SQL builders, exporters, or utilities.
+- **swift-concurrency-reviewer** — actor isolation, Sendable, Task cancellation, stale-result races (generation guards), Stop/timeout. Run after changes to `DatabaseClient`, `SSHTunnelService`, `DatabaseTransferService`, `PGToolchain`, or any ViewModel async load path.
+- **pg-catalog-expert** — writes/reviews `pg_catalog` introspection and DDL SQL and checks it across PostgreSQL 10–18. Run when introspection, navigator, Structure/Definition, ERD loading, or object create/alter/drop SQL changes.
+- **macos-native-ui-reviewer** — HIG/native-behavior review of views, sheets, menus, shortcuts, focus, accessibility, and the v0.3.6 UI conventions. Run after adding or changing UI.
 - **postgresql-function-auditor** — audit which PostgreSQL functions are surfaced in the UI vs. missing, prioritized by real-world usage. Use when planning the feature roadmap or evaluating query-builder coverage.
 - **paranoid-security-auditor** — run after touching anything sensitive: `DatabaseClient`, `KeychainService`, `ConnectionStore`, `SSHTunnelService`, SQL builders, credential handling, export paths. Treat as mandatory before commits in those areas.
-- **ui-performance-optimizer** — for SwiftUI polish, large-result-set scroll/render performance, and modernizing visual consistency.
+- **ui-performance-optimizer** — for large-result-set scroll/render performance and SwiftUI re-render cost.
 - **feature-dev:code-explorer / code-architect / code-reviewer** — three-phase loop for non-trivial features (new panes, new connection types, schema tools). Explorer first → architect → reviewer.
 - **code-smell-detector** — run proactively after any significant Swift change to catch duplication and anti-patterns.
 - **Explore** — fast read-only search across the Swift codebase when locating symbols or call sites across `SequelPGApp/`.
 - **Plan** — design step before larger refactors or cross-cutting changes.
 
 ## Recommended Skills
+
+Project skills (`.claude/skills/`):
+
+- `build-and-test` — filtered `xcodebuild` build/test commands and SwiftFormat.
+- `add-swift-file` — create a `.swift` file and register it in `project.pbxproj` (group and Sources-phase ids for every folder).
+- `dev-db` — start/reset/query the PostgreSQL 18 Docker fixture and extend its init scripts.
+- `verify-ui` — screenshot-verify a UI change against dev-db (temporary demo driver, window-id capture, cleanup).
+- `release` — version bump, CHANGELOG, and how the release workflow ships the DMG.
+
+General skills:
 
 - `/review` and `/code-review:code-review` — review changes on the current branch / a PR.
 - `/security-review` — security pass on pending changes. Required when touching connection/auth/SQL paths above.

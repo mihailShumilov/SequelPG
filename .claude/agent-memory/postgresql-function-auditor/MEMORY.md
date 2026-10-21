@@ -1,2 +1,4 @@
 - [Codebase conventions](project_codebase_conventions.md) — Where introspection queries live, how to add new categories, caching patterns, known ColumnInfo gaps
 - [Introspection audit gaps](audit_introspection_gaps.md) — Full April 2026 audit: what is implemented, defects, and P0-P3 missing capabilities
+- [project_codebase.md](project_codebase.md) — SequelPG codebase structure, key file locations, architecture patterns, and known issues found during audit
+- [user_profile.md](user_profile.md) — User context: working on native macOS PostgreSQL client using PostgresNIO and Swift

@@ -1,1 +1,4 @@
 - [SequelPG Security Architecture](project_security_architecture.md) — credential flow, SQL construction patterns, confirmed injection vectors, SSH design
+- [project-security-architecture.md](project-security-architecture.md) — Core security architecture: Keychain, SSH tunnel, SQL quoting, entitlements, credential flow
+- [audit-findings-2026-04-04.md](audit-findings-2026-04-04.md) — Full audit findings from initial review, 2026-04-04
+- [audit-findings-2026-04-19.md](audit-findings-2026-04-19.md) — Findings from second full review, 2026-04-19 (new files: ObjectCRUD, QueryHistory, SQLFormatter, ObjectCreateSheets, FieldEditorView)

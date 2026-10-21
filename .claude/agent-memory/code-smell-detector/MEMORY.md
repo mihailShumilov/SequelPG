@@ -1,2 +1,3 @@
 - [Project Architecture](project_architecture.md) — macOS SwiftUI MVVM PostgreSQL client; key patterns and layer rules
 - [Code Smells Found](code_smells.md) — Recurring smells, duplication hotspots, anti-patterns identified in first review
+- [SequelPG Codebase Patterns](project_codebase_patterns.md) — Architecture, recurring smells, and conventions in the SequelPG PostgreSQL client (reviewed 2026-04-19)
