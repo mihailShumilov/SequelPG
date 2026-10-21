@@ -36,6 +36,7 @@
 		AA1000000000000000001B /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001B; };
 		AA1000000000000000001C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001C; };
 		AA1000000000000000001D /* QuoteIdentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001D; };
+		AA10000000000000000E30 /* DropObjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E30; };
 		AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000001E; };
 		AA1000000000000000001F /* PostgresNIO in Frameworks */ = {isa = PBXBuildFile; productRef = AD10000000000000000001; };
 		AA10000000000000000020 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000022; };
@@ -161,6 +162,7 @@
 		AB1000000000000000001B /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		AB1000000000000000001C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB1000000000000000001D /* QuoteIdentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteIdentTests.swift; sourceTree = "<group>"; };
+		AB10000000000000000E30 /* DropObjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropObjectTests.swift; sourceTree = "<group>"; };
 		AB1000000000000000001E /* ConnectionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStoreTests.swift; sourceTree = "<group>"; };
 		AB1000000000000000001F /* SequelPGApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SequelPGApp.entitlements; sourceTree = "<group>"; };
 		AB10000000000000000022 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
@@ -433,6 +435,7 @@
 				AB10000000000000000E28 /* TransferViewModelTests.swift */,
 				AB10000000000000000022 /* ModelTests.swift */,
 				AB1000000000000000001D /* QuoteIdentTests.swift */,
+				AB10000000000000000E30 /* DropObjectTests.swift */,
 				AB10000000000000000023 /* TableViewModelTests.swift */,
 				AB10000000000000000024 /* NavigatorViewModelTests.swift */,
 				AB10000000000000000025 /* QueryViewModelTests.swift */,
@@ -652,6 +655,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA1000000000000000001D /* QuoteIdentTests.swift in Sources */,
+				AA10000000000000000E30 /* DropObjectTests.swift in Sources */,
 				AA1000000000000000001E /* ConnectionStoreTests.swift in Sources */,
 				AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */,
 				AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */,

@@ -2,6 +2,31 @@ import Foundation
 import OSLog
 import PostgresNIO
 
+/// SQL expressions that render an overloadable object's navigator name from
+/// pg_catalog. The navigator listing, the Definition lookup, and the DROP
+/// lookup must all use the same expression so a name round-trips to exactly
+/// one catalog row. They expect `pg_proc p` / `pg_operator o` in scope.
+///
+/// `format_type` and `oidvectortypes` omit the schema of any type visible on
+/// the session's `search_path`, so these must only be evaluated inside
+/// `DatabaseClient.withCatalogSession`, which pins the path: built-in types
+/// render bare (`integer`) and every other type schema-qualified (`app.mood`).
+enum CatalogSignature {
+    /// IN-argument types — the form regprocedure and DROP FUNCTION accept.
+    static let routineArgs = "oidvectortypes(p.proargtypes)"
+
+    /// `my_func(integer, app.mood)`.
+    static let routine = "p.proname || '(' || \(routineArgs) || ')'"
+
+    /// Operand types, with `NONE` for the missing side of a prefix (or,
+    /// before PG 14, postfix) operator.
+    static let operatorLeft = "COALESCE(format_type(NULLIF(o.oprleft, 0), NULL), 'NONE')"
+    static let operatorRight = "COALESCE(format_type(NULLIF(o.oprright, 0), NULL), 'NONE')"
+
+    /// `===(integer, integer)`.
+    static let `operator` = "o.oprname || '(' || \(operatorLeft) || ', ' || \(operatorRight) || ')'"
+}
+
 /// Protocol for database operations, enabling test mocking.
 protocol PostgresClientProtocol: Sendable {
     func connect(profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
@@ -28,6 +53,11 @@ protocol PostgresClientProtocol: Sendable {
     func listDatabases() async throws -> [String]
     func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
     func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String
+    /// Drops a navigator object with CASCADE, refusing if the live connection
+    /// is no longer on `database`. Overloadable objects (functions, procedures,
+    /// aggregates, operators) are resolved to exactly one catalog entry in the
+    /// same transaction. Returns the executed DROP statement.
+    func drop(_ object: DBObject, inDatabase database: String, timeout: TimeInterval) async throws -> String
     func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata
     // Per-table metadata
     func listIndexes(schema: String, table: String) async throws -> [IndexInfo]
@@ -231,32 +261,198 @@ actor DatabaseClient: PostgresClientProtocol {
                     connection: connection
                 )
             }
-        } catch let error as AppError {
-            throw error
-        } catch is CancellationError {
+        } catch {
+            throw mapQueryError(error, from: client)
+        }
+    }
+
+    /// Translates a driver error into the `AppError` shown to the user, and
+    /// drops the client when the error means the connection is gone — unless
+    /// a database switch has already replaced `failedClient` with a new one.
+    private func mapQueryError(_ error: Error, from failedClient: PostgresClient) -> Error {
+        switch error {
+        case let error as AppError:
+            return error
+        case is CancellationError:
             // Surface user-initiated cancellation as-is so callers can tell
             // it apart from a real failure.
-            throw CancellationError()
-        } catch let error as PSQLError {
-            if error.code == .serverClosedConnection || error.code == .connectionError {
-                self.client = nil
-                self.runTask?.cancel()
-                self.runTask = nil
-                throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
+            return CancellationError()
+        case let error as PSQLError:
+            let sqlState = error.serverInfo?[.sqlState]
+            if error.code == .serverClosedConnection || error.code == .connectionError
+                || sqlState?.hasPrefix("08") == true
+            {
+                if client === failedClient {
+                    client = nil
+                    runTask?.cancel()
+                    runTask = nil
+                }
+                return AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
             }
-            if error.serverInfo?[.sqlState] == "23503" {
-                throw AppError.foreignKeyViolation(Self.formatPSQLError(error))
+            if sqlState == "23503" {
+                return AppError.foreignKeyViolation(Self.formatPSQLError(error))
             }
-            if let sqlState = error.serverInfo?[.sqlState], sqlState.hasPrefix("08") {
-                self.client = nil
-                self.runTask?.cancel()
-                self.runTask = nil
-                throw AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
-            }
-            throw AppError.queryFailed(Self.formatPSQLError(error))
-        } catch {
-            throw AppError.queryFailed(error.localizedDescription)
+            return AppError.queryFailed(Self.formatPSQLError(error))
+        default:
+            return AppError.queryFailed(error.localizedDescription)
         }
+    }
+
+    /// Runs `body` in a transaction on one leased connection with `search_path`
+    /// pinned to `pg_catalog`, so signatures rendered via `CatalogSignature`
+    /// read the same on every connection — whatever `SET search_path` a Query
+    /// tab session left on a pooled connection.
+    private static func withCatalogSession<T>(
+        client: PostgresClient,
+        _ body: (PostgresConnection) async throws -> T
+    ) async throws -> T {
+        try await client.withConnection { connection in
+            try await connection.query("BEGIN", logger: connection.logger)
+            do {
+                try await connection.query("SET LOCAL search_path = pg_catalog, pg_temp", logger: connection.logger)
+                let result = try await body(connection)
+                try await connection.query("COMMIT", logger: connection.logger)
+                return result
+            } catch {
+                _ = try? await connection.query("ROLLBACK", logger: connection.logger)
+                throw error
+            }
+        }
+    }
+
+    // MARK: - Drop
+
+    func drop(_ object: DBObject, inDatabase database: String, timeout: TimeInterval) async throws -> String {
+        guard let client else { throw AppError.notConnected }
+        guard let keyword = Self.dropKeyword(for: object.type) else {
+            throw AppError.validationFailed(["\(object.name) can't be dropped from the sidebar."])
+        }
+        let serverVersion = await detectServerVersion(client: client)
+        let lookup = Self.dropTargetLookupQuery(for: object, serverVersion: serverVersion)
+        do {
+            // Everything runs on one connection in one transaction: the DROP
+            // hits the database and catalog entry checked here, even if the
+            // navigator points the client at another database meanwhile.
+            return try await Self.withCatalogSession(client: client) { connection in
+                if timeout > 0 {
+                    try await connection.query(
+                        PostgresQuery(unsafeSQL: "SET LOCAL statement_timeout = \(Int(timeout * 1000))"),
+                        logger: connection.logger
+                    )
+                }
+                let current = try await Self.firstString(
+                    connection.query("SELECT current_database()", logger: connection.logger)
+                )
+                guard current == database else {
+                    throw AppError.validationFailed([
+                        "The sidebar was switching databases, so \(object.name) was not dropped. Try again.",
+                    ])
+                }
+                let target: String
+                if let lookup {
+                    target = try await Self.resolveDropTarget(lookup, object: object, connection: connection)
+                } else {
+                    target = "\(quoteIdent(object.schema)).\(quoteIdent(object.name))"
+                }
+                let sql = "DROP \(keyword) \(target) CASCADE"
+                try await connection.query(PostgresQuery(unsafeSQL: sql), logger: connection.logger)
+                return sql
+            }
+        } catch {
+            throw mapQueryError(error, from: client)
+        }
+    }
+
+    /// Runs a drop-target lookup and requires exactly one match, so a stale or
+    /// overloaded navigator entry never drops the wrong object. The target is
+    /// rendered by the server with %I / format_type, never assembled here.
+    private static func resolveDropTarget(
+        _ lookup: PostgresQuery,
+        object: DBObject,
+        connection: PostgresConnection
+    ) async throws -> String {
+        var targets: [String] = []
+        for try await row in try await connection.query(lookup, logger: connection.logger) {
+            let (target,) = try row.decode(String.self)
+            targets.append(target)
+        }
+        guard targets.count == 1, let target = targets.first else {
+            throw AppError.validationFailed([targets.isEmpty
+                    ? "\(object.name) no longer exists in schema \(object.schema). Choose Refresh (⌘R) and try again."
+                    : "\(object.name) has several overloads. Drop the one you mean from the Query tab with its argument types."])
+        }
+        return target
+    }
+
+    static func dropKeyword(for type: DBObjectType) -> String? {
+        switch type {
+        case .table: return "TABLE"
+        case .view: return "VIEW"
+        case .materializedView: return "MATERIALIZED VIEW"
+        case .sequence: return "SEQUENCE"
+        case .type: return "TYPE"
+        case .domain: return "DOMAIN"
+        case .collation: return "COLLATION"
+        case .foreignTable: return "FOREIGN TABLE"
+        case .ftsConfiguration: return "TEXT SEARCH CONFIGURATION"
+        case .ftsDictionary: return "TEXT SEARCH DICTIONARY"
+        case .ftsParser: return "TEXT SEARCH PARSER"
+        case .ftsTemplate: return "TEXT SEARCH TEMPLATE"
+        case .function, .triggerFunction: return "FUNCTION"
+        case .procedure: return "PROCEDURE"
+        case .aggregate: return "AGGREGATE"
+        case .operator: return "OPERATOR"
+        default: return nil
+        }
+    }
+
+    /// Catalog query returning the server-rendered DROP target for an
+    /// overloadable object — one row per catalog entry of the same kind
+    /// matching its navigator name — or `nil` for types addressed by plain
+    /// `schema.name`. Must run inside `withCatalogSession`.
+    static func dropTargetLookupQuery(for object: DBObject, serverVersion: Int) -> PostgresQuery? {
+        let schema = object.schema
+        let name = object.name
+        if object.type == .operator {
+            return """
+                SELECT format('%I.%s (%s, %s)', n.nspname, o.oprname,
+                    \(unescaped: CatalogSignature.operatorLeft), \(unescaped: CatalogSignature.operatorRight))
+                FROM pg_operator o
+                JOIN pg_namespace n ON o.oprnamespace = n.oid
+                WHERE n.nspname = \(schema) AND \(unescaped: CatalogSignature.operator) = \(name)
+                """
+        }
+
+        // Kind filters mirror the navigator listings. prokind is PG 11+.
+        let hasProkind = serverVersion >= 11
+        let returnsTrigger = "p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype"
+        var args = CatalogSignature.routineArgs
+        // Functions are listed with their signature; the other kinds by bare name.
+        var match = "p.proname"
+        let kindFilter: String
+        switch object.type {
+        case .function:
+            match = CatalogSignature.routine
+            kindFilter = (hasProkind ? "p.prokind = 'f'" : "NOT p.proisagg AND NOT p.proiswindow")
+                + " AND NOT \(returnsTrigger)"
+        case .triggerFunction:
+            kindFilter = (hasProkind ? "p.prokind = 'f'" : "NOT p.proisagg") + " AND \(returnsTrigger)"
+        case .procedure:
+            guard hasProkind else { return nil }
+            kindFilter = "p.prokind = 'p'"
+        case .aggregate:
+            kindFilter = hasProkind ? "p.prokind = 'a'" : "p.proisagg"
+            // DROP AGGREGATE spells a zero-argument signature as (*).
+            args = "CASE WHEN p.pronargs = 0 THEN '*' ELSE \(args) END"
+        default:
+            return nil
+        }
+        return """
+            SELECT format('%I.%I(%s)', n.nspname, p.proname, \(unescaped: args))
+            FROM pg_proc p
+            JOIN pg_namespace n ON p.pronamespace = n.oid
+            WHERE n.nspname = \(schema) AND \(unescaped: match) = \(name) AND \(unescaped: kindFilter)
+            """
     }
 
     /// Runs `sql` on a single leased connection, optionally guarded by a
@@ -1020,14 +1216,30 @@ actor DatabaseClient: PostgresClientProtocol {
     ///
     /// Accepts a `PostgresQuery` so callers bind user-supplied schema/table
     /// names as parameters instead of hand-escaping into the SQL.
+    /// Pass `catalogSession: true` when the query renders a `CatalogSignature`.
     private func fetchNamedObjects(
         client: PostgresClient,
         schema: String,
         query: PostgresQuery,
+        type: DBObjectType,
+        catalogSession: Bool = false
+    ) async throws -> [DBObject] {
+        if catalogSession {
+            return try await Self.withCatalogSession(client: client) { connection in
+                try await Self.decodeNamedObjects(
+                    connection.query(query, logger: connection.logger), schema: schema, type: type
+                )
+            }
+        }
+        return try await Self.decodeNamedObjects(client.query(query), schema: schema, type: type)
+    }
+
+    private static func decodeNamedObjects(
+        _ rows: PostgresRowSequence,
+        schema: String,
         type: DBObjectType
     ) async throws -> [DBObject] {
         var result: [DBObject] = []
-        let rows = try await client.query(query)
         for try await row in rows {
             let (name,) = try row.decode(String.self)
             result.append(DBObject(schema: schema, name: name, type: type))
@@ -1112,7 +1324,7 @@ actor DatabaseClient: PostgresClientProtocol {
         // for getObjectDDL. PG18's pg_get_function_identity_arguments now
         // includes parameter names too, which would break that round-trip.
         let query: PostgresQuery = """
-            SELECT p.proname || '(' || oidvectortypes(p.proargtypes) || ')' AS func_sig
+            SELECT \(unescaped: CatalogSignature.routine) AS func_sig
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
             WHERE n.nspname = \(schema)
@@ -1120,7 +1332,9 @@ actor DatabaseClient: PostgresClientProtocol {
               AND NOT EXISTS (SELECT 1 FROM pg_type t WHERE t.oid = p.prorettype AND t.typname = 'trigger')
             ORDER BY p.proname
             """
-        let functions = try await fetchNamedObjects(client: client, schema: schema, query: query, type: .function)
+        let functions = try await fetchNamedObjects(
+            client: client, schema: schema, query: query, type: .function, catalogSession: true
+        )
         cachedFunctions.set(schema, functions)
         Log.db.info("Loaded \(functions.count) functions in schema \(schema, privacy: .public)")
         return functions
@@ -1232,11 +1446,11 @@ actor DatabaseClient: PostgresClientProtocol {
             """, type: .foreignTable)
 
         async let operators = fetchNamedObjects(client: client, schema: schema, query: """
-            SELECT oprname FROM pg_operator o
+            SELECT \(unescaped: CatalogSignature.operator) FROM pg_operator o
             JOIN pg_namespace n ON o.oprnamespace = n.oid
             WHERE n.nspname = \(schema)
-            ORDER BY oprname
-            """, type: .operator)
+            ORDER BY 1
+            """, type: .operator, catalogSession: true)
 
         // PG 11 introduced prokind; earlier versions have neither procedures
         // nor a reliable way to filter them out. Skip the fetch entirely there.
@@ -1482,13 +1696,15 @@ actor DatabaseClient: PostgresClientProtocol {
 
         let query = makeObjectDDLQuery(schema: schema, name: name, type: type)
         do {
-            let rows = try await client.query(query)
-            for try await row in rows {
-                if let (ddl,) = try? row.decode(String.self) {
-                    return ddl
+            // Operators are matched by their rendered signature and functions by
+            // a regprocedure cast; both resolve type names via search_path, so
+            // they only identify the listed object inside a catalog session.
+            let ddl = [.operator, .function, .procedure, .triggerFunction].contains(type)
+                ? try await Self.withCatalogSession(client: client) { connection in
+                    try await Self.firstString(connection.query(query, logger: connection.logger))
                 }
-            }
-            return "-- Definition not available"
+                : try await Self.firstString(client.query(query))
+            return ddl ?? "-- Definition not available"
         } catch let error as PSQLError {
             // Surface the server's actual error in the Definition pane instead
             // of letting it bubble up as the generic NSError text
@@ -1496,6 +1712,15 @@ actor DatabaseClient: PostgresClientProtocol {
             // useful (e.g. "is an aggregate function") and should be readable.
             return "-- Error loading definition for \(schema).\(name):\n-- \(Self.formatPSQLError(error))"
         }
+    }
+
+    private static func firstString(_ rows: PostgresRowSequence) async throws -> String? {
+        for try await row in rows {
+            if let (value,) = try? row.decode(String.self) {
+                return value
+            }
+        }
+        return nil
     }
 
     /// Resolves one pg_proc entry into a typed `FunctionMetadata`. The Run sheet
@@ -1574,8 +1799,16 @@ actor DatabaseClient: PostgresClientProtocol {
                 """
         }
 
-        let rows = try await client.query(query)
-        for try await row in rows {
+        // The regprocedure cast resolves type names via search_path; pin it so
+        // it finds the overload the navigator listed.
+        let rows = try await Self.withCatalogSession(client: client) { connection in
+            var collected: [PostgresRow] = []
+            for try await row in try await connection.query(query, logger: connection.logger) {
+                collected.append(row)
+            }
+            return collected
+        }
+        for row in rows {
             // PostgresNIO's auto-tuple decode caps out before 12 fields;
             // use column-keyed access. `proargnames` can contain NULL
             // elements when some params are anonymous, so decode as
@@ -1854,7 +2087,7 @@ actor DatabaseClient: PostgresClientProtocol {
                 LEFT JOIN pg_type rt ON o.oprright = rt.oid
                 JOIN pg_type res ON o.oprresult = res.oid
                 JOIN pg_proc p ON o.oprcode = p.oid
-                WHERE n.nspname = \(schema) AND o.oprname = \(name)
+                WHERE n.nspname = \(schema) AND \(unescaped: CatalogSignature.operator) = \(name)
                 LIMIT 1
                 """
         case .table:

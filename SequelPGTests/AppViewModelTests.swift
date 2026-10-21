@@ -215,6 +215,15 @@ actor MockDatabaseClient: PostgresClientProtocol {
         return "-- mock DDL"
     }
 
+    var droppedObjects: [(object: DBObject, database: String)] = []
+    /// Returns the DROP statement to report, or throws. Default: a plain statement.
+    var dropHandler: (@Sendable (DBObject) throws -> String)?
+    func drop(_ object: DBObject, inDatabase database: String, timeout: TimeInterval) async throws -> String {
+        droppedObjects.append((object, database))
+        if let dropHandler { return try dropHandler(object) }
+        return "DROP \(object.name) CASCADE"
+    }
+
     var stubbedFunctionMetadata: FunctionMetadata?
     var shouldThrowOnGetFunctionMetadata = false
     func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata {
@@ -2071,7 +2080,16 @@ extension MockDatabaseClient {
         lastRunQuerySQL = nil
     }
 
+    func setDropHandler(_ handler: (@Sendable (DBObject) throws -> String)?) {
+        dropHandler = handler
+    }
+
+    func getDroppedObjects() -> [(object: DBObject, database: String)] {
+        droppedObjects
+    }
+
     func resetQueryState() {
+        droppedObjects = []
         allRunQuerySQLs = []
         lastRunQuerySQL = nil
         lastRunQueryMaxRows = nil

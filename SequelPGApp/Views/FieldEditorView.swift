@@ -247,7 +247,8 @@ struct FieldEditorView: View {
                                 .foregroundStyle(.tertiary)
                                 .font(.caption)
 
-                            TextField("Value", text: $item.value)
+                            TextField("Value", text: $item.value, axis: .vertical)
+                                .lineLimit(1 ... 6)
                                 .textFieldStyle(.plain)
                                 .font(.system(.body, design: .monospaced))
 
@@ -593,6 +594,7 @@ func parsePostgresArray(_ raw: String) -> [ArrayItem] {
     var current = ""
     current.reserveCapacity(min(64, inner.count))
     var inQuotes = false
+    var wasQuoted = false
     var escaped = false
 
     for scalar in inner.unicodeScalars {
@@ -605,28 +607,47 @@ func parsePostgresArray(_ raw: String) -> [ArrayItem] {
         case "\\":
             escaped = true
         case "\"":
+            // Whitespace before an opening quote is layout, not content.
+            if !inQuotes, current.unicodeScalars.allSatisfy(isArrayWhitespace) {
+                current.removeAll(keepingCapacity: true)
+            }
             inQuotes.toggle()
+            wasQuoted = true
         case ",":
             if inQuotes {
                 current.unicodeScalars.append(scalar)
             } else {
-                items.append(makeArrayItem(current))
+                items.append(makeArrayItem(current, quoted: wasQuoted))
                 current.removeAll(keepingCapacity: true)
+                wasQuoted = false
             }
         default:
+            // So is whitespace after the closing quote.
+            if wasQuoted, !inQuotes, isArrayWhitespace(scalar) { continue }
             current.unicodeScalars.append(scalar)
         }
     }
-    items.append(makeArrayItem(current))
+    items.append(makeArrayItem(current, quoted: wasQuoted))
     return items
 }
 
-private func makeArrayItem(_ raw: String) -> ArrayItem {
-    let trimmed = raw.trimmingCharacters(in: .whitespaces)
-    if trimmed == "NULL" {
+/// A quoted element is taken verbatim — `"NULL"` is the string, and its spaces
+/// are significant. Unquoted elements are trimmed, and `NULL` in any case is null.
+private func makeArrayItem(_ raw: String, quoted: Bool) -> ArrayItem {
+    if quoted { return ArrayItem(value: raw) }
+    let trimmed = raw.trimmingCharacters(in: arrayWhitespace)
+    if trimmed.utf8.count == 4, trimmed.caseInsensitiveCompare("NULL") == .orderedSame {
         return ArrayItem(value: "", isNull: true)
     }
     return ArrayItem(value: trimmed)
+}
+
+/// The characters PostgreSQL's array parser skips around unquoted elements
+/// (`array_isspace`: space, \t, \n, \r, \v, \f).
+private let arrayWhitespace = CharacterSet(charactersIn: " \t\n\r\u{0B}\u{0C}")
+
+private func isArrayWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+    arrayWhitespace.contains(scalar)
 }
 
 /// Serializes array items back to PostgreSQL text format.
@@ -634,19 +655,17 @@ func serializePostgresArray(_ items: [ArrayItem]) -> String {
     let elements = items.map { item -> String in
         if item.isNull { return "NULL" }
         let val = item.value
-        // Quote if contains special characters — include control characters
-        // so newlines / tabs inside an element can't ambiguate the array text.
-        let needsQuoting = val.isEmpty || val.contains(",") || val.contains("\"")
-            || val.contains("\\") || val.contains("{") || val.contains("}")
-            || val.contains(" ") || val.contains("\n") || val.contains("\r")
-            || val.contains("\t") || val.uppercased() == "NULL"
+        // Quote if contains special characters. Control characters stay raw
+        // inside the quotes: the array parser treats `\` as "take the next
+        // character literally", so `\n` would be stored as `n`.
+        let needsQuoting = val.isEmpty || val.uppercased() == "NULL"
+            || val.unicodeScalars.contains { scalar in
+                isArrayWhitespace(scalar) || ",\"\\{}".unicodeScalars.contains(scalar)
+            }
         if needsQuoting {
             let escaped = val
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "\n", with: "\\n")
-                .replacingOccurrences(of: "\r", with: "\\r")
-                .replacingOccurrences(of: "\t", with: "\\t")
             return "\"\(escaped)\""
         }
         return val

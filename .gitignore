@@ -42,3 +42,6 @@ Pods/
 .env
 *.pem
 *.key
+
+# Security audit findings (may describe unresolved issues; keep local)
+.claude/agent-memory/paranoid-security-auditor/audit-findings-*.md

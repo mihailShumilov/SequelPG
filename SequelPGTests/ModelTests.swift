@@ -196,3 +196,71 @@ final class QueryResultTests: XCTestCase {
         XCTAssertTrue(result.isTruncated)
     }
 }
+
+final class PostgresArrayTextTests: XCTestCase {
+
+    // MARK: - Serialize
+
+    func testSerializeKeepsControlCharactersRawInsideQuotes() {
+        let text = serializePostgresArray([ArrayItem(value: "a\nb"), ArrayItem(value: "c\td")])
+        XCTAssertEqual(text, "{\"a\nb\",\"c\td\"}")
+    }
+
+    func testSerializeEscapesBackslashAndQuote() {
+        let text = serializePostgresArray([ArrayItem(value: "x\\y\"z")])
+        XCTAssertEqual(text, "{\"x\\\\y\\\"z\"}")
+    }
+
+    func testSerializeQuotesStringNullAndEmitsBareNull() {
+        let text = serializePostgresArray([ArrayItem(value: "NULL"), ArrayItem(value: "", isNull: true)])
+        XCTAssertEqual(text, "{\"NULL\",NULL}")
+    }
+
+    // MARK: - Parse
+
+    func testParseQuotedNullIsAString() {
+        let items = parsePostgresArray("{\"NULL\",NULL,null}")
+        XCTAssertEqual(items.map(\.value), ["NULL", "", ""])
+        XCTAssertEqual(items.map(\.isNull), [false, true, true])
+    }
+
+    func testParseQuotedElementKeepsSurroundingSpaces() {
+        let items = parsePostgresArray("{\" a \",b}")
+        XCTAssertEqual(items.map(\.value), [" a ", "b"])
+    }
+
+    func testParseQuotedEmptyString() {
+        let items = parsePostgresArray("{\"\",x}")
+        XCTAssertEqual(items.map(\.value), ["", "x"])
+        XCTAssertFalse(items[0].isNull)
+    }
+
+    func testParseIgnoresWhitespaceAroundQuotedElements() {
+        let items = parsePostgresArray("{ \"a\" , b}")
+        XCTAssertEqual(items.map(\.value), ["a", "b"])
+    }
+
+    func testParseEscapedQuoteAndBackslashInsideQuotes() {
+        let items = parsePostgresArray("{\"a\\\"b\",\"c\\\\d\"}")
+        XCTAssertEqual(items.map(\.value), ["a\"b", "c\\d"])
+    }
+
+    func testParseUnquotedNullIsCaseInsensitiveAndTrimmed() {
+        let items = parsePostgresArray("{ NuLl , x }")
+        XCTAssertEqual(items.map(\.isNull), [true, false])
+        XCTAssertEqual(items[1].value, "x")
+    }
+
+    func testSerializeQuotesVerticalTabAndFormFeed() {
+        XCTAssertEqual(serializePostgresArray([ArrayItem(value: "\u{0B}x\u{0C}")]), "{\"\u{0B}x\u{0C}\"}")
+    }
+
+    // MARK: - Round trip
+
+    func testRoundTripPreservesTrickyValues() {
+        let values = ["a\nb", "tab\there", " padded ", "NULL", "", "q\"uote", "back\\slash", "{brace}", "a,b", "\u{0C}ff"]
+        let parsed = parsePostgresArray(serializePostgresArray(values.map { ArrayItem(value: $0) }))
+        XCTAssertEqual(parsed.map(\.value), values)
+        XCTAssertTrue(parsed.allSatisfy { !$0.isNull })
+    }
+}

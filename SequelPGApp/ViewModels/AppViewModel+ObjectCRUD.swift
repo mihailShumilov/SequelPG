@@ -1,95 +1,31 @@
 import Foundation
 
 extension AppViewModel {
-    /// Simple `DROP <keyword> schema.name CASCADE` keywords by object type.
-    /// Function-like types and operators need special handling and aren't in this table.
-    private static let simpleDropKeyword: [DBObjectType: String] = [
-        .table: "TABLE",
-        .view: "VIEW",
-        .materializedView: "MATERIALIZED VIEW",
-        .sequence: "SEQUENCE",
-        .type: "TYPE",
-        .domain: "DOMAIN",
-        .collation: "COLLATION",
-        .foreignTable: "FOREIGN TABLE",
-        .ftsConfiguration: "TEXT SEARCH CONFIGURATION",
-        .ftsDictionary: "TEXT SEARCH DICTIONARY",
-        .ftsParser: "TEXT SEARCH PARSER",
-        .ftsTemplate: "TEXT SEARCH TEMPLATE",
-    ]
-
     /// Drops any database object with confirmation already handled by the caller.
+    /// `DatabaseClient.drop` resolves overloadable objects against pg_catalog
+    /// and refuses if the connection has moved to another database.
     func dropObject(_ object: DBObject) async {
-        guard let dropSQL = buildDropSQL(for: object) else {
-            errorMessage = "Cannot drop \(object.name): object metadata is invalid."
+        let db = navigatorVM.connectedDatabase
+        let dropSQL: String
+        do {
+            dropSQL = try await dbClient.drop(object, inDatabase: db, timeout: Self.defaultQueryTimeout)
+        } catch {
+            errorMessage = error.localizedDescription
             return
         }
 
-        do {
-            _ = try await dbClient.runQuery(dropSQL, maxRows: 0, timeout: Self.defaultQueryTimeout)
-            queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: true)
-            await dbClient.invalidateCache()
+        queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: true)
+        await dbClient.invalidateCache()
+        // The user may have moved on while the DROP ran: only clear a selection
+        // that still points at the dropped object, and only reload the tree if
+        // it still shows the database the object lived in.
+        if navigatorVM.selectedObject == object {
             navigatorVM.selectedObject = nil
-            let db = navigatorVM.connectedDatabase
-            navigatorVM.invalidateSchema(db: db, schema: object.schema)
+        }
+        navigatorVM.invalidateSchema(db: db, schema: object.schema)
+        if navigatorVM.connectedDatabase == db {
             await loadSchemaObjects(db: db, schema: object.schema)
-        } catch {
-            queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: false, errorMessage: error.localizedDescription)
-            errorMessage = error.localizedDescription
         }
-    }
-
-    /// Builds a safe DROP statement, validating any component that comes from
-    /// pg_catalog (function argument lists, operator argument types) to defeat
-    /// injection via hostile-server-supplied identifiers.
-    private func buildDropSQL(for object: DBObject) -> String? {
-        let qualified = "\(quoteIdent(object.schema)).\(quoteIdent(object.name))"
-        if let keyword = Self.simpleDropKeyword[object.type] {
-            return "DROP \(keyword) \(qualified) CASCADE"
-        }
-        switch object.type {
-        case .function, .triggerFunction:
-            return buildFunctionLikeDropSQL(object, keyword: "FUNCTION", defaultArgs: "")
-        case .procedure:
-            return buildFunctionLikeDropSQL(object, keyword: "PROCEDURE", defaultArgs: "")
-        case .aggregate:
-            return buildFunctionLikeDropSQL(object, keyword: "AGGREGATE", defaultArgs: "*")
-        case .operator:
-            return buildOperatorDropSQL(object)
-        default:
-            return nil
-        }
-    }
-
-    private func buildFunctionLikeDropSQL(_ object: DBObject, keyword: String, defaultArgs: String) -> String? {
-        let (baseName, argList) = Self.splitFunctionName(object.name, defaultArgs: defaultArgs)
-        // Reject arg lists that came from a hostile pg_catalog row and would
-        // escape the parameter list (e.g. "integer) CASCADE; DROP TABLE users").
-        guard argList.isEmpty || argList == "*" || isValidFunctionParams(argList) else { return nil }
-        return "DROP \(keyword) \(quoteIdent(object.schema)).\(quoteIdent(baseName))(\(argList)) CASCADE"
-    }
-
-    private func buildOperatorDropSQL(_ object: DBObject) -> String? {
-        // DROP OPERATOR requires (left_type, right_type), but the navigator
-        // only stores the bare symbol. We emit a best-effort statement that
-        // the DB will reject with a friendly error; the identifier is still
-        // quoteIdent-safe against injection.
-        return "DROP OPERATOR \(quoteIdent(object.schema)).\(quoteIdent(object.name)) CASCADE"
-    }
-
-    /// Splits a function name like "my_func(integer, text)" into ("my_func", "integer, text").
-    /// If the name has no parentheses, returns the name with the given default args.
-    static func splitFunctionName(_ name: String, defaultArgs: String = "") -> (name: String, args: String) {
-        guard let parenIdx = name.firstIndex(of: "("),
-              name.hasSuffix(")")
-        else {
-            return (name, defaultArgs)
-        }
-        let funcName = String(name[name.startIndex ..< parenIdx])
-        let argsStart = name.index(after: parenIdx)
-        let argsEnd = name.index(before: name.endIndex)
-        let args = argsStart < argsEnd ? String(name[argsStart ..< argsEnd]) : defaultArgs
-        return (funcName, args)
     }
 
     /// Executes a CREATE statement and refreshes the navigator.
