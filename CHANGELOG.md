@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-10-21
+
 ### Added
 - **Connections menu in the toolbar.** Next to the connection name: Edit Connection…, Disconnect, any saved connection to open in a new tab, and New Connection Tab.
 - **Edit Connection…** (File menu or the Connections menu) edits the live connection's saved settings. **Save** keeps the session running; **Save & Reconnect** applies the changes right away.
