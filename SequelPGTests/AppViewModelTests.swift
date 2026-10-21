@@ -2095,3 +2095,53 @@ extension MockDatabaseClient {
         lastRunQueryMaxRows = nil
     }
 }
+
+// MARK: - Edit Connection / Reconnect
+
+@MainActor
+final class ReconnectTests: AppViewModelTestCase {
+
+    func testConnectedProfileIDTracksTheLiveConnection() async {
+        let profile = makeProfile()
+        XCTAssertNil(vm.connectedProfileID)
+
+        await makeConnectedVM(profile: profile)
+        XCTAssertEqual(vm.connectedProfileID, profile.id)
+
+        await vm.disconnect()
+        XCTAssertNil(vm.connectedProfileID)
+    }
+
+    func testReconnectUsesEditedSettings() async {
+        let original = makeProfile(name: "Old", database: "olddb")
+        await makeConnectedVM(profile: original)
+        var edited = original
+        edited.name = "New"
+        edited.database = "newdb"
+
+        await vm.reconnect(profile: edited, password: "changed", sshPassword: nil)
+
+        let connects = await mockDB.connectCallCount
+        let disconnects = await mockDB.disconnectCallCount
+        let lastProfile = await mockDB.lastConnectedProfile
+        let lastPassword = await mockDB.lastConnectedPassword
+        XCTAssertEqual(connects, 2)
+        XCTAssertEqual(disconnects, 1)
+        XCTAssertEqual(lastProfile?.database, "newdb")
+        XCTAssertEqual(lastPassword, "changed")
+        XCTAssertTrue(vm.isConnected)
+        XCTAssertEqual(vm.connectedProfileName, "New")
+        XCTAssertEqual(vm.connectedProfileID, original.id)
+    }
+
+    func testReconnectFailureLeavesWindowDisconnectedWithError() async {
+        await makeConnectedVM()
+        await mockDB.setShouldThrowOnConnect(true)
+
+        await vm.reconnect(profile: makeProfile(), password: nil, sshPassword: nil)
+
+        XCTAssertFalse(vm.isConnected)
+        XCTAssertNotNil(vm.errorMessage)
+        XCTAssertNil(vm.connectedProfileID)
+    }
+}

@@ -264,3 +264,11 @@ final class PostgresArrayTextTests: XCTestCase {
         XCTAssertTrue(parsed.allSatisfy { !$0.isNull })
     }
 }
+
+final class ConnectionProfileDisplayNameTests: XCTestCase {
+
+    func testDisplayNameFallsBackToUntitled() {
+        XCTAssertEqual(ConnectionProfile(name: "", host: "h", port: 5432, database: "d", username: "u").displayName, "Untitled")
+        XCTAssertEqual(ConnectionProfile(name: "Prod", host: "h", port: 5432, database: "d", username: "u").displayName, "Prod")
+    }
+}

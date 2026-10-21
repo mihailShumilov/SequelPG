@@ -185,6 +185,7 @@ struct CascadeDeleteBuilder {
     var showFunctionLibrary = false
     var showExportSheet = false
     var showImportSheet = false
+    var showEditConnectionSheet = false
 
     // Create-object sheets reachable from the Database menu and the sidebar.
     var showCreateDatabaseSheet = false
@@ -422,6 +423,17 @@ struct CascadeDeleteBuilder {
             errorMessage = error.localizedDescription
             Log.ui.error("UI: connection failed - \(error.localizedDescription)")
         }
+    }
+
+    /// Saved-profile id of the live connection, for editing it in place.
+    var connectedProfileID: UUID? { connectedProfile?.id }
+
+    /// Re-opens this window's session with edited settings. Like Disconnect,
+    /// it closes the open object tabs; on failure the window returns to the
+    /// start page with the error.
+    func reconnect(profile: ConnectionProfile, password: String?, sshPassword: String?) async {
+        await disconnect()
+        await connect(profile: profile, password: password, sshPassword: sshPassword)
     }
 
     func disconnect() async {

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-10-21
+
+### Added
+- **Connections menu in the toolbar.** Next to the connection name: Edit Connection…, Disconnect, any saved connection to open in a new tab, and New Connection Tab.
+- **Edit Connection…** (File menu or the Connections menu) edits the live connection's saved settings. **Save** keeps the session running; **Save & Reconnect** applies the changes right away.
+- **File ▸ Open Connection in New Tab** lists saved connections and connects in a new tab straight away.
+
+### Changed
+- File menu items now say what they open: **New Connection Window** (⌘N) and **New Connection Tab** (⌘T).
+- The start page shows a hint that ⌘T opens another connection in a new tab.
+
 ## [0.3.7] - 2026-10-21
 
 ### Fixed

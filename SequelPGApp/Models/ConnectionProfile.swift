@@ -179,3 +179,8 @@ extension KeyedDecodingContainer {
         try decodeIfPresent(type, forKey: key) ?? .init()
     }
 }
+
+extension ConnectionProfile {
+    /// Name shown in lists and menus; unnamed profiles read as "Untitled".
+    var displayName: String { name.isEmpty ? "Untitled" : name }
+}

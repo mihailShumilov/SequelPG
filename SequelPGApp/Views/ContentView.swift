@@ -9,6 +9,7 @@ struct ConnectionWindowView: View {
     static let windowID = "connection"
 
     @Environment(ConnectionListViewModel.self) private var connectionListVM
+    @Environment(\.openWindow) private var openWindow
     @State private var appVM = AppViewModel()
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
@@ -38,12 +39,29 @@ struct ConnectionWindowView: View {
         .background(WindowAccessor { window in
             WindowTabbing.attachIfRequested(window)
         })
+        // Opened via "Open Connection in New Tab": connect straight away.
+        .task {
+            if let profileID = WindowTabbing.takePendingProfileID() {
+                await connectToSavedProfile(profileID)
+            }
+        }
         // Closing the window (or its tab) ends the session it owned.
         .onDisappear {
             if appVM.isConnected {
                 Task { await appVM.disconnect() }
             }
         }
+    }
+
+    private func connectToSavedProfile(_ id: UUID) async {
+        guard let profile = connectionListVM.profiles.first(where: { $0.id == id }) else { return }
+        let password = connectionListVM.loadPasswordForProfile(profile)
+        let sshPassword = connectionListVM.loadSSHPasswordForProfile(profile)
+        await appVM.connect(
+            profile: profile,
+            password: password.isEmpty ? nil : password,
+            sshPassword: profile.useSSHTunnel ? sshPassword : nil
+        )
     }
 
     private var errorBinding: Binding<Bool> {
@@ -70,6 +88,10 @@ struct ConnectionWindowView: View {
         .navigationTitle(appVM.connectedProfileName ?? "SequelPG")
         .navigationSubtitle(appVM.navigatorVM.connectedDatabase)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                connectionMenu
+            }
+
             ToolbarItem(placement: .principal) {
                 Picker("Mode", selection: $appVM.selectedTab) {
                     ForEach(AppViewModel.MainTab.allCases, id: \.self) { tab in
@@ -111,6 +133,13 @@ struct ConnectionWindowView: View {
                 .help("Show or hide the Inspector (⌥⌘I)")
             }
         }
+        .sheet(isPresented: $appVM.showEditConnectionSheet) {
+            if let profileID = appVM.connectedProfileID {
+                EditConnectionSheet(profileID: profileID)
+                    .environment(appVM)
+                    .environment(connectionListVM)
+            }
+        }
         .sheet(isPresented: $appVM.showExtensionsSheet) {
             ExtensionsSheet().environment(appVM)
         }
@@ -131,6 +160,34 @@ struct ConnectionWindowView: View {
         } message: {
             Text(appVM.errorMessage ?? "")
         }
+    }
+}
+
+// MARK: - Connection menu
+
+private extension ConnectionWindowView {
+    /// Toolbar menu for this window's connection and for opening others.
+    var connectionMenu: some View {
+        Menu {
+            Section(appVM.connectedProfileName ?? "Connection") {
+                Button("Edit Connection…") { appVM.showEditConnectionSheet = true }
+                    .disabled(appVM.connectedProfileID == nil)
+                Button("Disconnect") { Task { await appVM.disconnect() } }
+            }
+            Section("Open in New Tab") {
+                ForEach(connectionListVM.profiles) { profile in
+                    Button(profile.displayName) {
+                        WindowTabbing.openNewTab(openWindow: openWindow, connectingTo: profile.id)
+                    }
+                }
+                Button("New Connection Tab") {
+                    WindowTabbing.openNewTab(openWindow: openWindow)
+                }
+            }
+        } label: {
+            Label("Connections", systemImage: "server.rack")
+        }
+        .help("Edit this connection, or open another one in a new tab")
     }
 }
 

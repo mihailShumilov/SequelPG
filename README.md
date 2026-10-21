@@ -42,6 +42,7 @@ Or use **Cmd+U** in Xcode.
 - [x] PG version-adaptive object categories (e.g., Procedures for PG 11+)
 - [x] Multi-database browsing (expand any database to see its schemas)
 - [x] Native window tabs (⌘T) and windows (⌘N) for multiple connections
+- [x] Connections toolbar menu and File menu to open saved connections in new tabs and edit the live connection
 - [x] Structure tab with column, index, constraint, trigger, and partition sections
 - [x] Content tab with pagination (50 / 100 / 200 rows)
 - [x] Double-click cell editing through a type-aware editor sheet, saved immediately

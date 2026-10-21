@@ -10,8 +10,6 @@ struct StartPageView: View {
     // MARK: - Form State
 
     @State private var form = ConnectionFormModel()
-    @State private var showPassword = false
-    @State private var showSSHPassword = false
     @State private var validationErrors: [String] = []
     @State private var deleteTarget: ConnectionProfile?
     @State private var previousSelectedId: UUID?
@@ -71,7 +69,7 @@ struct StartPageView: View {
             List(connectionListVM.filteredProfiles, selection: $connectionListVM.selectedProfileId) { profile in
                 Label {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(profile.name.isEmpty ? "Untitled" : profile.name)
+                        Text(profile.displayName)
                             .lineLimit(1)
                         Text(profileSummary(profile))
                             .font(.caption)
@@ -184,57 +182,9 @@ struct StartPageView: View {
     private var detailColumn: some View {
         if connectionListVM.selectedProfile != nil {
             VStack(spacing: 0) {
-                Form {
-                    Section {
-                        TextField("Name", text: $form.name)
-                        TextField("Host", text: $form.host, prompt: Text("localhost"))
-                        TextField("Port", text: $form.port, prompt: Text("5432"))
-                        TextField("Database", text: $form.database)
-                        TextField("Username", text: $form.username)
-                        HStack {
-                            if showPassword {
-                                TextField("Password", text: $form.password)
-                            } else {
-                                SecureField("Password", text: $form.password)
-                            }
-                            Button {
-                                showPassword.toggle()
-                            } label: {
-                                Image(systemName: showPassword ? "eye.slash" : "eye")
-                            }
-                            .buttonStyle(.borderless)
-                            .help(showPassword ? "Hide password" : "Show password")
-                        }
-                        Picker("SSL Mode", selection: $form.sslMode) {
-                            ForEach(SSLMode.allCases, id: \.self) { mode in
-                                Text(mode.displayName).tag(mode)
-                            }
-                        }
-                    } header: {
-                        Text("PostgreSQL Server")
-                    } footer: {
-                        Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
-
-                    Section("SSH Tunnel") {
-                        SSHTunnelFormSection(
-                            useSSHTunnel: $form.useSSHTunnel,
-                            sshHost: $form.sshHost,
-                            sshPort: $form.sshPort,
-                            sshUser: $form.sshUser,
-                            sshAuthMethod: $form.sshAuthMethod,
-                            sshKeyPath: $form.sshKeyPath,
-                            sshPassword: $form.sshPassword,
-                            showSSHPassword: $showSSHPassword
-                        )
-                    }
-                }
-                .formStyle(.grouped)
+                ConnectionSettingsForm(form: $form)
+                    // Fresh password-visibility state for each profile.
+                    .id(connectionListVM.selectedProfileId)
 
                 if !validationErrors.isEmpty {
                     InlineBanner(kind: .warning, message: validationErrors.joined(separator: "\n")) {
@@ -268,6 +218,13 @@ struct StartPageView: View {
                     }
                     .disabled(isTestingConnection || isConnecting)
                     .help("Open a throwaway connection to verify these settings")
+
+                    Spacer()
+
+                    Text("Tip: ⌘T opens another connection in a new tab.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
 
                     Spacer()
 
@@ -354,8 +311,6 @@ struct StartPageView: View {
             password: connectionListVM.loadPasswordForProfile(profile),
             sshPassword: connectionListVM.loadSSHPasswordForProfile(profile)
         )
-        showPassword = false
-        showSSHPassword = false
     }
 
     private func saveFormToProfile(id: UUID) {

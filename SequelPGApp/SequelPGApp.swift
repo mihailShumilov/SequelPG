@@ -35,7 +35,7 @@ struct SequelPGApp: App {
                 .preferredColorScheme(themePreference.colorScheme)
         }
         .commands {
-            AppCommands(themePreference: themePreference)
+            AppCommands(themePreference: themePreference, connectionListVM: connectionListVM)
         }
 
         Settings {
@@ -54,6 +54,7 @@ struct SequelPGApp: App {
 /// background window.
 struct AppCommands: Commands {
     let themePreference: ThemePreference
+    let connectionListVM: ConnectionListViewModel
 
     @FocusedValue(\.appViewModel) private var appVM
     @Environment(\.openWindow) private var openWindow
@@ -61,11 +62,29 @@ struct AppCommands: Commands {
     private var isConnected: Bool { appVM?.isConnected ?? false }
 
     var body: some Commands {
-        CommandGroup(after: .newItem) {
-            Button("New Tab") {
+        CommandGroup(replacing: .newItem) {
+            Button("New Connection Window") {
+                openWindow(id: ConnectionWindowView.windowID)
+            }
+            .keyboardShortcut("n", modifiers: .command)
+
+            Button("New Connection Tab") {
                 WindowTabbing.openNewTab(openWindow: openWindow)
             }
             .keyboardShortcut("t", modifiers: .command)
+
+            Menu("Open Connection in New Tab") {
+                ForEach(connectionListVM.profiles) { profile in
+                    Button(profile.displayName) {
+                        WindowTabbing.openNewTab(openWindow: openWindow, connectingTo: profile.id)
+                    }
+                }
+            }
+            .disabled(connectionListVM.profiles.isEmpty)
+
+            Divider()
+            Button("Edit Connection…") { appVM?.showEditConnectionSheet = true }
+                .disabled(appVM?.connectedProfileID == nil)
         }
 
         CommandGroup(replacing: .importExport) {
@@ -239,14 +258,24 @@ enum TextFinderAction {
 
 /// Opens connection windows as native tabs of the current window. `openNewTab`
 /// records the anchor window and asks SwiftUI for a new scene; the new
-/// window's `WindowAccessor` then attaches itself to that anchor's tab group.
+/// window's `WindowAccessor` then attaches itself to that anchor's tab group,
+/// and the new window picks up the saved connection to open, if any.
 @MainActor
 enum WindowTabbing {
     private static weak var anchorWindow: NSWindow?
+    private static var pendingProfileID: UUID?
 
-    static func openNewTab(openWindow: OpenWindowAction) {
+    static func openNewTab(openWindow: OpenWindowAction, connectingTo profileID: UUID? = nil) {
         anchorWindow = NSApp.keyWindow ?? NSApp.mainWindow
+        pendingProfileID = profileID
         openWindow(id: ConnectionWindowView.windowID)
+    }
+
+    /// The saved connection the newly opened window should connect to.
+    /// Handed over once, so restored or later windows start on the start page.
+    static func takePendingProfileID() -> UUID? {
+        defer { pendingProfileID = nil }
+        return pendingProfileID
     }
 
     /// Called by every new connection window once it has an `NSWindow`.
