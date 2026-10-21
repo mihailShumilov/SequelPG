@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The start page is a sidebar of saved connections (with filter, +/− bar, Duplicate in the context menu) and a grouped settings form with native Test Connection / Connect buttons; validation and test results appear as inline banners.
 
 ### Fixed
+- **Array values with newlines, tabs, a literal `"NULL"`, or padded text were corrupted by the field editor.** Saving an element containing a newline stored `n` instead of the line break (likewise tabs and carriage returns); a quoted `"NULL"` string element was read back as a real NULL; and quoted elements lost their leading/trailing spaces. Array elements now round-trip exactly.
+- **Dropping operators, aggregates, and overloaded routines from the sidebar.** Operators are now listed with their argument types (`===(integer, integer)`), so each overload is its own entry and can be dropped — previously every operator drop failed. Aggregates with arguments and functions whose argument types have unusual names can be dropped too. The exact object to drop is resolved from the server's catalog, and a name that no longer exists or matches several overloads is refused instead of guessed.
 - **EXPLAIN / EXPLAIN ANALYZE failed on non-trivial plans** (“The data couldn't be read because it isn't in the correct format”). The plan JSON was passing through the 10 000-character cell display cap, so any plan over that size — partitioned tables, wide joins — was truncated before parsing. EXPLAIN now reads its output whole.
 - ⌘F, ⇧⌘Y, Export and Import no longer act on every open connection at once; they target the key window.
 - The Disconnect command (⇧⌘W) documented in the README now exists.
