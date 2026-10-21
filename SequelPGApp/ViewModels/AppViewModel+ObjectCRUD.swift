@@ -1,49 +1,20 @@
 import Foundation
 
 extension AppViewModel {
-    /// Simple `DROP <keyword> schema.name CASCADE` keywords by object type.
-    /// Function-like types and operators need special handling and aren't in this table.
-    private static let simpleDropKeyword: [DBObjectType: String] = [
-        .table: "TABLE",
-        .view: "VIEW",
-        .materializedView: "MATERIALIZED VIEW",
-        .sequence: "SEQUENCE",
-        .type: "TYPE",
-        .domain: "DOMAIN",
-        .collation: "COLLATION",
-        .foreignTable: "FOREIGN TABLE",
-        .ftsConfiguration: "TEXT SEARCH CONFIGURATION",
-        .ftsDictionary: "TEXT SEARCH DICTIONARY",
-        .ftsParser: "TEXT SEARCH PARSER",
-        .ftsTemplate: "TEXT SEARCH TEMPLATE",
-    ]
-
     /// Drops any database object with confirmation already handled by the caller.
-    /// Functions, procedures, aggregates, and operators are resolved and dropped
-    /// by `DatabaseClient.dropOverloadableObject`, which matches the navigator
-    /// name against pg_catalog so overloads and hostile names can't misfire.
+    /// `DatabaseClient.drop` resolves overloadable objects against pg_catalog
+    /// and refuses if the connection has moved to another database.
     func dropObject(_ object: DBObject) async {
         let db = navigatorVM.connectedDatabase
-        var dropSQL: String?
+        let dropSQL: String
         do {
-            if let keyword = Self.simpleDropKeyword[object.type] {
-                let sql = "DROP \(keyword) \(quoteIdent(object.schema)).\(quoteIdent(object.name)) CASCADE"
-                dropSQL = sql
-                _ = try await dbClient.runQuery(sql, maxRows: 0, timeout: Self.defaultQueryTimeout)
-            } else {
-                dropSQL = try await dbClient.dropOverloadableObject(object, timeout: Self.defaultQueryTimeout)
-            }
+            dropSQL = try await dbClient.drop(object, inDatabase: db, timeout: Self.defaultQueryTimeout)
         } catch {
-            if let dropSQL {
-                queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: false, errorMessage: error.localizedDescription)
-            }
             errorMessage = error.localizedDescription
             return
         }
 
-        if let dropSQL {
-            queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: true)
-        }
+        queryHistoryVM.logQuery(sql: dropSQL, source: .system, success: true)
         await dbClient.invalidateCache()
         // The user may have moved on while the DROP ran: only clear a selection
         // that still points at the dropped object, and only reload the tree if

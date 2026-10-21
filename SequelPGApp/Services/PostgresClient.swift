@@ -53,10 +53,11 @@ protocol PostgresClientProtocol: Sendable {
     func listDatabases() async throws -> [String]
     func switchDatabase(to database: String, profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
     func getObjectDDL(schema: String, name: String, type: DBObjectType) async throws -> String
-    /// Drops a function, procedure, trigger function, aggregate, or operator
-    /// identified by its navigator name, resolving the exact catalog entry and
-    /// dropping it in one transaction. Returns the executed DROP statement.
-    func dropOverloadableObject(_ object: DBObject, timeout: TimeInterval) async throws -> String
+    /// Drops a navigator object with CASCADE, refusing if the live connection
+    /// is no longer on `database`. Overloadable objects (functions, procedures,
+    /// aggregates, operators) are resolved to exactly one catalog entry in the
+    /// same transaction. Returns the executed DROP statement.
+    func drop(_ object: DBObject, inDatabase database: String, timeout: TimeInterval) async throws -> String
     func getFunctionMetadata(schema: String, name: String) async throws -> FunctionMetadata
     // Per-table metadata
     func listIndexes(schema: String, table: String) async throws -> [IndexInfo]
@@ -261,13 +262,14 @@ actor DatabaseClient: PostgresClientProtocol {
                 )
             }
         } catch {
-            throw mapQueryError(error)
+            throw mapQueryError(error, from: client)
         }
     }
 
     /// Translates a driver error into the `AppError` shown to the user, and
-    /// drops the client when the error means the connection is gone.
-    private func mapQueryError(_ error: Error) -> Error {
+    /// drops the client when the error means the connection is gone — unless
+    /// a database switch has already replaced `failedClient` with a new one.
+    private func mapQueryError(_ error: Error, from failedClient: PostgresClient) -> Error {
         switch error {
         case let error as AppError:
             return error
@@ -280,9 +282,11 @@ actor DatabaseClient: PostgresClientProtocol {
             if error.code == .serverClosedConnection || error.code == .connectionError
                 || sqlState?.hasPrefix("08") == true
             {
-                client = nil
-                runTask?.cancel()
-                runTask = nil
+                if client === failedClient {
+                    client = nil
+                    runTask?.cancel()
+                    runTask = nil
+                }
                 return AppError.connectionFailed("Connection lost: \(Self.formatPSQLError(error))")
             }
             if sqlState == "23503" {
@@ -318,18 +322,17 @@ actor DatabaseClient: PostgresClientProtocol {
 
     // MARK: - Drop
 
-    func dropOverloadableObject(_ object: DBObject, timeout: TimeInterval) async throws -> String {
+    func drop(_ object: DBObject, inDatabase database: String, timeout: TimeInterval) async throws -> String {
         guard let client else { throw AppError.notConnected }
-        let serverVersion = await detectServerVersion(client: client)
-        guard let keyword = Self.dropKeyword(for: object.type),
-              let lookup = Self.dropTargetLookupQuery(for: object, serverVersion: serverVersion)
-        else {
+        guard let keyword = Self.dropKeyword(for: object.type) else {
             throw AppError.validationFailed(["\(object.name) can't be dropped from the sidebar."])
         }
+        let serverVersion = await detectServerVersion(client: client)
+        let lookup = Self.dropTargetLookupQuery(for: object, serverVersion: serverVersion)
         do {
-            // Lookup and DROP share one connection and transaction: the DROP
-            // hits the database and catalog entry the lookup resolved, even if
-            // the navigator switches databases or the catalog changes meanwhile.
+            // Everything runs on one connection in one transaction: the DROP
+            // hits the database and catalog entry checked here, even if the
+            // navigator points the client at another database meanwhile.
             return try await Self.withCatalogSession(client: client) { connection in
                 if timeout > 0 {
                     try await connection.query(
@@ -337,29 +340,64 @@ actor DatabaseClient: PostgresClientProtocol {
                         logger: connection.logger
                     )
                 }
-                var targets: [String] = []
-                for try await row in try await connection.query(lookup, logger: connection.logger) {
-                    let (target,) = try row.decode(String.self)
-                    targets.append(target)
+                let current = try await Self.firstString(
+                    connection.query("SELECT current_database()", logger: connection.logger)
+                )
+                guard current == database else {
+                    throw AppError.validationFailed([
+                        "The sidebar was switching databases, so \(object.name) was not dropped. Try again.",
+                    ])
                 }
-                guard targets.count == 1, let target = targets.first else {
-                    throw AppError.validationFailed([targets.isEmpty
-                            ? "\(object.name) no longer exists in schema \(object.schema). Choose Refresh (⌘R) and try again."
-                            : "\(object.name) has several overloads. Drop the one you mean from the Query tab with its argument types."])
+                let target: String
+                if let lookup {
+                    target = try await Self.resolveDropTarget(lookup, object: object, connection: connection)
+                } else {
+                    target = "\(quoteIdent(object.schema)).\(quoteIdent(object.name))"
                 }
-                // `target` is rendered by the server with %I / format_type from
-                // the catalog row, never parsed or assembled on the client.
                 let sql = "DROP \(keyword) \(target) CASCADE"
                 try await connection.query(PostgresQuery(unsafeSQL: sql), logger: connection.logger)
                 return sql
             }
         } catch {
-            throw mapQueryError(error)
+            throw mapQueryError(error, from: client)
         }
+    }
+
+    /// Runs a drop-target lookup and requires exactly one match, so a stale or
+    /// overloaded navigator entry never drops the wrong object. The target is
+    /// rendered by the server with %I / format_type, never assembled here.
+    private static func resolveDropTarget(
+        _ lookup: PostgresQuery,
+        object: DBObject,
+        connection: PostgresConnection
+    ) async throws -> String {
+        var targets: [String] = []
+        for try await row in try await connection.query(lookup, logger: connection.logger) {
+            let (target,) = try row.decode(String.self)
+            targets.append(target)
+        }
+        guard targets.count == 1, let target = targets.first else {
+            throw AppError.validationFailed([targets.isEmpty
+                    ? "\(object.name) no longer exists in schema \(object.schema). Choose Refresh (⌘R) and try again."
+                    : "\(object.name) has several overloads. Drop the one you mean from the Query tab with its argument types."])
+        }
+        return target
     }
 
     static func dropKeyword(for type: DBObjectType) -> String? {
         switch type {
+        case .table: return "TABLE"
+        case .view: return "VIEW"
+        case .materializedView: return "MATERIALIZED VIEW"
+        case .sequence: return "SEQUENCE"
+        case .type: return "TYPE"
+        case .domain: return "DOMAIN"
+        case .collation: return "COLLATION"
+        case .foreignTable: return "FOREIGN TABLE"
+        case .ftsConfiguration: return "TEXT SEARCH CONFIGURATION"
+        case .ftsDictionary: return "TEXT SEARCH DICTIONARY"
+        case .ftsParser: return "TEXT SEARCH PARSER"
+        case .ftsTemplate: return "TEXT SEARCH TEMPLATE"
         case .function, .triggerFunction: return "FUNCTION"
         case .procedure: return "PROCEDURE"
         case .aggregate: return "AGGREGATE"
@@ -370,7 +408,8 @@ actor DatabaseClient: PostgresClientProtocol {
 
     /// Catalog query returning the server-rendered DROP target for an
     /// overloadable object — one row per catalog entry of the same kind
-    /// matching its navigator name. Must run inside `withCatalogSession`.
+    /// matching its navigator name — or `nil` for types addressed by plain
+    /// `schema.name`. Must run inside `withCatalogSession`.
     static func dropTargetLookupQuery(for object: DBObject, serverVersion: Int) -> PostgresQuery? {
         let schema = object.schema
         let name = object.name
@@ -1657,9 +1696,10 @@ actor DatabaseClient: PostgresClientProtocol {
 
         let query = makeObjectDDLQuery(schema: schema, name: name, type: type)
         do {
-            // Operators are matched by their rendered signature, which is only
-            // stable inside a catalog session.
-            let ddl = type == .operator
+            // Operators are matched by their rendered signature and functions by
+            // a regprocedure cast; both resolve type names via search_path, so
+            // they only identify the listed object inside a catalog session.
+            let ddl = [.operator, .function, .procedure, .triggerFunction].contains(type)
                 ? try await Self.withCatalogSession(client: client) { connection in
                     try await Self.firstString(connection.query(query, logger: connection.logger))
                 }
@@ -1759,8 +1799,16 @@ actor DatabaseClient: PostgresClientProtocol {
                 """
         }
 
-        let rows = try await client.query(query)
-        for try await row in rows {
+        // The regprocedure cast resolves type names via search_path; pin it so
+        // it finds the overload the navigator listed.
+        let rows = try await Self.withCatalogSession(client: client) { connection in
+            var collected: [PostgresRow] = []
+            for try await row in try await connection.query(query, logger: connection.logger) {
+                collected.append(row)
+            }
+            return collected
+        }
+        for row in rows {
             // PostgresNIO's auto-tuple decode caps out before 12 fields;
             // use column-keyed access. `proargnames` can contain NULL
             // elements when some params are anonymous, so decode as

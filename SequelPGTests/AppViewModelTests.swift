@@ -215,12 +215,12 @@ actor MockDatabaseClient: PostgresClientProtocol {
         return "-- mock DDL"
     }
 
-    var droppedOverloadableObjects: [DBObject] = []
+    var droppedObjects: [(object: DBObject, database: String)] = []
     /// Returns the DROP statement to report, or throws. Default: a plain statement.
-    var dropOverloadableHandler: (@Sendable (DBObject) throws -> String)?
-    func dropOverloadableObject(_ object: DBObject, timeout: TimeInterval) async throws -> String {
-        droppedOverloadableObjects.append(object)
-        if let dropOverloadableHandler { return try dropOverloadableHandler(object) }
+    var dropHandler: (@Sendable (DBObject) throws -> String)?
+    func drop(_ object: DBObject, inDatabase database: String, timeout: TimeInterval) async throws -> String {
+        droppedObjects.append((object, database))
+        if let dropHandler { return try dropHandler(object) }
         return "DROP \(object.name) CASCADE"
     }
 
@@ -2080,16 +2080,16 @@ extension MockDatabaseClient {
         lastRunQuerySQL = nil
     }
 
-    func setDropOverloadableHandler(_ handler: (@Sendable (DBObject) throws -> String)?) {
-        dropOverloadableHandler = handler
+    func setDropHandler(_ handler: (@Sendable (DBObject) throws -> String)?) {
+        dropHandler = handler
     }
 
-    func getDroppedOverloadableObjects() -> [DBObject] {
-        droppedOverloadableObjects
+    func getDroppedObjects() -> [(object: DBObject, database: String)] {
+        droppedObjects
     }
 
     func resetQueryState() {
-        droppedOverloadableObjects = []
+        droppedObjects = []
         allRunQuerySQLs = []
         lastRunQuerySQL = nil
         lastRunQueryMaxRows = nil

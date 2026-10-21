@@ -3,52 +3,22 @@ import XCTest
 
 // MARK: - Drop Object Tests
 
-/// Tests for AppViewModel.dropObject and the catalog lookup behind
-/// DatabaseClient.dropOverloadableObject:
-/// - simple object types are dropped with quoted identifiers via runQuery
-/// - routines, aggregates, and operators go through dropOverloadableObject
+/// Tests for AppViewModel.dropObject and the catalog lookup behind DatabaseClient.drop:
+/// - every drop goes through DatabaseClient.drop with the navigator's database
 /// - success logs history, refreshes the navigator, and clears only a stale selection
 /// - failures surface the error without refreshing
 /// - the lookup query binds names as parameters and filters by object kind
 @MainActor
 final class DropObjectTests: AppViewModelTestCase {
 
-    // MARK: - Simple types
+    // MARK: - Delegation
 
-    func testDropTableQuotesSchemaAndNameAndLogsHistory() async {
+    func testDropPassesObjectAndConnectedDatabaseToClient() async {
         await makeConnectedVM()
-
-        await vm.dropObject(DBObject(schema: "My Schema", name: "odd\"name", type: .table))
-
-        let expected = "DROP TABLE \"My Schema\".\"odd\"\"name\" CASCADE"
-        let sqls = await mockDB.getAllRunQuerySQLs()
-        XCTAssertEqual(sqls, [expected])
-        XCTAssertNil(vm.errorMessage)
-        let entry = vm.queryHistoryVM.entries.first { $0.sql == expected }
-        XCTAssertEqual(entry?.success, true)
-        XCTAssertEqual(entry?.source, .system)
-    }
-
-    func testDropTableFailureLogsHistoryAndSetsError() async {
-        await makeConnectedVM()
-        await mockDB.setRunQueryHandler { _ in throw AppError.queryFailed("permission denied") }
-
-        await vm.dropObject(DBObject(schema: "app", name: "t", type: .table))
-
-        XCTAssertTrue(vm.errorMessage?.contains("permission denied") ?? false)
-        let entry = vm.queryHistoryVM.entries.first { $0.sql.hasPrefix("DROP TABLE") }
-        XCTAssertEqual(entry?.success, false)
-    }
-
-    // MARK: - Overloadable types
-
-    func testOverloadableTypesUseDropOverloadableObject() async {
-        await makeConnectedVM()
+        vm.navigatorVM.connectedDatabase = "sales"
         let objects = [
+            DBObject(schema: "app", name: "t", type: .table),
             DBObject(schema: "app", name: "f(integer)", type: .function),
-            DBObject(schema: "app", name: "trg", type: .triggerFunction),
-            DBObject(schema: "app", name: "do_work", type: .procedure),
-            DBObject(schema: "app", name: "mysum", type: .aggregate),
             DBObject(schema: "app", name: "===(text, text)", type: .operator),
         ]
 
@@ -56,27 +26,29 @@ final class DropObjectTests: AppViewModelTestCase {
             await vm.dropObject(object)
         }
 
-        let dropped = await mockDB.getDroppedOverloadableObjects()
-        XCTAssertEqual(dropped, objects)
+        let dropped = await mockDB.getDroppedObjects()
+        XCTAssertEqual(dropped.map(\.object), objects)
+        XCTAssertEqual(Set(dropped.map(\.database)), ["sales"])
         let sqls = await mockDB.getAllRunQuerySQLs()
-        XCTAssertFalse(sqls.contains { $0.hasPrefix("DROP") }, "overloadable drops must not go through runQuery")
+        XCTAssertFalse(sqls.contains { $0.hasPrefix("DROP") }, "drops must not bypass DatabaseClient.drop")
         XCTAssertNil(vm.errorMessage)
     }
 
-    func testOverloadableDropLogsTheExecutedStatement() async {
+    func testDropLogsTheExecutedStatement() async {
         await makeConnectedVM()
-        await mockDB.setDropOverloadableHandler { _ in "DROP OPERATOR app.=== (text, text) CASCADE" }
+        await mockDB.setDropHandler { _ in "DROP OPERATOR app.=== (text, text) CASCADE" }
 
         await vm.dropObject(DBObject(schema: "app", name: "===(text, text)", type: .operator))
 
         let entry = vm.queryHistoryVM.entries.first { $0.sql.hasPrefix("DROP OPERATOR") }
         XCTAssertEqual(entry?.sql, "DROP OPERATOR app.=== (text, text) CASCADE")
         XCTAssertEqual(entry?.success, true)
+        XCTAssertEqual(entry?.source, .system)
     }
 
-    func testOverloadableDropFailureSetsErrorAndSkipsRefresh() async {
+    func testDropFailureSetsErrorAndSkipsRefresh() async {
         await makeConnectedVM()
-        await mockDB.setDropOverloadableHandler { _ in
+        await mockDB.setDropHandler { _ in
             throw AppError.validationFailed(["agg has several overloads."])
         }
 
@@ -168,9 +140,10 @@ final class DropObjectTests: AppViewModelTestCase {
         XCTAssertTrue(sql.contains("FROM pg_operator o"))
     }
 
-    func testNonOverloadableTypesHaveNoLookupOrKeyword() {
+    func testPlainTypesUseNameWithoutLookup() {
         XCTAssertNil(lookup("t", .table))
-        XCTAssertNil(DatabaseClient.dropKeyword(for: .table))
+        XCTAssertEqual(DatabaseClient.dropKeyword(for: .table), "TABLE")
+        XCTAssertEqual(DatabaseClient.dropKeyword(for: .materializedView), "MATERIALIZED VIEW")
         XCTAssertEqual(DatabaseClient.dropKeyword(for: .triggerFunction), "FUNCTION")
     }
 }
