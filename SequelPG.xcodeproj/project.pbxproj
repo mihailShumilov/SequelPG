@@ -95,6 +95,7 @@
 		AA10000000000000000073 /* ExportViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000073; };
 		AA10000000000000000074 /* ImportViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000074; };
 		AA10000000000000000075 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000075; };
+		AA10000000000000000E31 /* EditConnectionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E31; };
 		AA10000000000000000076 /* ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000076; };
 		AA10000000000000000077 /* DatabaseTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000077; };
 		AA10000000000000000E21 /* EditorPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E21; };
@@ -221,6 +222,7 @@
 		AB10000000000000000073 /* ExportViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportViewModel.swift; sourceTree = "<group>"; };
 		AB10000000000000000074 /* ImportViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportViewModel.swift; sourceTree = "<group>"; };
 		AB10000000000000000075 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
+		AB10000000000000000E31 /* EditConnectionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditConnectionSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000076 /* ImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheet.swift; sourceTree = "<group>"; };
 		AB10000000000000000077 /* DatabaseTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseTransferTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000E21 /* EditorPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreferenceTests.swift; sourceTree = "<group>"; };
@@ -355,6 +357,7 @@
 				AB10000000000000000013 /* ConnectionFormView.swift */,
 				AB10000000000000000016 /* ContentTabView.swift */,
 				AB10000000000000000010 /* ContentView.swift */,
+				AB10000000000000000E31 /* EditConnectionSheet.swift */,
 				AB10000000000000000075 /* ExportSheet.swift */,
 				AB10000000000000000057 /* ExtensionsSheet.swift */,
 				AB10000000000000000059 /* FunctionLibrarySheet.swift */,
@@ -631,6 +634,7 @@
 				AA10000000000000000072 /* DatabaseTransferService.swift in Sources */,
 				AA10000000000000000073 /* ExportViewModel.swift in Sources */,
 				AA10000000000000000074 /* ImportViewModel.swift in Sources */,
+				AA10000000000000000E31 /* EditConnectionSheet.swift in Sources */,
 				AA10000000000000000075 /* ExportSheet.swift in Sources */,
 				AA10000000000000000076 /* ImportSheet.swift in Sources */,
 				AA10000000000000000078 /* TransferComponents.swift in Sources */,

@@ -72,3 +72,65 @@ struct ConnectionFormModel {
     /// `sshPassword` wrapped as optional, honoring the tunnel toggle.
     var effectiveSSHPassword: String? { useSSHTunnel ? sshPassword : nil }
 }
+
+/// The connection settings form shared by the start page and the
+/// Edit Connection sheet: server fields, SSL mode, and the SSH tunnel.
+struct ConnectionSettingsForm: View {
+    @Binding var form: ConnectionFormModel
+    @State private var showPassword = false
+    @State private var showSSHPassword = false
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Name", text: $form.name)
+                TextField("Host", text: $form.host, prompt: Text("localhost"))
+                TextField("Port", text: $form.port, prompt: Text("5432"))
+                TextField("Database", text: $form.database)
+                TextField("Username", text: $form.username)
+                HStack {
+                    if showPassword {
+                        TextField("Password", text: $form.password)
+                    } else {
+                        SecureField("Password", text: $form.password)
+                    }
+                    Button {
+                        showPassword.toggle()
+                    } label: {
+                        Image(systemName: showPassword ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(showPassword ? "Hide password" : "Show password")
+                }
+                Picker("SSL Mode", selection: $form.sslMode) {
+                    ForEach(SSLMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+            } header: {
+                Text("PostgreSQL Server")
+            } footer: {
+                Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+
+            Section("SSH Tunnel") {
+                SSHTunnelFormSection(
+                    useSSHTunnel: $form.useSSHTunnel,
+                    sshHost: $form.sshHost,
+                    sshPort: $form.sshPort,
+                    sshUser: $form.sshUser,
+                    sshAuthMethod: $form.sshAuthMethod,
+                    sshKeyPath: $form.sshKeyPath,
+                    sshPassword: $form.sshPassword,
+                    showSSHPassword: $showSSHPassword
+                )
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
