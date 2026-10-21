@@ -2,6 +2,22 @@ import Foundation
 import OSLog
 import PostgresNIO
 
+/// SQL expressions that render an overloadable object's navigator name from
+/// pg_catalog. The navigator listing, the Definition lookup, and the DROP
+/// lookup must all use the same expression so a name round-trips to exactly
+/// one catalog row. They expect `pg_proc p` / `pg_operator o` in scope.
+enum CatalogSignature {
+    /// `my_func(integer, text)` — IN-argument types only, the form regprocedure accepts.
+    static let routine = "p.proname || '(' || oidvectortypes(p.proargtypes) || ')'"
+
+    /// `===(integer, integer)`, with `NONE` for the missing side of a prefix
+    /// (or, before PG 14, postfix) operator.
+    static let `operator` = """
+        o.oprname || '(' || COALESCE(format_type(NULLIF(o.oprleft, 0), NULL), 'NONE') \
+        || ', ' || COALESCE(format_type(NULLIF(o.oprright, 0), NULL), 'NONE') || ')'
+        """
+}
+
 /// Protocol for database operations, enabling test mocking.
 protocol PostgresClientProtocol: Sendable {
     func connect(profile: ConnectionProfile, password: String?, sshPassword: String?) async throws
@@ -1112,7 +1128,7 @@ actor DatabaseClient: PostgresClientProtocol {
         // for getObjectDDL. PG18's pg_get_function_identity_arguments now
         // includes parameter names too, which would break that round-trip.
         let query: PostgresQuery = """
-            SELECT p.proname || '(' || oidvectortypes(p.proargtypes) || ')' AS func_sig
+            SELECT \(unescaped: CatalogSignature.routine) AS func_sig
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
             WHERE n.nspname = \(schema)
@@ -1232,10 +1248,10 @@ actor DatabaseClient: PostgresClientProtocol {
             """, type: .foreignTable)
 
         async let operators = fetchNamedObjects(client: client, schema: schema, query: """
-            SELECT oprname FROM pg_operator o
+            SELECT \(unescaped: CatalogSignature.operator) FROM pg_operator o
             JOIN pg_namespace n ON o.oprnamespace = n.oid
             WHERE n.nspname = \(schema)
-            ORDER BY oprname
+            ORDER BY 1
             """, type: .operator)
 
         // PG 11 introduced prokind; earlier versions have neither procedures
@@ -1854,7 +1870,7 @@ actor DatabaseClient: PostgresClientProtocol {
                 LEFT JOIN pg_type rt ON o.oprright = rt.oid
                 JOIN pg_type res ON o.oprresult = res.oid
                 JOIN pg_proc p ON o.oprcode = p.oid
-                WHERE n.nspname = \(schema) AND o.oprname = \(name)
+                WHERE n.nspname = \(schema) AND \(unescaped: CatalogSignature.operator) = \(name)
                 LIMIT 1
                 """
         case .table:

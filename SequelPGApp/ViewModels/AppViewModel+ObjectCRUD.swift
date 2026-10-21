@@ -20,8 +20,15 @@ extension AppViewModel {
 
     /// Drops any database object with confirmation already handled by the caller.
     func dropObject(_ object: DBObject) async {
-        guard let dropSQL = buildDropSQL(for: object) else {
-            errorMessage = "Cannot drop \(object.name): object metadata is invalid."
+        let dropSQL: String
+        do {
+            guard let sql = try await buildDropSQL(for: object) else {
+                errorMessage = "Cannot drop \(object.name): this object type can't be dropped from the navigator."
+                return
+            }
+            dropSQL = sql
+        } catch {
+            errorMessage = error.localizedDescription
             return
         }
 
@@ -39,57 +46,80 @@ extension AppViewModel {
         }
     }
 
-    /// Builds a safe DROP statement, validating any component that comes from
-    /// pg_catalog (function argument lists, operator argument types) to defeat
-    /// injection via hostile-server-supplied identifiers.
-    private func buildDropSQL(for object: DBObject) -> String? {
-        let qualified = "\(quoteIdent(object.schema)).\(quoteIdent(object.name))"
+    /// Builds the DROP statement for `object`, or `nil` for unsupported types.
+    ///
+    /// Overloadable objects (routines, aggregates, operators) are resolved on the
+    /// server: the navigator name is matched against pg_catalog as a quoted
+    /// literal, and the server renders the drop target with `%I` / `format_type`.
+    /// No catalog-derived text is parsed or spliced into SQL on the client, so a
+    /// hostile object or type name can't escape the statement.
+    private func buildDropSQL(for object: DBObject) async throws -> String? {
         if let keyword = Self.simpleDropKeyword[object.type] {
-            return "DROP \(keyword) \(qualified) CASCADE"
+            return "DROP \(keyword) \(quoteIdent(object.schema)).\(quoteIdent(object.name)) CASCADE"
         }
+        let keyword: String
         switch object.type {
-        case .function, .triggerFunction:
-            return buildFunctionLikeDropSQL(object, keyword: "FUNCTION", defaultArgs: "")
-        case .procedure:
-            return buildFunctionLikeDropSQL(object, keyword: "PROCEDURE", defaultArgs: "")
-        case .aggregate:
-            return buildFunctionLikeDropSQL(object, keyword: "AGGREGATE", defaultArgs: "*")
-        case .operator:
-            return buildOperatorDropSQL(object)
+        case .function, .triggerFunction: keyword = "FUNCTION"
+        case .procedure: keyword = "PROCEDURE"
+        case .aggregate: keyword = "AGGREGATE"
+        case .operator: keyword = "OPERATOR"
+        default: return nil
+        }
+        let target = try await resolveDropTarget(Self.dropTargetLookupSQL(for: object), object: object)
+        return "DROP \(keyword) \(target) CASCADE"
+    }
+
+    /// Catalog query returning the server-rendered drop target for an
+    /// overloadable object — one row per catalog entry matching its navigator name.
+    static func dropTargetLookupSQL(for object: DBObject) -> String {
+        let schema = quoteLiteral(.text(object.schema))
+        let name = quoteLiteral(.text(object.name))
+        if object.type == .operator {
+            return """
+                SELECT format('%I.%s (%s, %s)', n.nspname, o.oprname,
+                    COALESCE(format_type(NULLIF(o.oprleft, 0), NULL), 'NONE'),
+                    COALESCE(format_type(NULLIF(o.oprright, 0), NULL), 'NONE'))
+                FROM pg_operator o
+                JOIN pg_namespace n ON o.oprnamespace = n.oid
+                WHERE n.nspname = \(schema) AND \(CatalogSignature.operator) = \(name)
+                """
+        }
+        // Functions are listed with their signature; procedures, aggregates,
+        // and trigger functions by bare name.
+        let match = object.name.hasSuffix(")") ? CatalogSignature.routine : "p.proname"
+        // DROP AGGREGATE spells a zero-argument signature as (*).
+        let args = object.type == .aggregate
+            ? "CASE WHEN p.pronargs = 0 THEN '*' ELSE oidvectortypes(p.proargtypes) END"
+            : "oidvectortypes(p.proargtypes)"
+        let isAggregate = "EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid)"
+        return """
+            SELECT format('%I.%I(%s)', n.nspname, p.proname, \(args))
+            FROM pg_proc p
+            JOIN pg_namespace n ON p.pronamespace = n.oid
+            WHERE n.nspname = \(schema) AND \(match) = \(name)
+              AND \(object.type == .aggregate ? "" : "NOT ")\(isAggregate)
+            """
+    }
+
+    /// Runs a drop-target lookup and requires exactly one match, so a stale or
+    /// overloaded navigator entry can never drop the wrong object.
+    private func resolveDropTarget(_ lookupSQL: String, object: DBObject) async throws -> String {
+        let result = try await dbClient.runQuery(lookupSQL, maxRows: 2, timeout: Self.defaultQueryTimeout)
+        switch result.rows.count {
+        case 0:
+            throw AppError.validationFailed([
+                "\(object.name) no longer exists in schema \(object.schema). Refresh the navigator.",
+            ])
+        case 1:
+            guard case let .text(target) = result.rows[0].first else {
+                throw AppError.validationFailed(["Cannot drop \(object.name): object metadata is invalid."])
+            }
+            return target
         default:
-            return nil
+            throw AppError.validationFailed([
+                "\(object.name) has several overloads. Drop the one you mean from the Query tab with its argument types.",
+            ])
         }
-    }
-
-    private func buildFunctionLikeDropSQL(_ object: DBObject, keyword: String, defaultArgs: String) -> String? {
-        let (baseName, argList) = Self.splitFunctionName(object.name, defaultArgs: defaultArgs)
-        // Reject arg lists that came from a hostile pg_catalog row and would
-        // escape the parameter list (e.g. "integer) CASCADE; DROP TABLE users").
-        guard argList.isEmpty || argList == "*" || isValidFunctionParams(argList) else { return nil }
-        return "DROP \(keyword) \(quoteIdent(object.schema)).\(quoteIdent(baseName))(\(argList)) CASCADE"
-    }
-
-    private func buildOperatorDropSQL(_ object: DBObject) -> String? {
-        // DROP OPERATOR requires (left_type, right_type), but the navigator
-        // only stores the bare symbol. We emit a best-effort statement that
-        // the DB will reject with a friendly error; the identifier is still
-        // quoteIdent-safe against injection.
-        return "DROP OPERATOR \(quoteIdent(object.schema)).\(quoteIdent(object.name)) CASCADE"
-    }
-
-    /// Splits a function name like "my_func(integer, text)" into ("my_func", "integer, text").
-    /// If the name has no parentheses, returns the name with the given default args.
-    static func splitFunctionName(_ name: String, defaultArgs: String = "") -> (name: String, args: String) {
-        guard let parenIdx = name.firstIndex(of: "("),
-              name.hasSuffix(")")
-        else {
-            return (name, defaultArgs)
-        }
-        let funcName = String(name[name.startIndex ..< parenIdx])
-        let argsStart = name.index(after: parenIdx)
-        let argsEnd = name.index(before: name.endIndex)
-        let args = argsStart < argsEnd ? String(name[argsStart ..< argsEnd]) : defaultArgs
-        return (funcName, args)
     }
 
     /// Executes a CREATE statement and refreshes the navigator.
