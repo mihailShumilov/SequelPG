@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-10-23
+
+### Fixed
+- **Switching saved connections on the start page** ([#11](https://github.com/mihailShumilov/SequelPG/issues/11)). A single click on another connection in the sidebar now selects it and shows its settings. Before, the click was swallowed and the selection stayed put. Double-clicking a connection (or pressing Return) connects to it without overwriting another saved connection with its settings, and unsaved edits are always saved to the connection they were made in.
+
 ## [0.3.8] - 2026-10-21
 
 ### Added
