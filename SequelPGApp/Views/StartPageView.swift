@@ -12,7 +12,10 @@ struct StartPageView: View {
     @State private var form = ConnectionFormModel()
     @State private var validationErrors: [String] = []
     @State private var deleteTarget: ConnectionProfile?
-    @State private var previousSelectedId: UUID?
+    /// The profile whose settings `form` currently holds. Saves always target
+    /// this id, never the sidebar selection, so a form is never written into
+    /// a different profile than the one it was loaded from.
+    @State private var formProfileId: UUID?
     @State private var isTestingConnection = false
     @State private var testResult: TestConnectionResult?
     @State private var isConnecting = false
@@ -81,32 +84,27 @@ struct StartPageView: View {
                     Image(systemName: profile.useSSHTunnel ? "lock.shield" : "server.rack")
                 }
                 .tag(profile.id)
-                .contentShape(Rectangle())
-                // Two separate tap gestures race each other and cause selection
-                // flicker before the double-tap resolves. Use a `simultaneousGesture`
-                // so the selection-on-single-tap behavior is a side effect of the
-                // List's native selection while double-tap triggers connect.
-                .simultaneousGesture(
-                    TapGesture(count: 2).onEnded {
-                        connectionListVM.selectedProfileId = profile.id
-                        loadFormFromProfile(profile)
-                        connectSelected()
-                    }
-                )
-                .contextMenu {
-                    Button("Connect") {
-                        connectionListVM.selectedProfileId = profile.id
-                        loadFormFromProfile(profile)
-                        connectSelected()
-                    }
+            }
+            .listStyle(.sidebar)
+            // Row-level tap gestures swallow the click the List needs to change
+            // its selection on macOS, so double-click (and Return) is handled by
+            // the List's own primary action instead.
+            .contextMenu(forSelectionType: UUID.self) { ids in
+                if let id = ids.first, ids.count == 1,
+                   let profile = connectionListVM.profiles.first(where: { $0.id == id })
+                {
+                    Button("Connect") { connect(profileId: id) }
                     Button("Duplicate") { duplicateProfile(profile) }
                     Divider()
                     Button("Delete…", role: .destructive) {
                         deleteTarget = profile
                     }
                 }
+            } primaryAction: { ids in
+                if let id = ids.first, ids.count == 1 {
+                    connect(profileId: id)
+                }
             }
-            .listStyle(.sidebar)
             .overlay {
                 if connectionListVM.profiles.isEmpty {
                     ContentUnavailableView {
@@ -149,24 +147,27 @@ struct StartPageView: View {
             .background(.bar)
         }
         .onChange(of: connectionListVM.selectedProfileId) { _, newId in
-            // Auto-save previous profile before switching
-            if let prevId = previousSelectedId, prevId != newId {
-                saveFormToProfile(id: prevId)
-            }
-            // Load new profile into form
-            if let newId, let profile = connectionListVM.profiles.first(where: { $0.id == newId }) {
-                loadFormFromProfile(profile)
-            }
-            previousSelectedId = newId
-            validationErrors = []
-            testResult = nil
+            switchForm(to: newId)
         }
         .onAppear {
-            if let profile = connectionListVM.selectedProfile {
-                loadFormFromProfile(profile)
-                previousSelectedId = profile.id
-            }
+            switchForm(to: connectionListVM.selectedProfileId)
         }
+    }
+
+    /// Saves the form back to the profile it was loaded from, then loads the
+    /// profile `id` into it. A no-op when the form already holds `id`, so it is
+    /// safe to call from both the selection observer and explicit actions.
+    private func switchForm(to id: UUID?) {
+        guard id != formProfileId else { return }
+        if let currentId = formProfileId {
+            saveFormToProfile(id: currentId)
+        }
+        formProfileId = id
+        if let id, let profile = connectionListVM.profiles.first(where: { $0.id == id }) {
+            loadFormFromProfile(profile)
+        }
+        validationErrors = []
+        testResult = nil
     }
 
     private func profileSummary(_ profile: ConnectionProfile) -> String {
@@ -184,7 +185,7 @@ struct StartPageView: View {
             VStack(spacing: 0) {
                 ConnectionSettingsForm(form: $form)
                     // Fresh password-visibility state for each profile.
-                    .id(connectionListVM.selectedProfileId)
+                    .id(formProfileId)
 
                 if !validationErrors.isEmpty {
                     InlineBanner(kind: .warning, message: validationErrors.joined(separator: "\n")) {
@@ -263,8 +264,8 @@ struct StartPageView: View {
 
     private func createNewProfile() {
         // Save current form before creating new
-        if let prevId = connectionListVM.selectedProfileId {
-            saveFormToProfile(id: prevId)
+        if let currentId = formProfileId {
+            saveFormToProfile(id: currentId)
         }
 
         let profile = ConnectionProfile(
@@ -278,8 +279,8 @@ struct StartPageView: View {
     }
 
     private func duplicateProfile(_ source: ConnectionProfile) {
-        if let prevId = connectionListVM.selectedProfileId {
-            saveFormToProfile(id: prevId)
+        if let currentId = formProfileId {
+            saveFormToProfile(id: currentId)
         }
         var copy = source
         copy.name = "\(source.name) copy"
@@ -320,7 +321,7 @@ struct StartPageView: View {
     }
 
     private func testSelected() {
-        guard let id = connectionListVM.selectedProfileId else { return }
+        guard let id = formProfileId else { return }
 
         let profile = form.buildProfile(id: id, fallbackPort: 0)
         let errors = profile.validate()
@@ -347,8 +348,16 @@ struct StartPageView: View {
         }
     }
 
+    /// Selects `profileId`, loads it into the form (saving any edits to the
+    /// previous profile first), and connects with it.
+    private func connect(profileId: UUID) {
+        connectionListVM.selectedProfileId = profileId
+        switchForm(to: profileId)
+        connectSelected()
+    }
+
     private func connectSelected() {
-        guard let id = connectionListVM.selectedProfileId else { return }
+        guard let id = formProfileId else { return }
 
         let profile = form.buildProfile(id: id)
 
