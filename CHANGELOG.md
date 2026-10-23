@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-10-23
+
+### Fixed
+- **SSL Mode Prefer and Require now behave like `psql`** ([#3](https://github.com/mihailShumilov/SequelPG/issues/3)). Prefer and Require no longer verify the server's certificate, so servers with self-signed certificates connect; to verify the certificate, use Verify CA or Verify Full. As in libpq, Prefer retries without SSL when the SSL attempt fails, for example when `pg_hba.conf` only allows unencrypted connections.
+- **Connection errors say what went wrong.** A failed connection or Test used to show "The operation couldn't be completed. (ConnectionPoolError error 1.)" after about a minute. It now fails within a second with the cause and, where it helps, the setting to change: the server doesn't accept SSL (try Prefer or Off), its certificate couldn't be verified (try Require), `pg_hba.conf` requires or refuses SSL from this host, the password was rejected, the database doesn't exist, or the host and port couldn't be reached.
+
 ## [0.3.9] - 2026-10-23
 
 ### Fixed

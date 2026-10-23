@@ -73,6 +73,15 @@ protocol PostgresClientProtocol: Sendable {
     func listRoles() async throws -> [RoleInfo]
 }
 
+/// What `DatabaseClient` dials for one connection attempt.
+private struct ConnectionEndpointConfig: Sendable {
+    let host: String
+    let port: Int
+    let username: String
+    let password: String?
+    let database: String
+}
+
 /// The sole component that communicates with PostgreSQL via PostgresNIO.
 actor DatabaseClient: PostgresClientProtocol {
     private var client: PostgresClient?
@@ -112,6 +121,7 @@ actor DatabaseClient: PostgresClientProtocol {
             host: host, port: port,
             username: profile.username, password: password,
             database: profile.database, sslMode: profile.sslMode,
+            displayEndpoint: "\(profile.host):\(profile.port)",
             cleanupOnFailure: { [weak self] in await self?.disconnect() }
         )
 
@@ -140,10 +150,13 @@ actor DatabaseClient: PostgresClientProtocol {
         return (effectiveHost, profile.port)
     }
 
-    /// Builds a `PostgresClient`, spawns its run-loop task, and verifies the
-    /// connection with a trivial `SELECT 1`. On verification failure, runs the
-    /// caller-supplied cleanup (`disconnect` for `connect`, a narrower teardown
-    /// for `switchDatabase` that preserves the SSH tunnel).
+    /// Opens the connection and makes the resulting `PostgresClient` the live
+    /// one. On failure, runs the caller-supplied cleanup (`disconnect` for
+    /// `connect`, a narrower teardown for `switchDatabase` that preserves the
+    /// SSH tunnel) and throws a message naming the cause.
+    ///
+    /// Like libpq's `sslmode=prefer`, a `.prefer` attempt whose SSL handshake
+    /// fails is retried once without SSL.
     private func establishClient(
         host: String,
         port: Int,
@@ -151,12 +164,60 @@ actor DatabaseClient: PostgresClientProtocol {
         password: String?,
         database: String,
         sslMode: SSLMode,
+        displayEndpoint: String,
         cleanupOnFailure: () async -> Void
     ) async throws {
+        let endpoint = ConnectionEndpointConfig(
+            host: host, port: port, username: username, password: password, database: database
+        )
+        var failure: ConnectionFailure
+        do {
+            try await startClient(endpoint, sslMode: sslMode)
+            return
+        } catch {
+            await teardownPostgresClient()
+            failure = Self.failure(from: error)
+        }
+
+        if sslMode == .prefer, failure.allowsPlaintextRetry {
+            Log.db.info("SSL attempt failed under Prefer; retrying \(host, privacy: .public):\(port) without SSL")
+            do {
+                try await startClient(endpoint, sslMode: .off)
+                return
+            } catch {
+                await teardownPostgresClient()
+                failure = Self.failure(from: error)
+            }
+        }
+
+        await cleanupOnFailure()
+        throw AppError.connectionFailed(failure.message(sslMode: sslMode, endpoint: displayEndpoint))
+    }
+
+    /// Checks `endpoint` with a single connection, then starts a pooled
+    /// client for it and verifies that with `SELECT 1`.
+    ///
+    /// The single connection comes first because `PostgresClient` retries a
+    /// failing connect with backoff for about a minute and then reports only
+    /// a generic pool error ("connection creation circuit breaker tripped");
+    /// a lone `PostgresConnection` fails at once with the actual cause.
+    private func startClient(_ endpoint: ConnectionEndpointConfig, sslMode: SSLMode) async throws {
+        let probe = try await PostgresConnection.connect(
+            configuration: PostgresConnection.Configuration(
+                host: endpoint.host, port: endpoint.port,
+                username: endpoint.username, password: endpoint.password,
+                database: endpoint.database,
+                tls: try Self.makeConnectionTLS(for: sslMode)
+            ),
+            id: 0,
+            logger: Logger(label: "SequelPG.connection-check")
+        )
+        try? await probe.close()
+
         let config = PostgresClient.Configuration(
-            host: host, port: port,
-            username: username, password: password,
-            database: database,
+            host: endpoint.host, port: endpoint.port,
+            username: endpoint.username, password: endpoint.password,
+            database: endpoint.database,
             tls: Self.makeTLS(for: sslMode)
         )
 
@@ -165,39 +226,102 @@ actor DatabaseClient: PostgresClientProtocol {
 
         runTask = Task { await newClient.run() }
 
-        do {
-            let rows = try await newClient.query("SELECT 1 AS ok")
-            for try await _ in rows {}
-        } catch {
-            await cleanupOnFailure()
-            throw AppError.connectionFailed(error.localizedDescription)
-        }
+        let rows = try await newClient.query("SELECT 1 AS ok")
+        for try await _ in rows {}
 
-        resolvedEndpoint = PGConnectionEndpoint(host: host, port: port)
+        resolvedEndpoint = PGConnectionEndpoint(host: endpoint.host, port: endpoint.port)
+    }
+
+    private static func failure(from error: Error) -> ConnectionFailure {
+        if let error = error as? PSQLError {
+            return classify(error)
+        }
+        return .other(error.localizedDescription)
+    }
+
+    private static func classify(_ error: PSQLError) -> ConnectionFailure {
+        if error.code == .sslUnsupported {
+            return .sslUnsupported
+        }
+        if let serverInfo = error.serverInfo, let message = serverInfo[.message] {
+            return .server(message: message, sqlState: serverInfo[.sqlState])
+        }
+        if let underlying = error.underlying {
+            let detail = String(describing: underlying)
+            if underlying is NIOSSLError || underlying is NIOSSLExtraError {
+                if detail.contains("CERTIFICATE_VERIFY_FAILED") || underlying is NIOSSLExtraError {
+                    return .certificateRejected(Self.tlsDetail(detail))
+                }
+                return .tlsHandshakeFailed(Self.tlsDetail(detail))
+            }
+            if underlying is NIOConnectionError || underlying is IOError || underlying is ChannelError {
+                return .unreachable(Self.socketDetail(detail))
+            }
+            return .other(detail)
+        }
+        return .other(String(describing: error.code))
+    }
+
+    /// "…error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED at …"
+    /// → "CERTIFICATE_VERIFY_FAILED".
+    private static func tlsDetail(_ detail: String) -> String {
+        if let range = detail.range(of: #"OPENSSL_internal:([A-Z_]+)"#, options: .regularExpression) {
+            return String(detail[range].dropFirst("OPENSSL_internal:".count))
+        }
+        return detail
+    }
+
+    /// "…error: connection reset (error set): Connection refused) (errno: 61))"
+    /// → "Connection refused". Other errors (e.g. "Connect timeout (10 s)")
+    /// are returned unchanged.
+    private static func socketDetail(_ detail: String) -> String {
+        if let range = detail.range(of: #"\): ([^)(]+)\)"#, options: .regularExpression) {
+            return String(detail[range].dropFirst(3).dropLast())
+        }
+        return detail
     }
 
     func currentEndpoint() async -> PGConnectionEndpoint? {
         client == nil ? nil : resolvedEndpoint
     }
 
-    /// Build TLS configuration for the given SSL mode.
+    /// Build TLS configuration for the given SSL mode. Like libpq, Prefer and
+    /// Require encrypt without verifying the server certificate; Verify CA
+    /// checks the chain and Verify Full also checks the host name.
     private static func makeTLS(for sslMode: SSLMode) -> PostgresClient.Configuration.TLS {
         switch sslMode {
         case .off:
             return .disable
         case .prefer:
-            return .prefer(.makeClientConfiguration())
-        case .require:
-            return .require(.makeClientConfiguration())
-        case .verifyCa:
-            var c = TLSConfiguration.makeClientConfiguration()
-            c.certificateVerification = .noHostnameVerification
-            return .require(c)
-        case .verifyFull:
-            var c = TLSConfiguration.makeClientConfiguration()
-            c.certificateVerification = .fullVerification
-            return .require(c)
+            return .prefer(tlsConfiguration(for: sslMode))
+        case .require, .verifyCa, .verifyFull:
+            return .require(tlsConfiguration(for: sslMode))
         }
+    }
+
+    /// The same settings for a single `PostgresConnection`.
+    private static func makeConnectionTLS(for sslMode: SSLMode) throws -> PostgresConnection.Configuration.TLS {
+        switch sslMode {
+        case .off:
+            return .disable
+        case .prefer:
+            return .prefer(try NIOSSLContext(configuration: tlsConfiguration(for: sslMode)))
+        case .require, .verifyCa, .verifyFull:
+            return .require(try NIOSSLContext(configuration: tlsConfiguration(for: sslMode)))
+        }
+    }
+
+    private static func tlsConfiguration(for sslMode: SSLMode) -> TLSConfiguration {
+        var c = TLSConfiguration.makeClientConfiguration()
+        switch sslMode {
+        case .off, .prefer, .require:
+            c.certificateVerification = .none
+        case .verifyCa:
+            c.certificateVerification = .noHostnameVerification
+        case .verifyFull:
+            c.certificateVerification = .fullVerification
+        }
+        return c
     }
 
     func disconnect() async {
@@ -1660,6 +1784,7 @@ actor DatabaseClient: PostgresClientProtocol {
             host: host, port: port,
             username: newProfile.username, password: password,
             database: newProfile.database, sslMode: newProfile.sslMode,
+            displayEndpoint: "\(newProfile.host):\(newProfile.port)",
             cleanupOnFailure: { [weak self] in
                 // Preserve SSH tunnel on switch failure so the caller can retry.
                 await self?.teardownPostgresClient()
