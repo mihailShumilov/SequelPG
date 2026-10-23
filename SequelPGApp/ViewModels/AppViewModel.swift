@@ -686,7 +686,6 @@ struct CascadeDeleteBuilder {
         tab.sortAscending = tableVM.sortAscending
         tab.filters = tableVM.filters
         tab.activeFilterSQL = tableVM.activeFilterSQL
-        tab.selectedRowIndex = tableVM.selectedRowIndex
         tab.showFilterBar = tableVM.showFilterBar
         tabs[idx] = tab
     }
@@ -705,8 +704,13 @@ struct CascadeDeleteBuilder {
         tableVM.sortAscending = tab.sortAscending
         tableVM.filters = tab.filters
         tableVM.activeFilterSQL = tab.activeFilterSQL
+        // Row selection is intentionally NOT snapshotted or restored. The grid's
+        // NSTableView is reused across objects, so a restored index would
+        // re-highlight rows that ⌫ / "Delete Rows" could then delete from the
+        // wrong table. Always start the incoming tab with no selection.
         tableVM.selectedRowIndex = nil
         tableVM.selectedRowIndices = []
+        tableVM.selectedRowData = nil
         tableVM.showFilterBar = tab.showFilterBar
         tableVM.selectedObjectName = tab.dbObject.name
         tableVM.selectedObjectColumnCount = tab.columns.count

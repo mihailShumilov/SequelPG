@@ -948,6 +948,13 @@ struct DataGridView: NSViewRepresentable {
         // `restoreFromTab` / `TableViewModel.clear`), which takes the
         // `deselectAll` branch and wipes the reused table's highlight before the
         // new object's rows can be deleted.
+        //
+        // Known limitation: because of the `contains(idx)` check, setting
+        // `selectedRowIndex` programmatically to a row that is already inside a
+        // multi-selection does NOT collapse the selection to that one row.
+        // Nothing does that today. If you need it, add an explicit collapse
+        // signal; setting nil and then the row in one SwiftUI update coalesces
+        // and never reaches this method as nil.
         coordinator.isSyncingFromSwiftUI = true
         if let idx = selectedRowIndex, idx >= 0, idx < rowCount {
             if !tableView.selectedRowIndexes.contains(idx) {
