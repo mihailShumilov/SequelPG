@@ -123,6 +123,74 @@ final class SSLModeTests: XCTestCase {
     }
 }
 
+final class ConnectionFailureTests: XCTestCase {
+
+    private let hbaPrefix = #"no pg_hba.conf entry for host "10.0.0.5", user "app", database "db""#
+    private var hbaNoEncryption: String { hbaPrefix + ", no encryption" }
+    private var hbaSSLEncryption: String { hbaPrefix + ", SSL encryption" }
+
+    func testSSLUnsupportedSuggestsPreferOrOff() {
+        let message = ConnectionFailure.sslUnsupported.message(sslMode: .require, endpoint: "localhost:5432")
+        XCTAssertTrue(message.contains("localhost:5432"))
+        XCTAssertTrue(message.contains("Set SSL Mode to Prefer or Off"))
+    }
+
+    func testCertificateRejectedSuggestsRequire() {
+        let message = ConnectionFailure.certificateRejected("CERTIFICATE_VERIFY_FAILED")
+            .message(sslMode: .verifyFull, endpoint: "db:5432")
+        XCTAssertTrue(message.contains("CERTIFICATE_VERIFY_FAILED"))
+        XCTAssertTrue(message.contains("set SSL Mode to Require"))
+    }
+
+    func testHandshakeHintOnlyWhenSSLIsRequired() {
+        let failure = ConnectionFailure.tlsHandshakeFailed("WRONG_VERSION_NUMBER")
+        XCTAssertTrue(failure.message(sslMode: .require, endpoint: "db:5432").contains("Try SSL Mode Prefer or Off"))
+        XCTAssertFalse(failure.message(sslMode: .prefer, endpoint: "db:5432").contains("Try SSL Mode"))
+    }
+
+    func testServerMessageIsShownAsIs() {
+        let failure = ConnectionFailure.server(
+            message: #"password authentication failed for user "dbo""#, sqlState: "28P01"
+        )
+        XCTAssertEqual(
+            failure.message(sslMode: .prefer, endpoint: "localhost:5432"),
+            #"password authentication failed for user "dbo""#
+        )
+    }
+
+    func testHbaRequiringSSLSuggestsRequire() {
+        let failure = ConnectionFailure.server(message: hbaNoEncryption, sqlState: "28000")
+        XCTAssertTrue(failure.message(sslMode: .off, endpoint: "db:5432").contains("Set SSL Mode to Require"))
+        XCTAssertFalse(failure.message(sslMode: .require, endpoint: "db:5432").contains("Set SSL Mode"))
+    }
+
+    func testHbaRejectingSSLSuggestsPreferOrOff() {
+        let failure = ConnectionFailure.server(message: hbaSSLEncryption, sqlState: "28000")
+        XCTAssertTrue(
+            failure.message(sslMode: .verifyFull, endpoint: "db:5432").contains("Set SSL Mode to Prefer or Off")
+        )
+        XCTAssertFalse(failure.message(sslMode: .off, endpoint: "db:5432").contains("Set SSL Mode"))
+    }
+
+    func testUnreachableNamesEndpoint() {
+        let message = ConnectionFailure.unreachable("Connection refused")
+            .message(sslMode: .prefer, endpoint: "localhost:5433")
+        XCTAssertTrue(message.contains("Could not reach localhost:5433 (Connection refused)"))
+    }
+
+    func testPlaintextRetryOnlyForSSLNegotiationFailures() {
+        XCTAssertTrue(ConnectionFailure.certificateRejected("x").allowsPlaintextRetry)
+        XCTAssertTrue(ConnectionFailure.tlsHandshakeFailed("x").allowsPlaintextRetry)
+        XCTAssertTrue(ConnectionFailure.server(message: hbaSSLEncryption, sqlState: "28000").allowsPlaintextRetry)
+
+        XCTAssertFalse(ConnectionFailure.server(message: hbaNoEncryption, sqlState: "28000").allowsPlaintextRetry)
+        XCTAssertFalse(ConnectionFailure.server(message: "password authentication failed", sqlState: "28P01")
+            .allowsPlaintextRetry)
+        XCTAssertFalse(ConnectionFailure.sslUnsupported.allowsPlaintextRetry)
+        XCTAssertFalse(ConnectionFailure.unreachable("Connection refused").allowsPlaintextRetry)
+    }
+}
+
 final class DBObjectTests: XCTestCase {
 
     func testIdentity() {

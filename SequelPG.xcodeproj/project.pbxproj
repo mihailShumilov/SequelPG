@@ -14,6 +14,7 @@
 		AA10000000000000000005 /* QueryResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000005; };
 		AA10000000000000000006 /* CellValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000006; };
 		AA10000000000000000007 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000007; };
+		AA10000000000000000E32 /* ConnectionFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E32; };
 		AA10000000000000000008 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000008; };
 		AA10000000000000000009 /* ConnectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000009; };
 		AA1000000000000000000A /* PostgresClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000A; };
@@ -141,6 +142,7 @@
 		AB10000000000000000005 /* QueryResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryResult.swift; sourceTree = "<group>"; };
 		AB10000000000000000006 /* CellValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CellValue.swift; sourceTree = "<group>"; };
 		AB10000000000000000007 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		AB10000000000000000E32 /* ConnectionFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionFailure.swift; sourceTree = "<group>"; };
 		AB10000000000000000008 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		AB10000000000000000009 /* ConnectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStore.swift; sourceTree = "<group>"; };
 		AB1000000000000000000A /* PostgresClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostgresClient.swift; sourceTree = "<group>"; };
@@ -301,6 +303,7 @@
 				AB10000000000000000006 /* CellValue.swift */,
 				AB10000000000000000004 /* ColumnInfo.swift */,
 				AB10000000000000000002 /* ConnectionProfile.swift */,
+				AB10000000000000000E32 /* ConnectionFailure.swift */,
 				AB10000000000000000051 /* ConstraintInfo.swift */,
 				AB10000000000000000070 /* DatabaseTransfer.swift */,
 				AB10000000000000000003 /* DBObject.swift */,
@@ -570,6 +573,7 @@
 				AA10000000000000000005 /* QueryResult.swift in Sources */,
 				AA10000000000000000006 /* CellValue.swift in Sources */,
 				AA10000000000000000007 /* AppError.swift in Sources */,
+				AA10000000000000000E32 /* ConnectionFailure.swift in Sources */,
 				AA10000000000000000008 /* KeychainService.swift in Sources */,
 				AA10000000000000000009 /* ConnectionStore.swift in Sources */,
 				AA1000000000000000000A /* PostgresClient.swift in Sources */,
