@@ -21,8 +21,8 @@ enum ResultsTabKind: Sendable, CaseIterable {
     /// Column metadata for the detected table (includes PK info).
     var editableColumns: [ColumnInfo] = []
 
-    /// Row index pending delete confirmation in query results.
-    var deleteConfirmationRowIndex: Int?
+    /// Row indices pending delete confirmation in query results.
+    var deleteConfirmationRowIndices: [Int]?
 
     /// Client-side sort state for query results.
     var sortColumn: String?
