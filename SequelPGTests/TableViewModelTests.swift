@@ -392,32 +392,32 @@ final class TableViewModelTests: XCTestCase {
         XCTAssertNil(sut.selectedRowData)
     }
 
-    // MARK: - deleteConfirmationRowIndices
+    // MARK: - deleteConfirmationRowIndex
 
-    func testInitialDeleteConfirmationRowIndicesIsNil() {
-        XCTAssertNil(sut.deleteConfirmationRowIndices)
+    func testInitialDeleteConfirmationRowIndexIsNil() {
+        XCTAssertNil(sut.deleteConfirmationRowIndex)
     }
 
-    func testDeleteConfirmationRowIndicesCanBeSet() {
-        sut.deleteConfirmationRowIndices = [3]
-        XCTAssertEqual(sut.deleteConfirmationRowIndices, [3])
+    func testDeleteConfirmationRowIndexCanBeSet() {
+        sut.deleteConfirmationRowIndex = 3
+        XCTAssertEqual(sut.deleteConfirmationRowIndex, 3)
     }
 
-    func testDeleteConfirmationRowIndicesCanHoldMultiple() {
-        sut.deleteConfirmationRowIndices = [0, 2, 4]
-        XCTAssertEqual(sut.deleteConfirmationRowIndices, [0, 2, 4])
+    func testDeleteConfirmationRowIndexCanBeSetToZero() {
+        sut.deleteConfirmationRowIndex = 0
+        XCTAssertEqual(sut.deleteConfirmationRowIndex, 0)
     }
 
-    func testDeleteConfirmationRowIndicesCanBeSetBackToNil() {
-        sut.deleteConfirmationRowIndices = [5]
-        sut.deleteConfirmationRowIndices = nil
-        XCTAssertNil(sut.deleteConfirmationRowIndices)
+    func testDeleteConfirmationRowIndexCanBeSetBackToNil() {
+        sut.deleteConfirmationRowIndex = 5
+        sut.deleteConfirmationRowIndex = nil
+        XCTAssertNil(sut.deleteConfirmationRowIndex)
     }
 
-    func testClearResetsDeleteConfirmationRowIndicesToNil() {
-        sut.deleteConfirmationRowIndices = [7]
+    func testClearResetsDeleteConfirmationRowIndexToNil() {
+        sut.deleteConfirmationRowIndex = 7
         sut.clear()
-        XCTAssertNil(sut.deleteConfirmationRowIndices)
+        XCTAssertNil(sut.deleteConfirmationRowIndex)
     }
 
     // MARK: - totalPages reacts to property changes
