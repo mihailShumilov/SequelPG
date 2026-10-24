@@ -36,11 +36,10 @@ struct ContentTabView: View {
                         onColumnHeaderTapped: { column in
                             appVM.toggleContentSort(column: column)
                         },
-                        onDeleteRows: appVM.canDeleteContentRow ? { rows in
-                            tableVM.deleteConfirmationRowIndices = rows
+                        onDeleteRow: appVM.canDeleteContentRow ? { rowIdx in
+                            tableVM.deleteConfirmationRowIndex = rowIdx
                         } : nil,
                         selectedRowIndex: $tableVM.selectedRowIndex,
-                        selectedRowIndices: $tableVM.selectedRowIndices,
                         foreignKeyForColumn: { columnName in
                             tableVM.foreignKey(forColumn: columnName)
                         },
@@ -113,27 +112,23 @@ struct ContentTabView: View {
                 .environment(tableVM)
         }
         .alert(
-            (tableVM.deleteConfirmationRowIndices?.count ?? 0) > 1
-                ? "Delete \(tableVM.deleteConfirmationRowIndices?.count ?? 0) Rows?"
-                : "Delete Row?",
+            "Delete Row?",
             isPresented: Binding<Bool>(
-                get: { tableVM.deleteConfirmationRowIndices != nil },
-                set: { if !$0 { tableVM.deleteConfirmationRowIndices = nil } }
+                get: { tableVM.deleteConfirmationRowIndex != nil },
+                set: { if !$0 { tableVM.deleteConfirmationRowIndex = nil } }
             )
         ) {
             Button("Cancel", role: .cancel) {
-                tableVM.deleteConfirmationRowIndices = nil
+                tableVM.deleteConfirmationRowIndex = nil
             }
             Button("Delete", role: .destructive) {
-                if let rows = tableVM.deleteConfirmationRowIndices {
-                    tableVM.deleteConfirmationRowIndices = nil
-                    Task { await appVM.deleteContentRows(rowIndices: rows) }
+                if let idx = tableVM.deleteConfirmationRowIndex {
+                    tableVM.deleteConfirmationRowIndex = nil
+                    Task { await appVM.deleteContentRow(rowIndex: idx) }
                 }
             }
         } message: {
-            Text((tableVM.deleteConfirmationRowIndices?.count ?? 0) > 1
-                ? "These rows will be permanently deleted from the database."
-                : "This row will be permanently deleted from the database.")
+            Text("This row will be permanently deleted from the database.")
         }
         .alert(
             "Foreign Key Conflict",
@@ -280,22 +275,17 @@ struct ContentTabView: View {
             .accessibilityLabel("Insert row")
 
             Button {
-                // Honor the full multi-row selection; fall back to the anchor
-                // when only a single row (or none synced) is selected.
-                let rows = tableVM.selectedRowIndices.isEmpty
-                    ? tableVM.selectedRowIndex.map { [$0] } ?? []
-                    : tableVM.selectedRowIndices
-                if !rows.isEmpty {
-                    tableVM.deleteConfirmationRowIndices = rows
+                if let idx = tableVM.selectedRowIndex {
+                    tableVM.deleteConfirmationRowIndex = idx
                 }
             } label: {
                 Image(systemName: "minus")
             }
             .disabled(tableVM.selectedRowIndex == nil || !appVM.canDeleteContentRow || tableVM.isInsertingRow)
             .help(appVM.canDeleteContentRow
-                ? "Delete the selected rows"
+                ? "Delete the selected row"
                 : "Rows can only be deleted from tables with a primary key")
-            .accessibilityLabel("Delete selected rows")
+            .accessibilityLabel("Delete row")
 
             Divider().frame(height: 14)
 

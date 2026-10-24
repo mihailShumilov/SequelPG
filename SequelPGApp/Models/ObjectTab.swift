@@ -24,6 +24,7 @@ struct ObjectTab: Identifiable, Equatable {
     var sortAscending: Bool
     var filters: [ContentFilter]
     var activeFilterSQL: String?
+    var selectedRowIndex: Int?
     var showFilterBar: Bool
 
     init(dbObject: DBObject, pageSize: Int = 50) {
@@ -42,6 +43,7 @@ struct ObjectTab: Identifiable, Equatable {
         self.sortAscending = true
         self.filters = [ContentFilter()]
         self.activeFilterSQL = nil
+        self.selectedRowIndex = nil
         self.showFilterBar = false
     }
 

@@ -1356,34 +1356,34 @@ final class AppViewModelTests: AppViewModelTestCase {
         XCTAssertFalse(vm.isConnected)
     }
 
-    // MARK: - executeQuery clears deleteConfirmationRowIndices
+    // MARK: - executeQuery clears deleteConfirmationRowIndex
 
-    func testExecuteQueryClearsDeleteConfirmationRowIndices() async {
+    func testExecuteQueryClearsDeleteConfirmationRowIndex() async {
         await makeConnectedVM()
-        vm.queryVM.deleteConfirmationRowIndices = [3]
+        vm.queryVM.deleteConfirmationRowIndex = 3
 
         await vm.executeQuery("SELECT 1")
 
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
     }
 
-    func testExecuteQueryClearsDeleteConfirmationRowIndicesEvenWhenAlreadyNil() async {
+    func testExecuteQueryClearsDeleteConfirmationRowIndexEvenWhenAlreadyNil() async {
         await makeConnectedVM()
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
 
         await vm.executeQuery("SELECT 1")
 
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
     }
 
-    func testExecuteQueryClearsDeleteConfirmationRowIndicesOnError() async {
+    func testExecuteQueryClearsDeleteConfirmationRowIndexOnError() async {
         await makeConnectedVM()
-        vm.queryVM.deleteConfirmationRowIndices = [5]
+        vm.queryVM.deleteConfirmationRowIndex = 5
         await mockDB.setShouldThrowOnRunQuery(true)
 
         await vm.executeQuery("SELECT bad")
 
-        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndices)
+        XCTAssertNil(vm.queryVM.deleteConfirmationRowIndex)
     }
 
     // MARK: - deleteQueryRow with active sort
@@ -1869,33 +1869,6 @@ final class AppViewModelTests: AppViewModelTestCase {
         XCTAssertEqual(vm.tableVM.filters[0].value, "7")
         XCTAssertEqual(vm.tableVM.activeFilterSQL, "\"id\"::text = '7'")
         XCTAssertEqual(vm.tableVM.currentPage, 3)
-    }
-
-    func testActivateTabClearsRowSelectionInsteadOfRestoringIt() async {
-        await makeConnectedVM()
-        let orders = DBObject(schema: "public", name: "orders", type: .table)
-        let users = DBObject(schema: "public", name: "users", type: .table)
-        await vm.selectObject(orders)
-        let ordersTabId = vm.activeTabId!
-        await vm.selectObject(users)
-        let usersTabId = vm.activeTabId!
-
-        // Multi-select rows on the users tab, as the grid would.
-        vm.selectRow(index: 2, columns: ["id"], values: [.text("3")])
-        vm.tableVM.selectedRowIndices = [0, 1, 2]
-
-        // Selection must not carry over to another tab: the reused grid would
-        // otherwise offer to delete those row indices from the wrong table.
-        vm.activateTab(ordersTabId)
-        XCTAssertNil(vm.tableVM.selectedRowIndex)
-        XCTAssertEqual(vm.tableVM.selectedRowIndices, [])
-        XCTAssertNil(vm.tableVM.selectedRowData)
-
-        // ...and is intentionally not restored when switching back.
-        vm.activateTab(usersTabId)
-        XCTAssertNil(vm.tableVM.selectedRowIndex)
-        XCTAssertEqual(vm.tableVM.selectedRowIndices, [])
-        XCTAssertNil(vm.tableVM.selectedRowData)
     }
 
     func testActivateTabIsIdempotentWhenAlreadyActive() async {
