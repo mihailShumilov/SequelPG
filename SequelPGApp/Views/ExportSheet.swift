@@ -260,7 +260,7 @@ struct ExportSheet: View {
            let type = UTType(filenameExtension: ext) {
             panel.allowedContentTypes = [type]
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanels.chooseSaveURL(panel) else { return }
         Task {
             guard let (connection, password) = await appVM.toolConnection() else {
                 vm.errorMessage = "Not connected."

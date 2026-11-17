@@ -121,10 +121,36 @@
 		AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E0F; };
 		AA10000000000000000E10 /* ERDModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E10; };
 		AA10000000000000000E11 /* ERDRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E11; };
+		F884F2E21B104EB9A973032B /* TestingHooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */; };
+		C5D740FAC53445D68AEF28BE /* TestCluster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45E3D3A1BDD4598AFF91A4B /* TestCluster.swift */; };
+		4CBA00AF0FDF4904B87A7627 /* IntegrationTestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16C8811ED254548AE64763B /* IntegrationTestCase.swift */; };
+		1AEE481D216B4263934BCFFF /* ConnectionAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F42730BFFF43A594E9F045 /* ConnectionAuthTests.swift */; };
+		7A2191F99A1340A0BFF2DA3A /* SSLModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAD5343BDF74B78BBA73F0E /* SSLModeTests.swift */; };
+		2196805A2E6B4CC388452E41 /* SSHTunnelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D26EED16F56A4FFB9E2CC2A0 /* SSHTunnelTests.swift */; };
+		EDEBC0259E6842FC9A75821D /* QueryExecutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23EF0687BB704A9082C03F8D /* QueryExecutionTests.swift */; };
+		BFFA776835434668AD2D16CA /* TypeDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E2940DBA844F4981F1367A /* TypeDecodingTests.swift */; };
+		33F3DCF1875D48E995A0EB6F /* IntrospectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CCD622BFE31484F8FB3E32C /* IntrospectionTests.swift */; };
+		FE7102F0EAB34FF9AB9A653B /* DropObjectIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */; };
+		DE87A925268A4E518600A1D2 /* AppViewModelIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */; };
+		DED43A3EA5FC4BFC8CE2EC96 /* TransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		AC10000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE10000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AF10000000000000000001;
+			remoteInfo = SequelPG;
+		};
+		188A2A780D114D20919FC1CD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE10000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AF10000000000000000001;
+			remoteInfo = SequelPG;
+		};
+		2F2637874ED64E428DDED40A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AE10000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -250,6 +276,20 @@
 		AB10000000000000000E10 /* ERDModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERDModelTests.swift; sourceTree = "<group>"; };
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0F6E41F4ABC14FBA81481057 /* SequelPGIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E735CB360184CFD94AA360C /* SequelPGUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestingHooks.swift; sourceTree = "<group>"; };
+		E45E3D3A1BDD4598AFF91A4B /* TestCluster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCluster.swift; sourceTree = "<group>"; };
+		B16C8811ED254548AE64763B /* IntegrationTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationTestCase.swift; sourceTree = "<group>"; };
+		98F42730BFFF43A594E9F045 /* ConnectionAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionAuthTests.swift; sourceTree = "<group>"; };
+		ADAD5343BDF74B78BBA73F0E /* SSLModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSLModeTests.swift; sourceTree = "<group>"; };
+		D26EED16F56A4FFB9E2CC2A0 /* SSHTunnelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHTunnelTests.swift; sourceTree = "<group>"; };
+		23EF0687BB704A9082C03F8D /* QueryExecutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryExecutionTests.swift; sourceTree = "<group>"; };
+		E8E2940DBA844F4981F1367A /* TypeDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeDecodingTests.swift; sourceTree = "<group>"; };
+		7CCD622BFE31484F8FB3E32C /* IntrospectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntrospectionTests.swift; sourceTree = "<group>"; };
+		B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropObjectIntegrationTests.swift; sourceTree = "<group>"; };
+		76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelIntegrationTests.swift; sourceTree = "<group>"; };
+		3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferIntegrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -268,6 +308,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9C404CDEB9D74C7686D14ABD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A91F6C5E33B245349F2E322A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -277,6 +331,8 @@
 				AC20000000000000000002 /* SequelPGApp */,
 				AC20000000000000000009 /* SequelPGTests */,
 				AC2000000000000000000A /* Products */,
+				394723EA09D743529361F3CA /* SequelPGIntegrationTests */,
+				5C589960FFC1464A964656C5 /* SequelPGUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -412,6 +468,7 @@
 				AB10000000000000000E05 /* ERDSVGRenderer.swift */,
 				AB10000000000000000E06 /* ERDImageExporter.swift */,
 				AB10000000000000000E11 /* ERDRouter.swift */,
+				E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -461,8 +518,35 @@
 			children = (
 				AB10000000000000000020 /* SequelPG.app */,
 				AB10000000000000000021 /* SequelPGTests.xctest */,
+				0F6E41F4ABC14FBA81481057 /* SequelPGIntegrationTests.xctest */,
+				5E735CB360184CFD94AA360C /* SequelPGUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		394723EA09D743529361F3CA /* SequelPGIntegrationTests */ = {
+			isa = PBXGroup;
+			children = (
+				E45E3D3A1BDD4598AFF91A4B /* TestCluster.swift */,
+				B16C8811ED254548AE64763B /* IntegrationTestCase.swift */,
+				98F42730BFFF43A594E9F045 /* ConnectionAuthTests.swift */,
+				ADAD5343BDF74B78BBA73F0E /* SSLModeTests.swift */,
+				D26EED16F56A4FFB9E2CC2A0 /* SSHTunnelTests.swift */,
+				23EF0687BB704A9082C03F8D /* QueryExecutionTests.swift */,
+				E8E2940DBA844F4981F1367A /* TypeDecodingTests.swift */,
+				7CCD622BFE31484F8FB3E32C /* IntrospectionTests.swift */,
+				B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */,
+				76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */,
+				3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */,
+			);
+			path = SequelPGIntegrationTests;
+			sourceTree = "<group>";
+		};
+		5C589960FFC1464A964656C5 /* SequelPGUITests */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = SequelPGUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -505,6 +589,40 @@
 			productReference = AB10000000000000000021 /* SequelPGTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		E85B75A0DFCF45A8A450C02B /* SequelPGIntegrationTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CACD2EA0ECA84F7C9332172F /* Build configuration list for PBXNativeTarget "SequelPGIntegrationTests" */;
+			buildPhases = (
+				04AE569C04D64583A3244EB5 /* Sources */,
+				9C404CDEB9D74C7686D14ABD /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C75B374DE60B4F3D91FAC26F /* PBXTargetDependency */,
+			);
+			name = SequelPGIntegrationTests;
+			productName = SequelPGIntegrationTests;
+			productReference = 0F6E41F4ABC14FBA81481057 /* SequelPGIntegrationTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		90007CD26A3E466ABF2A3591 /* SequelPGUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0A7F20E28F445D1B3537359 /* Build configuration list for PBXNativeTarget "SequelPGUITests" */;
+			buildPhases = (
+				FE002319CE19409CB4909538 /* Sources */,
+				A91F6C5E33B245349F2E322A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3DBA17C953DE458C824D7BBF /* PBXTargetDependency */,
+			);
+			name = SequelPGUITests;
+			productName = SequelPGUITests;
+			productReference = 5E735CB360184CFD94AA360C /* SequelPGUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -515,6 +633,14 @@
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
+					90007CD26A3E466ABF2A3591 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AF10000000000000000001;
+					};
+					E85B75A0DFCF45A8A450C02B = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AF10000000000000000001;
+					};
 					AF10000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
@@ -542,6 +668,8 @@
 			targets = (
 				AF10000000000000000001 /* SequelPG */,
 				AF10000000000000000002 /* SequelPGTests */,
+				E85B75A0DFCF45A8A450C02B /* SequelPGIntegrationTests */,
+				90007CD26A3E466ABF2A3591 /* SequelPGUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -651,6 +779,7 @@
 				AA10000000000000000E0C /* ERDExportSheet.swift in Sources */,
 				AA10000000000000000E08 /* DiagramTabView.swift in Sources */,
 				AA10000000000000000E11 /* ERDRouter.swift in Sources */,
+				F884F2E21B104EB9A973032B /* TestingHooks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -684,6 +813,31 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		04AE569C04D64583A3244EB5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C5D740FAC53445D68AEF28BE /* TestCluster.swift in Sources */,
+				4CBA00AF0FDF4904B87A7627 /* IntegrationTestCase.swift in Sources */,
+				1AEE481D216B4263934BCFFF /* ConnectionAuthTests.swift in Sources */,
+				7A2191F99A1340A0BFF2DA3A /* SSLModeTests.swift in Sources */,
+				2196805A2E6B4CC388452E41 /* SSHTunnelTests.swift in Sources */,
+				EDEBC0259E6842FC9A75821D /* QueryExecutionTests.swift in Sources */,
+				BFFA776835434668AD2D16CA /* TypeDecodingTests.swift in Sources */,
+				33F3DCF1875D48E995A0EB6F /* IntrospectionTests.swift in Sources */,
+				FE7102F0EAB34FF9AB9A653B /* DropObjectIntegrationTests.swift in Sources */,
+				DE87A925268A4E518600A1D2 /* AppViewModelIntegrationTests.swift in Sources */,
+				DED43A3EA5FC4BFC8CE2EC96 /* TransferIntegrationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE002319CE19409CB4909538 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -691,6 +845,16 @@
 			isa = PBXTargetDependency;
 			target = AF10000000000000000001 /* SequelPG */;
 			targetProxy = AC10000000000000000001 /* PBXContainerItemProxy */;
+		};
+		C75B374DE60B4F3D91FAC26F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AF10000000000000000001 /* SequelPG */;
+			targetProxy = 188A2A780D114D20919FC1CD /* PBXContainerItemProxy */;
+		};
+		3DBA17C953DE458C824D7BBF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AF10000000000000000001 /* SequelPG */;
+			targetProxy = 2F2637874ED64E428DDED40A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -824,6 +988,72 @@
 			};
 			name = Release;
 		};
+		4D6477DFE0F84DEFA6DBE272 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.3.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.integrationtests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SequelPG.app/Contents/MacOS/SequelPG";
+			};
+			name = Debug;
+		};
+		79CAC945C5054B6ABC8F257B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.3.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.integrationtests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SequelPG.app/Contents/MacOS/SequelPG";
+			};
+			name = Release;
+		};
+		B0A5EF0FD35C46959C0F471A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.3.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = SequelPG;
+			};
+			name = Debug;
+		};
+		F7F18D8CEF1E4355910DC96B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.3.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = SequelPG;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -850,6 +1080,24 @@
 			buildConfigurations = (
 				AF10000000000000000019 /* Debug */,
 				AF1000000000000000001A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CACD2EA0ECA84F7C9332172F /* Build configuration list for PBXNativeTarget "SequelPGIntegrationTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D6477DFE0F84DEFA6DBE272 /* Debug */,
+				79CAC945C5054B6ABC8F257B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F0A7F20E28F445D1B3537359 /* Build configuration list for PBXNativeTarget "SequelPGUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0A5EF0FD35C46959C0F471A /* Debug */,
+				F7F18D8CEF1E4355910DC96B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

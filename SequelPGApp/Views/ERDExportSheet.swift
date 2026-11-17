@@ -110,7 +110,7 @@ struct ERDExportSheet: View {
         if let type = UTType(filenameExtension: format.fileExtension) {
             panel.allowedContentTypes = [type]
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanels.chooseSaveURL(panel) else { return }
 
         do {
             let data = try render(nodes: nodes, edges: edges)

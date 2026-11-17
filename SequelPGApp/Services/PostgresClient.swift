@@ -1,4 +1,6 @@
 import Foundation
+import Logging
+import NIOSSL
 import OSLog
 import PostgresNIO
 
@@ -153,6 +155,22 @@ actor DatabaseClient: PostgresClientProtocol {
         sslMode: SSLMode,
         cleanupOnFailure: () async -> Void
     ) async throws {
+        // Fail fast with the server's own message before building the pool:
+        // PostgresClient retries failed connection attempts with backoff
+        // until the lease times out (~60 s), so a wrong password or a closed
+        // port would otherwise hang Connect for a minute and then report only
+        // PSQLError's generic description.
+        do {
+            try await Self.probeConnection(
+                host: host, port: port,
+                username: username, password: password,
+                database: database, sslMode: sslMode
+            )
+        } catch {
+            await cleanupOnFailure()
+            throw AppError.connectionFailed(Self.describeConnectionError(error))
+        }
+
         let config = PostgresClient.Configuration(
             host: host, port: port,
             username: username, password: password,
@@ -170,7 +188,7 @@ actor DatabaseClient: PostgresClientProtocol {
             for try await _ in rows {}
         } catch {
             await cleanupOnFailure()
-            throw AppError.connectionFailed(error.localizedDescription)
+            throw AppError.connectionFailed(Self.describeConnectionError(error))
         }
 
         resolvedEndpoint = PGConnectionEndpoint(host: host, port: port)
@@ -182,22 +200,70 @@ actor DatabaseClient: PostgresClientProtocol {
 
     /// Build TLS configuration for the given SSL mode.
     private static func makeTLS(for sslMode: SSLMode) -> PostgresClient.Configuration.TLS {
+        guard let tlsConfiguration = tlsConfiguration(for: sslMode) else { return .disable }
+        return sslMode == .prefer ? .prefer(tlsConfiguration) : .require(tlsConfiguration)
+    }
+
+    /// The certificate-verification policy behind each SSL mode; `nil` for `.off`.
+    /// Shared by the pool (`makeTLS`) and the connection probe so both always
+    /// negotiate identically.
+    private static func tlsConfiguration(for sslMode: SSLMode) -> TLSConfiguration? {
         switch sslMode {
         case .off:
-            return .disable
-        case .prefer:
-            return .prefer(.makeClientConfiguration())
-        case .require:
-            return .require(.makeClientConfiguration())
+            return nil
+        case .prefer, .require:
+            // libpq semantics: `prefer`/`require` encrypt but do not verify
+            // the certificate (that is what verify-ca / verify-full are for).
+            // NIO's default is full verification, which made these modes
+            // unusable against servers with self-signed or private-CA certs.
+            var c = TLSConfiguration.makeClientConfiguration()
+            c.certificateVerification = .none
+            return c
         case .verifyCa:
             var c = TLSConfiguration.makeClientConfiguration()
             c.certificateVerification = .noHostnameVerification
-            return .require(c)
+            return c
         case .verifyFull:
             var c = TLSConfiguration.makeClientConfiguration()
             c.certificateVerification = .fullVerification
-            return .require(c)
+            return c
         }
+    }
+
+    /// Opens and closes one direct connection with the exact settings the pool
+    /// will use. Throws the driver's error unchanged.
+    private static func probeConnection(
+        host: String,
+        port: Int,
+        username: String,
+        password: String?,
+        database: String,
+        sslMode: SSLMode
+    ) async throws {
+        let tls: PostgresConnection.Configuration.TLS
+        if let tlsConfiguration = tlsConfiguration(for: sslMode) {
+            let context = try NIOSSLContext(configuration: tlsConfiguration)
+            tls = sslMode == .prefer ? .prefer(context) : .require(context)
+        } else {
+            tls = .disable
+        }
+        let configuration = PostgresConnection.Configuration(
+            host: host, port: port,
+            username: username, password: password,
+            database: database,
+            tls: tls
+        )
+        let logger = Logger(label: "com.sequelpg.db.probe", factory: { _ in SwiftLogNoOpLogHandler() })
+        let connection = try await PostgresConnection.connect(configuration: configuration, id: 0, logger: logger)
+        try? await connection.close()
+    }
+
+    /// User-facing text for a failure while establishing a connection.
+    static func describeConnectionError(_ error: Error) -> String {
+        if let error = error as? PSQLError {
+            return formatPSQLError(error)
+        }
+        return error.localizedDescription
     }
 
     func disconnect() async {
@@ -1172,7 +1238,7 @@ actor DatabaseClient: PostgresClientProtocol {
     /// falling back to the localized description.
     private static func formatPSQLError(_ error: PSQLError) -> String {
         guard let serverInfo = error.serverInfo else {
-            return error.localizedDescription
+            return describeClientSideError(error)
         }
 
         var parts: [String] = []
@@ -1184,6 +1250,41 @@ actor DatabaseClient: PostgresClientProtocol {
         }
 
         return parts.isEmpty ? error.localizedDescription : parts.joined(separator: "\n")
+    }
+
+    /// Readable text for driver errors that carry no server message (network,
+    /// TLS, auth negotiation). PSQLError's own description is deliberately
+    /// generic, which left users with "PSQLError error 1".
+    private static func describeClientSideError(_ error: PSQLError) -> String {
+        var text: String
+        switch error.code {
+        case .connectionError where error.underlying is NIOSSLError:
+            text = String(describing: error.underlying!).contains("CERTIFICATE_VERIFY_FAILED")
+                ? "SSL handshake failed: the server certificate could not be verified against the system's trusted certificates."
+                : "SSL handshake failed."
+        case .connectionError:
+            text = "Could not reach the server."
+        case .sslUnsupported:
+            text = "The server does not accept SSL connections, but the selected SSL mode requires SSL."
+        case .failedToAddSSLHandler:
+            text = "Could not start an SSL session."
+        case .authMechanismRequiresPassword:
+            text = "The server requires a password."
+        case .unsupportedAuthMechanism:
+            text = "The server requested an authentication method that is not supported."
+        case .saslError:
+            text = "SCRAM authentication failed."
+        case .serverClosedConnection:
+            text = "The server closed the connection."
+        case .clientClosedConnection:
+            text = "The connection was closed."
+        default:
+            text = error.code.description
+        }
+        if let underlying = error.underlying {
+            text += " (\(String(describing: underlying)))"
+        }
+        return text
     }
 
     // MARK: - Introspection

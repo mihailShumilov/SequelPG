@@ -35,7 +35,7 @@ enum ThemeMode: String, CaseIterable, Identifiable, Sendable {
 @MainActor
 @Observable
 final class ThemePreference {
-    static let shared = ThemePreference()
+    static let shared = ThemePreference(defaults: TestingHooks.userDefaults)
 
     private let defaultsKey = "com.sequelpg.themeMode"
     private let defaults: UserDefaults

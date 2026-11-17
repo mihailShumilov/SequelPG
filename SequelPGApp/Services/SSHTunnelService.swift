@@ -75,6 +75,7 @@ actor SSHTunnelService {
             "-L", "\(port):\(remoteHost):\(remotePort)",
             "-p", "\(sshPort)",
         ]
+        args += TestingHooks.sshKnownHostsArguments()
 
         // Auth configuration
         switch sshAuthMethod {
@@ -101,6 +102,9 @@ actor SSHTunnelService {
             args += [
                 "-o", "PubkeyAuthentication=no",
                 "-o", "PreferredAuthentications=password,keyboard-interactive",
+                // The askpass FIFO yields the password once; a retry prompt
+                // would block until the tunnel timeout instead of failing.
+                "-o", "NumberOfPasswordPrompts=1",
             ]
         }
 

@@ -1,0 +1,86 @@
+# SequelPG automated-test cluster. Separate from dev-db: own ports (55xxx),
+# own volumes-free containers (every `make up` starts from a clean initdb),
+# so tests are reproducible and never touch the demo database.
+#
+# Values must match test-env.json — `make check` verifies they do.
+
+x-pg-common: &pg-common
+  environment: &pg-env
+    POSTGRES_DB: sequelpg_test
+    POSTGRES_USER: sp_admin
+    POSTGRES_PASSWORD: sp_admin_pw
+    POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
+  # tmpfs data dir: fast, and every container start is a fresh cluster.
+  tmpfs:
+    - /var/lib/postgresql:rw,size=1g
+  healthcheck:
+    # The init-phase server listens on the unix socket only, so a TCP
+    # pg_isready succeeds only once init scripts finished and the real
+    # server is up.
+    test: ["CMD-SHELL", "pg_isready -U sp_admin -d sequelpg_test -h 127.0.0.1"]
+    interval: 2s
+    timeout: 3s
+    retries: 90
+    start_period: 5s
+  networks: [testnet]
+
+services:
+  pg18:
+    <<: *pg-common
+    image: postgres:18
+    container_name: sequelpg_test_pg18
+    hostname: pg18
+    ports: ["127.0.0.1:55418:5432"]
+    environment:
+      <<: *pg-env
+      SEQUELPG_SSL: "on"
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./fixtures:/fixtures/qa:ro
+      - ../dev-db/init:/fixtures/dev:ro
+      - ./.generated/certs:/certs-src:ro
+
+  pg16:
+    <<: *pg-common
+    image: postgres:16
+    container_name: sequelpg_test_pg16
+    hostname: pg16
+    ports: ["127.0.0.1:55416:5432"]
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./fixtures:/fixtures/qa:ro
+      - ../dev-db/init:/fixtures/dev:ro
+
+  pg13:
+    <<: *pg-common
+    image: postgres:13
+    container_name: sequelpg_test_pg13
+    hostname: pg13
+    ports: ["127.0.0.1:55413:5432"]
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./fixtures:/fixtures/qa:ro
+      - ../dev-db/init:/fixtures/dev:ro
+
+  sshd:
+    build: ./sshd
+    image: sequelpg-test-sshd:1
+    container_name: sequelpg_test_sshd
+    hostname: bastion
+    ports: ["127.0.0.1:55022:22"]
+    volumes:
+      - ./.generated/ssh:/keys:ro
+    environment:
+      TUNNEL_USER: tunnel
+      TUNNEL_PASSWORD: tunnel_pw
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 22"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [testnet]
+
+networks:
+  testnet:
+    name: sequelpg_testnet

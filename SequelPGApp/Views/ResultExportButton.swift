@@ -42,7 +42,7 @@ struct ResultExportButton: View {
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.nameFieldStringValue = "\(defaultFileName).\(format.fileExtension)"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanels.chooseSaveURL(panel) else { return }
         appVM.exportResult(result, format: format, to: url)
     }
 }
