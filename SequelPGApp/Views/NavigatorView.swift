@@ -148,6 +148,7 @@ struct NavigatorView: View {
         return HStack(spacing: 6) {
             SearchField(text: $navigatorVM.filterText, prompt: "Filter")
                 .frame(maxWidth: .infinity)
+                .accessibilityIdentifier(A11yID.Navigator.filter)
 
             Menu {
                 Button("New Database…") { appVM.showCreateDatabaseSheet = true }
@@ -304,6 +305,7 @@ struct NavigatorView: View {
             }
         } label: {
             Label(schema, systemImage: "folder")
+                .accessibilityIdentifier(A11yID.Navigator.schema(schema))
                 .contentShape(Rectangle())
                 .onTapGesture { binding.wrappedValue.toggle() }
                 .contextMenu {
@@ -372,6 +374,7 @@ struct NavigatorView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .help(obj.name)
+                        .accessibilityIdentifier(A11yID.Navigator.object(schema: obj.schema, name: obj.name))
                         .tag(obj)
                         .contextMenu {
                             if appVM.isRunnable(obj) {
@@ -417,6 +420,7 @@ struct NavigatorView: View {
                     .accessibilityLabel(
                         "\(category.rawValue), \(objects.count) \(objects.count == 1 ? "object" : "objects")"
                     )
+                    .accessibilityIdentifier(A11yID.Navigator.category(schema: schema, category.rawValue))
                 } icon: {
                     Image(systemName: category.icon)
                 }

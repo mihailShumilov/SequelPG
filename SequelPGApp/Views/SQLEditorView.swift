@@ -40,6 +40,7 @@ struct SQLEditorView: NSViewRepresentable {
         layoutManager.addTextContainer(textContainer)
 
         let textView = CompletionTextView(frame: .zero, textContainer: textContainer)
+        textView.setAccessibilityIdentifier(A11yID.Query.editor)
         textView.isEditable = true
         textView.isSelectable = true
         textView.isRichText = false

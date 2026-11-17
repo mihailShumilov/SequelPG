@@ -368,6 +368,7 @@ struct FieldEditorView: View {
         VStack(spacing: 12) {
             Spacer()
             TextField("Enter value...", text: $text)
+                .accessibilityIdentifier(A11yID.FieldEditor.value)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .focused($textEditorFocused)
@@ -410,10 +411,12 @@ struct FieldEditorView: View {
                 onCancel()
             }
             .keyboardShortcut(.escape, modifiers: [])
+            .accessibilityIdentifier(A11yID.FieldEditor.cancel)
 
             Button("Save") {
                 save()
             }
+            .accessibilityIdentifier(A11yID.FieldEditor.save)
             .keyboardShortcut(.return, modifiers: .command)
             .buttonStyle(.borderedProminent)
             .disabled(validationError != nil && !isNull)

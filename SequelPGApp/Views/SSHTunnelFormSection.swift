@@ -17,20 +17,26 @@ struct SSHTunnelFormSection: View {
 
     var body: some View {
         Toggle("Connect via SSH Tunnel", isOn: $useSSHTunnel.animation())
+            .accessibilityIdentifier(A11yID.Form.useSSH)
 
         if useSSHTunnel {
             TextField("SSH Host", text: $sshHost)
+                .accessibilityIdentifier(A11yID.Form.sshHost)
             TextField("SSH Port", text: $sshPort)
+                .accessibilityIdentifier(A11yID.Form.sshPort)
             TextField("SSH User", text: $sshUser)
+                .accessibilityIdentifier(A11yID.Form.sshUser)
             Picker("Authentication", selection: $sshAuthMethod) {
                 ForEach(SSHAuthMethod.allCases, id: \.self) { method in
                     Text(method.displayName).tag(method)
                 }
             }
+            .accessibilityIdentifier(A11yID.Form.sshAuth)
 
             if sshAuthMethod == .keyFile {
                 TextField("Key File", text: $sshKeyPath, prompt: Text("~/.ssh/id_ed25519"))
                     .help("Path to SSH private key (e.g. ~/.ssh/id_rsa). Leave empty to use SSH agent.")
+                    .accessibilityIdentifier(A11yID.Form.sshKeyPath)
             }
 
             if sshAuthMethod == .password {
@@ -38,8 +44,10 @@ struct SSHTunnelFormSection: View {
                     HStack {
                         if showBinding.wrappedValue {
                             TextField("SSH Password", text: $sshPassword)
+                                .accessibilityIdentifier(A11yID.Form.sshPassword)
                         } else {
                             SecureField("SSH Password", text: $sshPassword)
+                                .accessibilityIdentifier(A11yID.Form.sshPassword)
                         }
                         Button {
                             showBinding.wrappedValue.toggle()
@@ -50,6 +58,7 @@ struct SSHTunnelFormSection: View {
                     }
                 } else {
                     SecureField("SSH Password", text: $sshPassword)
+                        .accessibilityIdentifier(A11yID.Form.sshPassword)
                 }
             }
         }

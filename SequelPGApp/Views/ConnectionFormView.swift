@@ -84,15 +84,22 @@ struct ConnectionSettingsForm: View {
         Form {
             Section {
                 TextField("Name", text: $form.name)
+                    .accessibilityIdentifier(A11yID.Form.name)
                 TextField("Host", text: $form.host, prompt: Text("localhost"))
+                    .accessibilityIdentifier(A11yID.Form.host)
                 TextField("Port", text: $form.port, prompt: Text("5432"))
+                    .accessibilityIdentifier(A11yID.Form.port)
                 TextField("Database", text: $form.database)
+                    .accessibilityIdentifier(A11yID.Form.database)
                 TextField("Username", text: $form.username)
+                    .accessibilityIdentifier(A11yID.Form.username)
                 HStack {
                     if showPassword {
                         TextField("Password", text: $form.password)
+                            .accessibilityIdentifier(A11yID.Form.password)
                     } else {
                         SecureField("Password", text: $form.password)
+                            .accessibilityIdentifier(A11yID.Form.password)
                     }
                     Button {
                         showPassword.toggle()
@@ -107,15 +114,25 @@ struct ConnectionSettingsForm: View {
                         Text(mode.displayName).tag(mode)
                     }
                 }
+                .accessibilityIdentifier(A11yID.Form.sslMode)
+                .help("Prefer and Require encrypt the connection but don't verify the server's certificate. "
+                    + "Verify CA checks the certificate chain; Verify Full also checks the host name.")
             } header: {
                 Text("PostgreSQL Server")
             } footer: {
-                Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    if form.sslMode == .prefer || form.sslMode == .require {
+                        Text("Encrypted, but the server's identity isn't verified. Use Verify Full to authenticate it.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("SSH Tunnel") {

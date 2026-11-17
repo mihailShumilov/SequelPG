@@ -101,6 +101,7 @@ struct ConnectionWindowView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .help("Switch between Structure, Content, Definition, Query, and Diagram (⌘1–⌘5)")
+                .accessibilityIdentifier(A11yID.Workspace.modePicker)
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
@@ -110,6 +111,7 @@ struct ConnectionWindowView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .help("Reload schemas and objects (⌘R)")
+                .accessibilityIdentifier(A11yID.Workspace.refresh)
 
                 Menu {
                     Button("Extensions…") { appVM.showExtensionsSheet = true }
@@ -124,6 +126,7 @@ struct ConnectionWindowView: View {
                     Label("Database", systemImage: "cylinder.split.1x2")
                 }
                 .help("Database tools")
+                .accessibilityIdentifier(A11yID.Workspace.databaseMenu)
 
                 Button {
                     appVM.showInspector.toggle()

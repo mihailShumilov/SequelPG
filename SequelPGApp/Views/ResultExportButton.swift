@@ -33,6 +33,7 @@ struct ResultExportButton: View {
         .disabled(isDisabled)
         .help("Export the rows currently shown to a CSV or JSON file")
         .accessibilityLabel("Export results")
+        .accessibilityIdentifier(A11yID.Results.export)
     }
 
     private func export(_ format: ResultExportFormat) {

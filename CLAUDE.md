@@ -60,15 +60,27 @@ Views (SwiftUI) → ViewModels (@MainActor, @Observable) → Services → Postgr
 
 ## Testing
 
-Tests are in `SequelPGTests/` and use mock implementations of `PostgresClientProtocol`. No live database is needed for tests. Import with `@testable import SequelPG`.
+Three local suites (see `test-db/README.md`):
 
-**Key patterns:**
+| Suite | Location | Run |
+| --- | --- | --- |
+| Unit (mocks, no DB) | `SequelPGTests/` | `make -C test-db test-unit` or the xcodebuild commands above |
+| Integration (real DB on PG 18/16/13, SSH, TLS) | `SequelPGIntegrationTests/`, scheme `SequelPGIntegrationTests` | `make -C test-db up && make -C test-db test-integration [ONLY=Class]` |
+| UI scenarios (real app via accessibility, in the background) | `UITest/` (SwiftPM, `sequelpg-uitest`) | `make -C test-db test-ui [ONLY="smoke edit-rows"]` |
+
+The Docker cluster lives in `test-db/` (`test-env.json` is the source of truth for ports/roles). It is separate from `dev-db/`.
+
+**Unit test patterns:**
 - ViewModels are `@MainActor`, so test classes must also be `@MainActor`
 - `DatabaseClient` mock is an `actor MockDatabaseClient: PostgresClientProtocol` — use `await` setter methods to mutate properties from `@MainActor` tests
 - `ConnectionStore` uses DI via `UserDefaults(suiteName:)` — use an ephemeral suite per test
 - `KeychainService` mock uses in-memory dict conforming to `KeychainServiceProtocol`
 
-**Adding new test files:** New `.swift` test files must be registered in `project.pbxproj` in 4 places (PBXBuildFile, PBXFileReference, SequelPGTests PBXGroup children, test target PBXSourcesBuildPhase). See existing entries for the ID naming pattern.
+**Test isolation:** `SequelPGApp/Utilities/TestingHooks.swift` (Debug only) switches every automated run — the XCTest host or `-SequelPGUITestMode` — to an in-memory Keychain, an isolated defaults suite and a temporary Application Support folder, so tests never prompt for or touch the developer's Keychain or saved connections. App code must get `UserDefaults`, the Keychain service and save/open panels through `TestingHooks` / `FilePanels`, not directly.
+
+**Accessibility identifiers:** UI scenarios find controls by the constants in `SequelPGApp/Utilities/AccessibilityID.swift` (`A11yID`), shared with `UITest/` via a symlink. Give new interactive controls an identifier.
+
+**Adding test files:** register with `Scripts/pbxproj.py add-file <path> --targets SequelPGTests` (or `SequelPGIntegrationTests`). `UITest/` is a SwiftPM package and needs no registration.
 
 ## Recommended Agents
 
@@ -76,6 +88,8 @@ Reach for these proactively when the task fits:
 
 Project agents live in `.claude/agents/`; each keeps versioned memory in `.claude/agent-memory/<agent>/`.
 
+- **integration-test-writer** — real-database tests in `SequelPGIntegrationTests` across PG 18/16/13, SSL and SSH. Run after connection, query-execution, introspection, DDL or transfer changes.
+- **ui-scenario-writer** — end-to-end scenarios in `UITest/` driven through accessibility in the background. Run after UI changes.
 - **unit-test-generator** — writes XCTest suites with the project's mocks and registers new test files in `project.pbxproj`. Run after new ViewModel methods, SQL builders, exporters, or utilities.
 - **swift-concurrency-reviewer** — actor isolation, Sendable, Task cancellation, stale-result races (generation guards), Stop/timeout. Run after changes to `DatabaseClient`, `SSHTunnelService`, `DatabaseTransferService`, `PGToolchain`, or any ViewModel async load path.
 - **pg-catalog-expert** — writes/reviews `pg_catalog` introspection and DDL SQL and checks it across PostgreSQL 10–18. Run when introspection, navigator, Structure/Definition, ERD loading, or object create/alter/drop SQL changes.
@@ -92,8 +106,11 @@ Project agents live in `.claude/agents/`; each keeps versioned memory in `.claud
 
 Project skills (`.claude/skills/`):
 
-- `build-and-test` — filtered `xcodebuild` build/test commands and SwiftFormat.
-- `add-swift-file` — create a `.swift` file and register it in `project.pbxproj` (group and Sources-phase ids for every folder).
+- `build-and-test` — filtered `xcodebuild` build/test commands, the three test suites, and SwiftFormat.
+- `test-db` — the Docker test cluster (PG 18/16/13, auth methods, TLS, SSH bastion) used by integration and UI tests.
+- `integration-test` — write/run `SequelPGIntegrationTests`.
+- `ui-test` — run/write/debug UI scenarios and explore the live UI with `sequelpg-uitest`.
+- `add-swift-file` — create a `.swift` file and register it in `project.pbxproj` (`Scripts/pbxproj.py add-file`).
 - `dev-db` — start/reset/query the PostgreSQL 18 Docker fixture and extend its init scripts.
 - `verify-ui` — screenshot-verify a UI change against dev-db (temporary demo driver, window-id capture, cleanup).
 - `release` — version bump, CHANGELOG, and how the release workflow ships the DMG.

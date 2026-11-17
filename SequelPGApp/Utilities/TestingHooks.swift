@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// Hooks that let the automated suites (`test-db/`, `SequelPGIntegrationTests`,
-/// `SequelPGUITests`) drive the app deterministically.
+/// `UITest/`) drive the app deterministically.
 ///
 /// Every hook is active only in DEBUG builds. Release builds compile the same
 /// API down to the production behavior, so nothing here can be switched on in
@@ -11,8 +11,8 @@ enum TestingHooks {
     /// Launch argument that puts the app into UI-test mode.
     static let uiTestModeArgument = "-SequelPGUITestMode"
 
-    /// Environment variables read by the hooks. Mirrored in the UI test target
-    /// (`UITestEnv.swift`) — keep the two in sync.
+    /// Environment variables read by the hooks. Mirrored by the UI scenario
+    /// driver (`UITest/Sources/SequelPGUITest/Session.swift`) — keep in sync.
     enum Env {
         /// Path to a known_hosts file passed to `ssh` as `UserKnownHostsFile`,
         /// so tests can trust the test bastion without editing ~/.ssh.
@@ -26,18 +26,28 @@ enum TestingHooks {
         static let openFile = "SEQUELPG_UITEST_OPEN_FILE"
     }
 
+    #if DEBUG
     /// A connection profile plus its secrets, as handed to the app by UI tests.
     struct SeedProfile: Codable {
         var profile: ConnectionProfile
         var password: String?
         var sshPassword: String?
     }
+    #endif
 
     #if DEBUG
     static let isUITestMode = ProcessInfo.processInfo.arguments.contains(uiTestModeArgument)
+    /// The app is the host of a unit/integration test bundle.
+    static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || NSClassFromString("XCTestCase") != nil
     #else
     static let isUITestMode = false
+    static let isTestHost = false
     #endif
+
+    /// Any automated run: never touch the real Keychain or the developer's
+    /// saved profiles and preferences.
+    static let isAutomatedTestRun = isUITestMode || isTestHost
 
     private static var environment: [String: String] { ProcessInfo.processInfo.environment }
 
@@ -61,25 +71,54 @@ enum TestingHooks {
     /// real profiles and preferences are never read or written.
     static let uiTestDefaultsSuite = "com.sequelpg.app.uitests"
 
+    /// Suite actually used: XCTest hosts get one per process, so test runs
+    /// in parallel (or beside a UI-test app) can't wipe each other's settings.
+    static let automatedDefaultsSuite = isTestHost
+        ? "\(uiTestDefaultsSuite).\(ProcessInfo.processInfo.processIdentifier)"
+        : uiTestDefaultsSuite
+
     /// The `UserDefaults` every app component should use.
     static let userDefaults: UserDefaults = {
-        guard isUITestMode, let suite = UserDefaults(suiteName: uiTestDefaultsSuite) else {
+        guard isAutomatedTestRun, let suite = UserDefaults(suiteName: automatedDefaultsSuite) else {
             return .standard
         }
-        suite.removePersistentDomain(forName: uiTestDefaultsSuite)
+        suite.removePersistentDomain(forName: automatedDefaultsSuite)
+        if isTestHost { removeStaleTestHostSuites() }
         return suite
     }()
 
-    /// Keychain stand-in: in-memory in UI-test mode (no system prompts, no
-    /// leftovers), the real Keychain otherwise.
-    static let keychainService: KeychainServiceProtocol = isUITestMode
+    /// Test hosts are killed rather than quit, so their per-process suites
+    /// are removed by the next run once the owning process is gone.
+    private static func removeStaleTestHostSuites() {
+        let prefs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences")
+        let prefix = uiTestDefaultsSuite + "."
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: prefs.path)) ?? []
+        for file in files where file.hasPrefix(prefix) && file.hasSuffix(".plist") {
+            let domain = String(file.dropLast(".plist".count))
+            guard let pid = Int32(domain.dropFirst(prefix.count)),
+                  pid != ProcessInfo.processInfo.processIdentifier,
+                  kill(pid, 0) != 0
+            else { continue }
+            UserDefaults.standard.removePersistentDomain(forName: domain)
+            try? FileManager.default.removeItem(at: prefs.appendingPathComponent(file))
+        }
+    }
+
+    /// Keychain stand-in: in-memory for every automated run (no system
+    /// prompts, no leftovers), the real Keychain otherwise.
+    #if DEBUG
+    static let keychainService: KeychainServiceProtocol = isAutomatedTestRun
         ? InMemoryKeychainService()
         : KeychainService.shared
+    #else
+    static let keychainService: KeychainServiceProtocol = KeychainService.shared
+    #endif
 
     /// Builds the connection store and, in UI-test mode, seeds it (and the
     /// in-memory keychain) from `SEQUELPG_UITEST_PROFILES`.
     static func makeConnectionStore() -> ConnectionStore {
         let store = ConnectionStore(defaults: userDefaults)
+        #if DEBUG
         guard isUITestMode,
               let json = environment[Env.seedProfiles],
               let data = json.data(using: .utf8),
@@ -95,14 +134,16 @@ enum TestingHooks {
                 try? keychainService.save(password: sshPassword, forKey: seed.profile.sshKeychainKey)
             }
         }
+        #endif
         return store
     }
 
     /// Application Support root for file-based stores (ERD layouts). A
-    /// throwaway temp directory in UI-test mode.
+    /// throwaway temp directory for automated runs.
     static func applicationSupportDirectory(fileManager: FileManager = .default) -> URL {
-        if isUITestMode {
-            return fileManager.temporaryDirectory.appendingPathComponent("SequelPGUITests-\(ProcessInfo.processInfo.processIdentifier)")
+        if isAutomatedTestRun {
+            let pid = ProcessInfo.processInfo.processIdentifier
+            return fileManager.temporaryDirectory.appendingPathComponent("SequelPGTests-\(pid)")
         }
         return (try? fileManager.url(
             for: .applicationSupportDirectory,
@@ -113,7 +154,8 @@ enum TestingHooks {
     }
 }
 
-/// Keychain replacement for UI-test mode. Thread-safe; lives for one launch.
+#if DEBUG
+/// Keychain replacement for automated test runs. Thread-safe; lives for one launch.
 final class InMemoryKeychainService: KeychainServiceProtocol, @unchecked Sendable {
     private var items: [String: String] = [:]
     private let lock = NSLock()
@@ -130,10 +172,11 @@ final class InMemoryKeychainService: KeychainServiceProtocol, @unchecked Sendabl
         lock.withLock { _ = items.removeValue(forKey: key) }
     }
 }
+#endif
 
 /// Runs open/save panels. In UI-test mode the panel is skipped and the path
-/// comes from the environment, because XCUITest can't reliably drive the
-/// out-of-process system file panels.
+/// comes from the environment: the system file panels run out of process and
+/// can't be driven reliably by the UI scenario driver.
 @MainActor
 enum FilePanels {
     static func chooseSaveURL(_ panel: NSSavePanel) -> URL? {
@@ -142,7 +185,7 @@ enum FilePanels {
            let dir = ProcessInfo.processInfo.environment[TestingHooks.Env.saveDirectory], !dir.isEmpty
         {
             return URL(fileURLWithPath: dir, isDirectory: true)
-                .appendingPathComponent(panel.nameFieldStringValue)
+                .appendingPathComponent((panel.nameFieldStringValue as NSString).lastPathComponent)
         }
         #endif
         guard panel.runModal() == .OK else { return nil }

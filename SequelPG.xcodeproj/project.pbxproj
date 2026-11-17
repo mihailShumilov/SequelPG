@@ -133,6 +133,8 @@
 		FE7102F0EAB34FF9AB9A653B /* DropObjectIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */; };
 		DE87A925268A4E518600A1D2 /* AppViewModelIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */; };
 		DED43A3EA5FC4BFC8CE2EC96 /* TransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */; };
+		2934FA8D792E41368E03B429 /* AccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */; };
+		737ADE30541742209A5FAFF2 /* TestingHooksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1739FC3FB88547D389026B32 /* TestingHooksTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -144,13 +146,6 @@
 			remoteInfo = SequelPG;
 		};
 		188A2A780D114D20919FC1CD /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AE10000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AF10000000000000000001;
-			remoteInfo = SequelPG;
-		};
-		2F2637874ED64E428DDED40A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AE10000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -277,7 +272,6 @@
 		AB10000000000000000020 /* SequelPG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SequelPG.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB10000000000000000021 /* SequelPGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0F6E41F4ABC14FBA81481057 /* SequelPGIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		5E735CB360184CFD94AA360C /* SequelPGUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SequelPGUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestingHooks.swift; sourceTree = "<group>"; };
 		E45E3D3A1BDD4598AFF91A4B /* TestCluster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCluster.swift; sourceTree = "<group>"; };
 		B16C8811ED254548AE64763B /* IntegrationTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationTestCase.swift; sourceTree = "<group>"; };
@@ -290,6 +284,8 @@
 		B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropObjectIntegrationTests.swift; sourceTree = "<group>"; };
 		76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModelIntegrationTests.swift; sourceTree = "<group>"; };
 		3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferIntegrationTests.swift; sourceTree = "<group>"; };
+		1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityID.swift; sourceTree = "<group>"; };
+		1739FC3FB88547D389026B32 /* TestingHooksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestingHooksTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -315,13 +311,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A91F6C5E33B245349F2E322A /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -332,7 +321,6 @@
 				AC20000000000000000009 /* SequelPGTests */,
 				AC2000000000000000000A /* Products */,
 				394723EA09D743529361F3CA /* SequelPGIntegrationTests */,
-				5C589960FFC1464A964656C5 /* SequelPGUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -469,6 +457,7 @@
 				AB10000000000000000E06 /* ERDImageExporter.swift */,
 				AB10000000000000000E11 /* ERDRouter.swift */,
 				E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */,
+				1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -509,6 +498,7 @@
 				AB10000000000000000E0D /* ERDViewModelTests.swift */,
 				AB10000000000000000E0E /* ERDLayoutEngineTests.swift */,
 				AB10000000000000000E0F /* ERDSVGRendererTests.swift */,
+				1739FC3FB88547D389026B32 /* TestingHooksTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -519,7 +509,6 @@
 				AB10000000000000000020 /* SequelPG.app */,
 				AB10000000000000000021 /* SequelPGTests.xctest */,
 				0F6E41F4ABC14FBA81481057 /* SequelPGIntegrationTests.xctest */,
-				5E735CB360184CFD94AA360C /* SequelPGUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -540,13 +529,6 @@
 				3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */,
 			);
 			path = SequelPGIntegrationTests;
-			sourceTree = "<group>";
-		};
-		5C589960FFC1464A964656C5 /* SequelPGUITests */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = SequelPGUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -606,23 +588,6 @@
 			productReference = 0F6E41F4ABC14FBA81481057 /* SequelPGIntegrationTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		90007CD26A3E466ABF2A3591 /* SequelPGUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = F0A7F20E28F445D1B3537359 /* Build configuration list for PBXNativeTarget "SequelPGUITests" */;
-			buildPhases = (
-				FE002319CE19409CB4909538 /* Sources */,
-				A91F6C5E33B245349F2E322A /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				3DBA17C953DE458C824D7BBF /* PBXTargetDependency */,
-			);
-			name = SequelPGUITests;
-			productName = SequelPGUITests;
-			productReference = 5E735CB360184CFD94AA360C /* SequelPGUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -633,10 +598,6 @@
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
-					90007CD26A3E466ABF2A3591 = {
-						CreatedOnToolsVersion = 15.0;
-						TestTargetID = AF10000000000000000001;
-					};
 					E85B75A0DFCF45A8A450C02B = {
 						CreatedOnToolsVersion = 15.0;
 						TestTargetID = AF10000000000000000001;
@@ -669,7 +630,6 @@
 				AF10000000000000000001 /* SequelPG */,
 				AF10000000000000000002 /* SequelPGTests */,
 				E85B75A0DFCF45A8A450C02B /* SequelPGIntegrationTests */,
-				90007CD26A3E466ABF2A3591 /* SequelPGUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -780,6 +740,7 @@
 				AA10000000000000000E08 /* DiagramTabView.swift in Sources */,
 				AA10000000000000000E11 /* ERDRouter.swift in Sources */,
 				F884F2E21B104EB9A973032B /* TestingHooks.swift in Sources */,
+				2934FA8D792E41368E03B429 /* AccessibilityID.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -810,6 +771,7 @@
 				AA10000000000000000E0D /* ERDViewModelTests.swift in Sources */,
 				AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */,
 				AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */,
+				737ADE30541742209A5FAFF2 /* TestingHooksTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -831,13 +793,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FE002319CE19409CB4909538 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -850,11 +805,6 @@
 			isa = PBXTargetDependency;
 			target = AF10000000000000000001 /* SequelPG */;
 			targetProxy = 188A2A780D114D20919FC1CD /* PBXContainerItemProxy */;
-		};
-		3DBA17C953DE458C824D7BBF /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = AF10000000000000000001 /* SequelPG */;
-			targetProxy = 2F2637874ED64E428DDED40A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1022,38 +972,6 @@
 			};
 			name = Release;
 		};
-		B0A5EF0FD35C46959C0F471A /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.8;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.uitests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = SequelPG;
-			};
-			name = Debug;
-		};
-		F7F18D8CEF1E4355910DC96B /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.8;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.uitests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = SequelPG;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1089,15 +1007,6 @@
 			buildConfigurations = (
 				4D6477DFE0F84DEFA6DBE272 /* Debug */,
 				79CAC945C5054B6ABC8F257B /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		F0A7F20E28F445D1B3537359 /* Build configuration list for PBXNativeTarget "SequelPGUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				B0A5EF0FD35C46959C0F471A /* Debug */,
-				F7F18D8CEF1E4355910DC96B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -4,11 +4,13 @@ ROOT  := $(abspath ..)
 PROJECT := $(ROOT)/SequelPG.xcodeproj
 DEST  := platform=macOS
 RESULTS := $(ROOT)/build/test-results
+DERIVED := $(ROOT)/build/DerivedData
+UITEST  := $(ROOT)/UITest/.build/release/sequelpg-uitest
 # Xcode output is long; set V=1 to see all of it.
 FILTER := $(if $(V),cat,grep -E '(error|warning: .*Test|Test Case .* (failed|passed)|Executed|\*\* TEST|skipped|XCTAssert)' || true)
 
 .PHONY: up down reset wait status logs psql check assets \
-        test test-unit test-integration test-ui test-ui-smoke test-all clean
+        test test-unit test-integration build-app build-uitest test-ui test-ui-smoke ui-list test-all clean
 
 assets:
 	@./scripts/gen-assets.sh
@@ -60,17 +62,30 @@ test-integration:
 		$(if $(ONLY),-only-testing:SequelPGIntegrationTests/$(ONLY)) \
 		-resultBundlePath $(RESULTS)/integration-$$(date +%s).xcresult 2>&1 | $(FILTER)
 
-test-ui:
-	@mkdir -p $(RESULTS)
-	set -o pipefail; TEST_RUNNER_SEQUELPG_REQUIRE_CLUSTER=1 xcodebuild test -project $(PROJECT) -scheme SequelPGUITests -destination '$(DEST)' \
-		$(if $(ONLY),-only-testing:SequelPGUITests/$(ONLY)) \
-		-resultBundlePath $(RESULTS)/ui-$$(date +%s).xcresult 2>&1 | $(FILTER)
+# UI scenarios drive the real app through the accessibility API, in the
+# background: no mouse, no focus, no locked screen. The terminal running
+# them needs Accessibility permission. ONLY="smoke edit-rows" narrows the run;
+# the report is build/uitest/report/report.html.
+build-app:
+	set -o pipefail; xcodebuild build -project $(PROJECT) -scheme SequelPG -configuration Debug -destination '$(DEST)' \
+		-derivedDataPath $(DERIVED) 2>&1 | { grep -E '( error|BUILD)' || true; }
+	@test -x $(DERIVED)/Build/Products/Debug/SequelPG.app/Contents/MacOS/SequelPG
+
+build-uitest:
+	set -o pipefail; cd $(ROOT)/UITest && swift build -c release 2>&1 | { grep -E '(error|Build complete)' || true; }
+	@test -x $(UITEST)
+
+test-ui: build-app build-uitest
+	$(UITEST) run $(ONLY)
 
 test-ui-smoke:
-	@$(MAKE) --no-print-directory test-ui ONLY=SmokeUITests
+	@$(MAKE) --no-print-directory test-ui ONLY=smoke
+
+ui-list: build-uitest
+	@$(UITEST) list
 
 # Full local pipeline: fresh cluster → unit → integration → UI.
 test-all: reset test-unit test-integration test-ui
 
 clean:
-	rm -rf $(RESULTS)
+	rm -rf $(RESULTS) $(ROOT)/build/uitest

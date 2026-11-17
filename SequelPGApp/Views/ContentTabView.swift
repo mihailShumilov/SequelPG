@@ -48,7 +48,8 @@ struct ContentTabView: View {
                             let colName = result.columns[colIdx]
                             guard let fk = tableVM.foreignKey(forColumn: colName) else { return }
                             Task { await appVM.navigateForeignKey(fromRow: result.rows[rowIdx], fk: fk) }
-                        }
+                        },
+                        gridIdentifier: A11yID.Content.grid
                     )
                 } else if let obj = navigatorVM.selectedObject, !obj.type.hasQueryableContent {
                     ContentUnavailableView {
@@ -273,6 +274,7 @@ struct ContentTabView: View {
             .disabled(!appVM.canInsertContentRow || tableVM.isInsertingRow)
             .help(appVM.canInsertContentRow ? "Insert a new row" : "Rows can only be inserted into tables")
             .accessibilityLabel("Insert row")
+            .accessibilityIdentifier(A11yID.Content.insertRow)
 
             Button {
                 if let idx = tableVM.selectedRowIndex {
@@ -286,6 +288,7 @@ struct ContentTabView: View {
                 ? "Delete the selected row"
                 : "Rows can only be deleted from tables with a primary key")
             .accessibilityLabel("Delete row")
+            .accessibilityIdentifier(A11yID.Content.deleteRow)
 
             Divider().frame(height: 14)
 
@@ -299,6 +302,7 @@ struct ContentTabView: View {
             }
             .help("Filter rows (⌘F)")
             .accessibilityLabel("Toggle filter bar")
+            .accessibilityIdentifier(A11yID.Content.toggleFilter)
 
             Picker("Rows per page", selection: $tableVM.pageSize) {
                 ForEach(tableVM.pageSizeOptions, id: \.self) { size in
@@ -326,6 +330,7 @@ struct ContentTabView: View {
             .disabled(tableVM.currentPage <= 0 || tableVM.isInsertingRow)
             .help("Previous page")
             .accessibilityLabel("Previous page")
+            .accessibilityIdentifier(A11yID.Content.previousPage)
 
             PageJumpField(
                 page: tableVM.currentPage + 1,
@@ -349,6 +354,7 @@ struct ContentTabView: View {
             .disabled(tableVM.currentPage >= tableVM.totalPages - 1 || tableVM.isInsertingRow)
             .help("Next page")
             .accessibilityLabel("Next page")
+            .accessibilityIdentifier(A11yID.Content.nextPage)
 
             Spacer()
 
@@ -368,6 +374,7 @@ struct ContentTabView: View {
             Text("≈ \(tableVM.approximateRowCount.formatted()) rows")
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .accessibilityIdentifier(A11yID.Content.approximateRowCount)
                 .accessibilityLabel("Approximately \(tableVM.approximateRowCount) rows")
         }
         .buttonStyle(.borderless)
@@ -453,6 +460,7 @@ struct InsertRowSheet: View {
                             )
                             .labelsHidden()
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityIdentifier(A11yID.Content.insertField(column.name))
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {

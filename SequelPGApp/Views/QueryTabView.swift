@@ -80,6 +80,7 @@ struct QueryTabView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .help("Cancel the running statement (⌘.)")
+                    .accessibilityIdentifier(A11yID.Query.stop)
                 } else {
                     Button {
                         appVM.runQueryAction(queryVM.queryText)
@@ -90,6 +91,7 @@ struct QueryTabView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(queryIsEmpty)
                     .help("Run the query (⌘↩)")
+                    .accessibilityIdentifier(A11yID.Query.run)
                 }
 
                 Button {
@@ -99,6 +101,7 @@ struct QueryTabView: View {
                 }
                 .disabled(queryVM.isExecuting || queryIsEmpty)
                 .help("Show the planner's predicted plan without running the query (⌥⌘E)")
+                .accessibilityIdentifier(A11yID.Query.explain)
 
                 Button {
                     appVM.runExplainAction(queryVM.queryText, analyze: true)
@@ -107,6 +110,7 @@ struct QueryTabView: View {
                 }
                 .disabled(queryVM.isExecuting || queryIsEmpty)
                 .help("Run the query and report what actually happened (⌥⇧⌘E)")
+                .accessibilityIdentifier(A11yID.Query.analyze)
 
                 Divider().frame(height: 14)
 
@@ -125,6 +129,7 @@ struct QueryTabView: View {
                 }
                 .disabled(queryIsEmpty && queryVM.result == nil && queryVM.plan == nil)
                 .help("Clear the editor and results (⌘K)")
+                .accessibilityIdentifier(A11yID.Query.clear)
 
                 Spacer(minLength: 8)
 
@@ -168,6 +173,7 @@ struct QueryTabView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+                .accessibilityIdentifier(A11yID.Query.resultsTabs)
                 Spacer()
             }
             .controlSize(.small)
@@ -181,6 +187,8 @@ struct QueryTabView: View {
                 InlineBanner(kind: .error, message: error) {
                     queryVM.errorMessage = nil
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier(A11yID.Query.errorBanner)
             }
 
             switch queryVM.activeResultsTab {
@@ -196,6 +204,8 @@ struct QueryTabView: View {
                     runningState
                 } else if let plan = queryVM.plan {
                     QueryPlanView(plan: plan)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier(A11yID.Query.planView)
                 } else {
                     QueryPlanEmptyView()
                 }
@@ -209,6 +219,7 @@ struct QueryTabView: View {
                         } description: {
                             Text(commandSummary(result))
                         }
+                        .accessibilityIdentifier(A11yID.Query.commandCompleted)
                     } else {
                         VStack(spacing: 0) {
                             ResultsGridView(
@@ -229,16 +240,19 @@ struct QueryTabView: View {
                                 onDeleteRow: appVM.canDeleteQueryRow ? { rowIdx in
                                     queryVM.deleteConfirmationRowIndex = rowIdx
                                 } : nil,
-                                selectedRowIndex: $tableVM.selectedRowIndex
+                                selectedRowIndex: $tableVM.selectedRowIndex,
+                                gridIdentifier: A11yID.Query.grid
                             )
 
                             BottomBar {
                                 Text("\(result.rowCount) row\(result.rowCount == 1 ? "" : "s")")
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
+                                    .accessibilityIdentifier(A11yID.Query.rowCount)
                                 if result.isTruncated {
                                     Label("Showing the first \(AppViewModel.maxQueryRows.formatted()) rows", systemImage: "exclamationmark.triangle")
                                         .foregroundStyle(.orange)
+                                        .accessibilityIdentifier(A11yID.Query.truncated)
                                 }
                                 if queryVM.editableTableContext != nil {
                                     Text("Editable — double-click a cell")
@@ -446,6 +460,8 @@ struct ResultsGridView: View {
     var onFKJump: ((Int, Int) -> Void)?
     @Binding var selectedRowIndex: Int?
     @State private var fieldEditorCell: (row: Int, col: Int)?
+    /// Accessibility identifier for the underlying NSTableView (UI tests).
+    private let gridIdentifier: String?
     private let columnMinWidth: CGFloat = 100
     /// Per-column derived metadata. Indexed by display column position (i.e.
     /// the same index passed to `cellView(rowIdx:colIdx:)`). Computed once at
@@ -465,8 +481,10 @@ struct ResultsGridView: View {
         onDeleteRow: ((Int) -> Void)? = nil,
         selectedRowIndex: Binding<Int?> = .constant(nil),
         foreignKeyForColumn: ((String) -> ConstraintInfo?)? = nil,
-        onFKJump: ((Int, Int) -> Void)? = nil
+        onFKJump: ((Int, Int) -> Void)? = nil,
+        gridIdentifier: String? = nil
     ) {
+        self.gridIdentifier = gridIdentifier
         self.result = result
         self.columns = columns
         self.isEditable = isEditable
@@ -502,6 +520,7 @@ struct ResultsGridView: View {
 
     var body: some View {
         DataGridView(
+            accessibilityIdentifier: gridIdentifier,
             rowCount: result.rows.count,
             resultRevision: result.revision,
             columns: columnMeta.map { meta in
@@ -804,6 +823,8 @@ struct DataGridView: NSViewRepresentable {
         let action: () -> Void
     }
 
+    /// Set on the NSTableView so UI tests can find the grid.
+    var accessibilityIdentifier: String?
     let rowCount: Int
     /// Stable identity of the underlying result. Bumped whenever rows change
     /// (new query, inline cell edit, etc.). The Coordinator uses this to skip
@@ -862,6 +883,9 @@ struct DataGridView: NSViewRepresentable {
             tableView.addTableColumn(makeColumn(for: col))
         }
 
+        if let accessibilityIdentifier {
+            tableView.setAccessibilityIdentifier(accessibilityIdentifier)
+        }
         scrollView.documentView = tableView
         context.coordinator.tableView = tableView
 
