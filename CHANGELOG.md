@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-11-18
+
+### Added
+- **CA certificate file per connection.** Verify CA and Verify Full can check the server against your own CA (PEM) instead of the system trust store. The file is also passed to `pg_dump` and `psql` for export and import.
+- **"Don't verify server certificate"** for SSL Mode Prefer and Require: the connection is encrypted, but the server's identity isn't checked. Use it for self-signed certificates.
+- **Scripts with several statements.** Run executes the statements in the editor in order on one connection and shows the last result; it stops at the first failing statement. Semicolons inside strings, quoted identifiers, dollar-quoted bodies, comments and `BEGIN ATOMIC … END` bodies don't split a statement.
+- **Affected-row counts** for INSERT, UPDATE, DELETE, MERGE and COPY.
+
+### Changed
+- **Prefer and Require verify the server certificate again** unless "Don't verify server certificate" is on. If a self-signed server stops connecting, choose its CA certificate or turn that option on. Prefer still falls back to an unencrypted connection when SSL fails.
+
+### Fixed
+- **Stop cancels the statement on the server** with `pg_cancel_backend`, instead of leaving it running until it finished or timed out.
+- **Plain-SQL dumps from `pg_dump` 17+ import into PostgreSQL 16 and older.** The `SET transaction_timeout` line in the dump header now runs only on servers that have the setting.
+- **Verify Full through an SSH tunnel** checks the certificate against the database host name instead of the local tunnel address.
+- **Timestamps keep their microseconds** instead of being rounded to milliseconds.
+- A query no longer hangs when the server closes the session; it fails with an error.
+
 ## [0.3.10] - 2026-10-23
 
 ### Fixed
