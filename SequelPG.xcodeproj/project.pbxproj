@@ -150,6 +150,7 @@
 		6124E3A54A434932B0B5AD4B /* MCPSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */; };
 		0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */; };
 		F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */; };
+		3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -316,6 +317,7 @@
 		EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSessionPool.swift; sourceTree = "<group>"; };
 		BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPResultFormatter.swift; sourceTree = "<group>"; };
 		E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlySQLGuard.swift; sourceTree = "<group>"; };
+		4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsPane.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -465,6 +467,7 @@
 				AB10000000000000000E09 /* ERDCanvasView.swift */,
 				AB10000000000000000E0C /* ERDExportSheet.swift */,
 				AB10000000000000000E08 /* DiagramTabView.swift */,
+				4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -806,6 +809,7 @@
 				6124E3A54A434932B0B5AD4B /* MCPSessionPool.swift in Sources */,
 				0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */,
 				F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */,
+				3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

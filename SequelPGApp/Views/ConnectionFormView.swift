@@ -24,6 +24,8 @@ struct ConnectionFormModel {
     var sshKeyPath: String = ""
     var sshPassword: String = ""
 
+    var mcpAccess: MCPAccess = .off
+
     mutating func load(
         from profile: ConnectionProfile,
         password: String,
@@ -46,6 +48,7 @@ struct ConnectionFormModel {
         sshAuthMethod = profile.sshAuthMethod
         sshKeyPath = profile.sshKeyPath
         self.sshPassword = sshPassword
+        mcpAccess = profile.mcpAccess
     }
 
     /// Builds a `ConnectionProfile` from the current field values.
@@ -71,7 +74,8 @@ struct ConnectionFormModel {
             sshPort: sshPortInt,
             sshUser: sshUser.trimmingCharacters(in: .whitespaces),
             sshAuthMethod: sshAuthMethod,
-            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces)
+            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces),
+            mcpAccess: mcpAccess
         )
     }
 
@@ -179,6 +183,21 @@ struct ConnectionSettingsForm: View {
                     sshPassword: $form.sshPassword,
                     showSSHPassword: $showSSHPassword
                 )
+            }
+
+            Section {
+                Picker("MCP Access", selection: $form.mcpAccess) {
+                    ForEach(MCPAccess.allCases, id: \.self) { access in
+                        Text(access.displayName).tag(access)
+                    }
+                }
+                .accessibilityIdentifier(A11yID.Form.mcpAccess)
+            } header: {
+                Text("AI Assistants")
+            } footer: {
+                Text(form.mcpAccess == .off
+                    ? "AI assistants connected through MCP (Claude, Cursor…) can't see this connection."
+                    : "AI assistants connected through MCP can browse the schema and run read-only queries. Query results are sent to the assistant's model provider. Turn the server on in Settings → MCP.")
             }
         }
         .formStyle(.grouped)

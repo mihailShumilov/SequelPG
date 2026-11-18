@@ -56,6 +56,8 @@ struct SequelPGApp: App {
 
         Settings {
             SettingsView()
+                .environment(connectionListVM)
+                .environment(MCPServerController.shared)
                 .environment(themePreference)
                 .environment(editorPreference)
                 .preferredColorScheme(themePreference.colorScheme)

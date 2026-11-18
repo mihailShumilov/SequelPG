@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// SwiftUI Settings scene (`⌘,`): General (appearance), Editor (completion,
-/// timeout, font), and Tools (PostgreSQL client binaries).
+/// timeout, font), Tools (PostgreSQL client binaries) and MCP (AI clients).
 struct SettingsView: View {
     var body: some View {
         TabView {
@@ -12,6 +12,8 @@ struct SettingsView: View {
                 .tabItem { Label("Editor", systemImage: "text.cursor") }
             ToolsSettingsPane()
                 .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
+            MCPSettingsPane()
+                .tabItem { Label("MCP", systemImage: "sparkles") }
         }
         .frame(width: 520)
     }

@@ -7,6 +7,8 @@ struct MCPToolbox: MCPToolHandling {
     let pool: MCPSessionPool
     /// Server-side `statement_timeout` for run_query / explain_query.
     var queryTimeout: TimeInterval = 30
+    /// Asks the user, once per client, whether it may use the tools.
+    var authorize: @Sendable (MCPClientInfo?) async -> Bool = { _ in true }
 
     static let defaultMaxRows = 200
     static let maxRowsLimit = 1000
@@ -18,7 +20,13 @@ struct MCPToolbox: MCPToolHandling {
         ]
     }
 
-    func callTool(_ name: String, arguments: [String: JSONValue], client _: MCPClientInfo?) async -> MCPToolResult {
+    func callTool(_ name: String, arguments: [String: JSONValue], client: MCPClientInfo?) async -> MCPToolResult {
+        guard await authorize(client) else {
+            return .error(
+                "The user did not allow \(MCPServerController.normalizedName(client)) to use SequelPG. "
+                    + "It will be asked again after SequelPG restarts."
+            )
+        }
         do {
             let args = Arguments(values: arguments)
             switch name {
