@@ -53,10 +53,16 @@ extension Scenarios {
                 }
                 try ui.step("INSERT writes 5 rows") {
                     try ui.run("INSERT INTO qa.ui_cmd SELECT generate_series(1, 5)")
-                    try ui.expect(id: A11yID.Query.commandCompleted)
-                    // Known issue: the "N rows affected" summary never shows —
-                    // DatabaseClient doesn't read the command tag (rowsAffected is nil).
+                    try ui.expectContains(id: A11yID.Query.commandCompleted, "5 rows affected")
                     try ui.expectEqual(try Cluster.sql("SELECT count(*) FROM qa.ui_cmd"), "5", "rows in database")
+                }
+                try ui.step("UPDATE reports its count") {
+                    try ui.run("UPDATE qa.ui_cmd SET id = id + 10 WHERE id <= 2")
+                    try ui.expectContains(id: A11yID.Query.commandCompleted, "2 rows affected")
+                }
+                try ui.step("a script runs every statement and shows the last result") {
+                    try ui.run("INSERT INTO qa.ui_cmd VALUES (100); DELETE FROM qa.ui_cmd WHERE id = 3;\nSELECT count(*) AS n FROM qa.ui_cmd")
+                    try ui.expectEqual(try ui.grid().first?.last, "5", "count after the script")
                 }
                 try ui.step("DROP TABLE") {
                     try ui.run("DROP TABLE qa.ui_cmd")
@@ -81,7 +87,7 @@ extension Scenarios {
                 }
             },
 
-            Scenario(name: "long-query", summary: "a running statement shows Stop, then its result") { ui in
+            Scenario(name: "long-query", summary: "a running statement shows Stop, then its result; Stop cancels on the server") { ui in
                 try ui.step("connect") { try ui.connect("PG18 scram") }
                 try ui.step("Stop appears while running") {
                     try ui.mode("Query")
@@ -93,6 +99,18 @@ extension Scenarios {
                     try ui.waitUntilIdle(timeout: 15)
                     try ui.expectText(id: A11yID.Query.rowCount, "1 row") { $0 == "1 row" }
                     try ui.expectEqual(try ui.grid().first?.last, "42", "answer")
+                }
+                try ui.step("Stop ends the statement on the server") {
+                    try ui.fill(id: A11yID.Query.editor, "SELECT pg_sleep(30) AS ui_stop_probe")
+                    try ui.press(id: A11yID.Query.run)
+                    try ui.expect(id: A11yID.Query.stop, timeout: 3)
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                    try ui.press(id: A11yID.Query.stop)
+                    try ui.waitUntilIdle(timeout: 3)
+                    let running = try Cluster.sql(
+                        "SELECT count(*) FROM pg_stat_activity WHERE query LIKE '%ui_stop_probe%' AND state = 'active' AND pid <> pg_backend_pid()"
+                    )
+                    try ui.expectEqual(running, "0", "statements still running on the server")
                 }
             },
         ]

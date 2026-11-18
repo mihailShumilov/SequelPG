@@ -70,11 +70,49 @@ final class QueryExecutionTests: IntegrationTestCase {
             XCTAssertTrue(error is CancellationError, "Expected CancellationError, got \(error)")
         }
         let waited = Date().timeIntervalSince(start)
-        XCTExpectFailure("Known issue: Stop cancels only the Swift task; without a server-side cancel the call returns when the query finishes") {
-            XCTAssertLessThan(waited, 1.0, "Stop must return promptly")
-        }
+        XCTAssertLessThan(waited, 1.0, "Stop must return promptly")
         let one = try await client.scalar("SELECT 1")
         XCTAssertEqual(one, "1")
+        let running = try await client.scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE query = 'SELECT qa.slow(3)' AND state = 'active'"
+        )
+        XCTAssertEqual(running, "0", "Stop must cancel the statement on the server")
+    }
+
+    func testStopDuringTimedQueryRestoresStatementTimeout() async throws {
+        let client = try await connect()
+        let task = Task { try await client.runQuery("SELECT qa.slow(3)", maxRows: 1, timeout: 30) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        task.cancel()
+        _ = await task.result
+        for _ in 0 ..< 6 {
+            let value = try await client.runQuery("SHOW statement_timeout", maxRows: 1, timeout: 0)
+            XCTAssertEqual(value.rows.first?.first, .text("0"), "statement_timeout leaked onto a pooled connection")
+        }
+    }
+
+    func testRowsAffectedIsReportedForDML() async throws {
+        let client = try await connect()
+        let schema = try await makeScratchSchema(on: client)
+        let t = "\(quoteIdent(schema)).t"
+        try await client.exec("CREATE TABLE \(t) (id int PRIMARY KEY, v int)")
+        let insert = try await client.exec("INSERT INTO \(t) SELECT g, 0 FROM generate_series(1, 5) g")
+        XCTAssertEqual(insert.rowsAffected, 5)
+        let update = try await client.exec("UPDATE \(t) SET v = 1 WHERE id <= 3")
+        XCTAssertEqual(update.rowsAffected, 3)
+        let delete = try await client.exec("DELETE FROM \(t) WHERE id = 5")
+        XCTAssertEqual(delete.rowsAffected, 1)
+        let none = try await client.exec("UPDATE \(t) SET v = 2 WHERE false")
+        XCTAssertEqual(none.rowsAffected, 0)
+        let merge = try await client.exec("""
+            MERGE INTO \(t) USING (VALUES (1), (9)) s(id) ON \(t).id = s.id
+            WHEN MATCHED THEN UPDATE SET v = 7 WHEN NOT MATCHED THEN INSERT VALUES (s.id, 7)
+            """)
+        XCTAssertEqual(merge.rowsAffected, 2)
+        let ddl = try await client.exec("CREATE INDEX ON \(t) (v)")
+        XCTAssertNil(ddl.rowsAffected)
+        let select = try await client.exec("SELECT * FROM \(t)")
+        XCTAssertNil(select.rowsAffected)
     }
 
     func testSyntaxErrorIsReportedVerbatim() async throws {
@@ -86,13 +124,29 @@ final class QueryExecutionTests: IntegrationTestCase {
         XCTAssertTrue(message(of: error).contains("syntax error"), message(of: error))
     }
 
-    func testMultipleStatementsAreRejected() async throws {
-        // The extended query protocol runs one statement per call; the editor
-        // sends the buffer as-is. Pins the current behavior so a future
-        // statement splitter is a deliberate change.
+    func testMultipleStatementsRunInOrderAndReturnTheLastResult() async throws {
         let client = try await connect()
-        let error = await assertThrowsAsync { try await client.exec("SELECT 1; SELECT 2") }
-        XCTAssertTrue(message(of: error).localizedCaseInsensitiveContains("multiple commands"), message(of: error))
+        let schema = try await makeScratchSchema(on: client)
+        let t = "\(quoteIdent(schema)).t"
+        let result = try await client.exec("""
+            CREATE TABLE \(t) (id int, note text);
+            INSERT INTO \(t) VALUES (1, 'a;b'), (2, $$c;d$$); -- a comment; with a semicolon
+            /* block; comment */
+            SELECT note FROM \(t) ORDER BY id;
+            """)
+        XCTAssertEqual(result.column("note"), ["a;b", "c;d"])
+    }
+
+    func testFailingStatementStopsTheScript() async throws {
+        let client = try await connect()
+        let schema = try await makeScratchSchema(on: client)
+        let t = "\(quoteIdent(schema)).t"
+        let error = await assertThrowsAsync {
+            try await client.exec("CREATE TABLE \(t) (id int); SELEC 1; INSERT INTO \(t) VALUES (1)")
+        }
+        XCTAssertTrue(message(of: error).contains("syntax error"), message(of: error))
+        let count = try await client.scalar("SELECT count(*) FROM \(t)")
+        XCTAssertEqual(count, "0", "Statements after the failing one must not run")
     }
 
     func testUnknownTableErrorNamesTheRelation() async throws {

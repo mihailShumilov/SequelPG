@@ -81,6 +81,8 @@ enum TestCluster {
 
     static var sshClientKeyPath: String { generatedDirectory.appendingPathComponent("ssh/client_ed25519").path }
     static var sshWrongKeyPath: String { generatedDirectory.appendingPathComponent("ssh/wrong_ed25519").path }
+    /// The private CA that signed pg18's certificate (SAN localhost, 127.0.0.1).
+    static var caCertPath: String { generatedDirectory.appendingPathComponent("certs/ca.crt").path }
     static var sshKnownHostsPath: String { generatedDirectory.appendingPathComponent("ssh/known_hosts").path }
     static var sshHostPublicKeyPath: String {
         generatedDirectory.appendingPathComponent("ssh/ssh_host_ed25519_key.pub").path
@@ -128,7 +130,9 @@ enum TestCluster {
         role: Role = .scram,
         sslMode: SSLMode = .off,
         database: String? = nil,
-        host: String? = nil
+        host: String? = nil,
+        verifyCertificate: Bool = false,
+        caCertPath: String = ""
     ) -> ConnectionProfile {
         ConnectionProfile(
             name: "\(server.rawValue)-\(role.rawValue)-\(sslMode.rawValue)",
@@ -136,7 +140,9 @@ enum TestCluster {
             port: port(server),
             database: database ?? self.database,
             username: user(role),
-            sslMode: sslMode
+            sslMode: sslMode,
+            sslSkipVerification: !verifyCertificate,
+            sslRootCertPath: caCertPath
         )
     }
 
@@ -156,6 +162,9 @@ enum TestCluster {
             database: database ?? self.database,
             username: user(role),
             sslMode: sslMode,
+            // The bastion dials the compose service name, which the test
+            // certificate doesn't cover.
+            sslSkipVerification: true,
             useSSHTunnel: true,
             sshHost: config.host,
             sshPort: config.ssh.port,

@@ -101,19 +101,42 @@ extension Scenarios {
 
             Scenario(
                 name: "ssl-modes",
-                summary: "require encrypts, SSL-only role works with SSL, verify-full without the CA fails clearly",
+                summary: "certificate verification: on by default, CA file, \u{201C}Don't verify\u{201D}, SSL-only role",
                 profiles: {
-                    var require = SeedProfile("SSL require")
-                    require.sslMode = "require"
+                    var unverified = SeedProfile("SSL require, no verify")
+                    unverified.sslMode = "require"
+                    unverified.sslSkipVerification = true
+                    var verified = SeedProfile("SSL require, system CA")
+                    verified.sslMode = "require"
+                    var withCA = SeedProfile("SSL CA file, verify-full")
+                    withCA.sslMode = "verify-full"
+                    withCA.sslRootCertPath = Cluster.caCert
                     var sslOnly = SeedProfile("SSL-only role", role: "sslonly")
                     sslOnly.sslMode = "require"
+                    sslOnly.sslSkipVerification = true
                     var verifyFull = SeedProfile("SSL verify-full")
                     verifyFull.sslMode = "verify-full"
-                    return [require, sslOnly, verifyFull]
+                    return [unverified, verified, withCA, sslOnly, verifyFull]
                 }()
             ) { ui in
-                try ui.step("require is encrypted") {
-                    try ui.connect("SSL require")
+                try ui.step("the form offers \u{201C}Don't verify\u{201D} and a CA file") {
+                    try ui.selectProfile("SSL require, no verify")
+                    try ui.expect(id: A11yID.Form.sslSkipVerification)
+                    try ui.selectProfile("SSL CA file, verify-full")
+                    try ui.expectText(id: A11yID.Form.sslRootCert, "the CA path") { $0.hasSuffix("ca.crt") }
+                }
+                try ui.step("require without verification is encrypted") {
+                    try ui.connect("SSL require, no verify")
+                    let ssl = try ui.scalar("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
+                    try ui.expectEqual(ssl, "true", "pg_stat_ssl.ssl")
+                    try ui.disconnect()
+                }
+                try ui.step("require verifies the certificate by default") {
+                    let text = try ui.connectExpectingError("SSL require, system CA")
+                    try ui.expect(text.contains("Don\u{2019}t verify") || text.contains("Don't verify"), "message: \(text)")
+                }
+                try ui.step("verify-full succeeds with the profile's CA file") {
+                    try ui.connect("SSL CA file, verify-full")
                     let ssl = try ui.scalar("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
                     try ui.expectEqual(ssl, "true", "pg_stat_ssl.ssl")
                     try ui.disconnect()
@@ -123,7 +146,7 @@ extension Scenarios {
                     try ui.expectEqual(try ui.scalar("SELECT current_user"), Cluster.role("sslonly").user, "user")
                     try ui.disconnect()
                 }
-                try ui.step("verify-full with a private CA fails with a readable message") {
+                try ui.step("verify-full without the CA fails with a readable message") {
                     let text = try ui.connectExpectingError("SSL verify-full")
                     try ui.expect(text.localizedCaseInsensitiveContains("certificate"), "message: \(text)")
                 }

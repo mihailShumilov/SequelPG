@@ -76,12 +76,6 @@ final class TransferIntegrationTests: IntegrationTestCase {
                     password: TestCluster.password(.scram), toolPath: psql, inputPath: dump
                 ))
             } catch {
-                // KNOWN ISSUE: a newer pg_dump (17+) writes
-                // `SET transaction_timeout = 0;`, which servers < 17 reject;
-                // with ON_ERROR_STOP the app's own export can't be re-imported.
-                if TestCluster.major(server) < 17, message(of: error).contains("transaction_timeout") {
-                    XCTExpectFailure("Known issue: pg_dump \(PGToolchain.version(of: .pgDump) ?? "") output does not import into PG\(TestCluster.major(server))")
-                }
                 XCTFail("\(server): import failed: \(message(of: error))")
                 continue
             }

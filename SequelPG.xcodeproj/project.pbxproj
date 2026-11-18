@@ -135,6 +135,10 @@
 		DED43A3EA5FC4BFC8CE2EC96 /* TransferIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */; };
 		2934FA8D792E41368E03B429 /* AccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */; };
 		737ADE30541742209A5FAFF2 /* TestingHooksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1739FC3FB88547D389026B32 /* TestingHooksTests.swift */; };
+		3E9008344E264D82B1DBDBF6 /* SQLStatementSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7656793BE484B14B1431FD5 /* SQLStatementSplitter.swift */; };
+		183C254613EE47098A5B0728 /* SQLStatementSplitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */; };
+		EB10F1393FE944748B047BEF /* ConnectionSSLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */; };
+		5F00B0604FAA43A6AAAF0CF7 /* QueryOutputFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -286,6 +290,10 @@
 		3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferIntegrationTests.swift; sourceTree = "<group>"; };
 		1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityID.swift; sourceTree = "<group>"; };
 		1739FC3FB88547D389026B32 /* TestingHooksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestingHooksTests.swift; sourceTree = "<group>"; };
+		B7656793BE484B14B1431FD5 /* SQLStatementSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLStatementSplitter.swift; sourceTree = "<group>"; };
+		D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLStatementSplitterTests.swift; sourceTree = "<group>"; };
+		454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSSLTests.swift; sourceTree = "<group>"; };
+		70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryOutputFormattingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -458,6 +466,7 @@
 				AB10000000000000000E11 /* ERDRouter.swift */,
 				E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */,
 				1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */,
+				B7656793BE484B14B1431FD5 /* SQLStatementSplitter.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -499,6 +508,9 @@
 				AB10000000000000000E0E /* ERDLayoutEngineTests.swift */,
 				AB10000000000000000E0F /* ERDSVGRendererTests.swift */,
 				1739FC3FB88547D389026B32 /* TestingHooksTests.swift */,
+				D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */,
+				454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */,
+				70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -741,6 +753,7 @@
 				AA10000000000000000E11 /* ERDRouter.swift in Sources */,
 				F884F2E21B104EB9A973032B /* TestingHooks.swift in Sources */,
 				2934FA8D792E41368E03B429 /* AccessibilityID.swift in Sources */,
+				3E9008344E264D82B1DBDBF6 /* SQLStatementSplitter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -772,6 +785,9 @@
 				AA10000000000000000E0E /* ERDLayoutEngineTests.swift in Sources */,
 				AA10000000000000000E0F /* ERDSVGRendererTests.swift in Sources */,
 				737ADE30541742209A5FAFF2 /* TestingHooksTests.swift in Sources */,
+				183C254613EE47098A5B0728 /* SQLStatementSplitterTests.swift in Sources */,
+				EB10F1393FE944748B047BEF /* ConnectionSSLTests.swift in Sources */,
+				5F00B0604FAA43A6AAAF0CF7 /* QueryOutputFormattingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

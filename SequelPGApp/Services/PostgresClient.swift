@@ -113,7 +113,8 @@ actor DatabaseClient: PostgresClientProtocol {
         try await establishClient(
             host: host, port: port,
             username: profile.username, password: password,
-            database: profile.database, sslMode: profile.sslMode,
+            database: profile.database, ssl: profile.sslSettings,
+            tlsServerName: Self.tlsServerName(for: profile),
             cleanupOnFailure: { [weak self] in await self?.disconnect() }
         )
 
@@ -152,7 +153,8 @@ actor DatabaseClient: PostgresClientProtocol {
         username: String,
         password: String?,
         database: String,
-        sslMode: SSLMode,
+        ssl: SSLSettings,
+        tlsServerName: String?,
         cleanupOnFailure: () async -> Void
     ) async throws {
         // Fail fast with the server's own message before building the pool:
@@ -164,19 +166,20 @@ actor DatabaseClient: PostgresClientProtocol {
             try await Self.probeConnection(
                 host: host, port: port,
                 username: username, password: password,
-                database: database, sslMode: sslMode
+                database: database, ssl: ssl, tlsServerName: tlsServerName
             )
         } catch {
             await cleanupOnFailure()
             throw AppError.connectionFailed(Self.describeConnectionError(error))
         }
 
-        let config = PostgresClient.Configuration(
+        var config = PostgresClient.Configuration(
             host: host, port: port,
             username: username, password: password,
             database: database,
-            tls: Self.makeTLS(for: sslMode)
+            tls: Self.makeTLS(for: ssl)
         )
+        config.options.tlsServerName = tlsServerName
 
         let newClient = PostgresClient(configuration: config)
         self.client = newClient
@@ -198,36 +201,49 @@ actor DatabaseClient: PostgresClientProtocol {
         client == nil ? nil : resolvedEndpoint
     }
 
-    /// Build TLS configuration for the given SSL mode.
-    private static func makeTLS(for sslMode: SSLMode) -> PostgresClient.Configuration.TLS {
-        guard let tlsConfiguration = tlsConfiguration(for: sslMode) else { return .disable }
-        return sslMode == .prefer ? .prefer(tlsConfiguration) : .require(tlsConfiguration)
+    /// Build TLS configuration for the given SSL settings.
+    private static func makeTLS(for ssl: SSLSettings) -> PostgresClient.Configuration.TLS {
+        guard let tlsConfiguration = tlsConfiguration(for: ssl) else { return .disable }
+        return ssl.mode == .prefer ? .prefer(tlsConfiguration) : .require(tlsConfiguration)
     }
 
-    /// The certificate-verification policy behind each SSL mode; `nil` for `.off`.
-    /// Shared by the pool (`makeTLS`) and the connection probe so both always
-    /// negotiate identically.
-    private static func tlsConfiguration(for sslMode: SSLMode) -> TLSConfiguration? {
-        switch sslMode {
+    /// The certificate-verification policy behind the SSL settings; `nil` for
+    /// `.off`. Shared by the pool (`makeTLS`) and the connection probe so both
+    /// always negotiate identically.
+    ///
+    /// Prefer/Require verify the full chain and host name unless the profile
+    /// opts out ("Don't verify server certificate"), Verify CA skips only the
+    /// host name, Verify Full checks both. A profile CA file replaces the
+    /// system trust store.
+    static func tlsConfiguration(for ssl: SSLSettings) -> TLSConfiguration? {
+        guard ssl.mode != .off else { return nil }
+        var c = TLSConfiguration.makeClientConfiguration()
+        switch ssl.mode {
         case .off:
             return nil
         case .prefer, .require:
-            // libpq semantics: `prefer`/`require` encrypt but do not verify
-            // the certificate (that is what verify-ca / verify-full are for).
-            // NIO's default is full verification, which made these modes
-            // unusable against servers with self-signed or private-CA certs.
-            var c = TLSConfiguration.makeClientConfiguration()
-            c.certificateVerification = .none
-            return c
+            c.certificateVerification = ssl.skipVerification ? .none : .fullVerification
         case .verifyCa:
-            var c = TLSConfiguration.makeClientConfiguration()
             c.certificateVerification = .noHostnameVerification
-            return c
         case .verifyFull:
-            var c = TLSConfiguration.makeClientConfiguration()
             c.certificateVerification = .fullVerification
-            return c
         }
+        if ssl.verifiesCertificate, let path = ssl.rootCertificatePath {
+            c.trustRoots = .file(path)
+        }
+        return c
+    }
+
+    /// The name the server certificate must match (and SNI). A tunnel dials
+    /// 127.0.0.1, so the profile's real host is named explicitly; IP
+    /// addresses are not valid SNI and are left to the driver.
+    static func tlsServerName(for profile: ConnectionProfile) -> String? {
+        let host = profile.host.trimmingCharacters(in: .whitespaces)
+        guard profile.useSSHTunnel, !host.isEmpty else { return nil }
+        var v4 = in_addr()
+        var v6 = in6_addr()
+        if inet_pton(AF_INET, host, &v4) == 1 || inet_pton(AF_INET6, host, &v6) == 1 { return nil }
+        return host
     }
 
     /// Opens and closes one direct connection with the exact settings the pool
@@ -238,30 +254,39 @@ actor DatabaseClient: PostgresClientProtocol {
         username: String,
         password: String?,
         database: String,
-        sslMode: SSLMode
+        ssl: SSLSettings,
+        tlsServerName: String?
     ) async throws {
+        try Task.checkCancellation()
         let tls: PostgresConnection.Configuration.TLS
-        if let tlsConfiguration = tlsConfiguration(for: sslMode) {
+        if let tlsConfiguration = tlsConfiguration(for: ssl) {
             let context = try NIOSSLContext(configuration: tlsConfiguration)
-            tls = sslMode == .prefer ? .prefer(context) : .require(context)
+            tls = ssl.mode == .prefer ? .prefer(context) : .require(context)
         } else {
             tls = .disable
         }
-        let configuration = PostgresConnection.Configuration(
+        var configuration = PostgresConnection.Configuration(
             host: host, port: port,
             username: username, password: password,
             database: database,
             tls: tls
         )
+        configuration.options.tlsServerName = tlsServerName
         let logger = Logger(label: "com.sequelpg.db.probe", factory: { _ in SwiftLogNoOpLogHandler() })
         let connection = try await PostgresConnection.connect(configuration: configuration, id: 0, logger: logger)
         try? await connection.close()
+        try Task.checkCancellation()
     }
 
     /// User-facing text for a failure while establishing a connection.
     static func describeConnectionError(_ error: Error) -> String {
         if let error = error as? PSQLError {
             return formatPSQLError(error)
+        }
+        if error is NIOSSLError {
+            // Building the TLS context failed before any network traffic:
+            // the only per-profile input is the CA certificate file.
+            return "Could not load the CA certificate file. Choose a PEM file with the server's CA certificate."
         }
         return error.localizedDescription
     }
@@ -294,14 +319,19 @@ actor DatabaseClient: PostgresClientProtocol {
         maxRows: Int = 2000,
         timeout: TimeInterval = 10.0
     ) async throws -> QueryResult {
-        try await execute(sql, maxRows: maxRows, timeout: timeout, truncateCells: true)
+        let statements = SQLStatementSplitter.split(sql)
+        guard !statements.isEmpty else {
+            throw AppError.queryFailed("There is no SQL statement to run.")
+        }
+        return try await execute(statements, maxRows: maxRows, timeout: timeout, truncateCells: true)
     }
 
-    /// Shared executor behind `runQuery` and `explainQuery`. `truncateCells`
-    /// applies the 10 000-character display cap to every text cell; EXPLAIN
-    /// output must be read whole or its JSON can't be parsed.
+    /// Shared executor behind `runQuery` and `explainQuery`. Runs `statements`
+    /// in order on one connection and returns the last one's result.
+    /// `truncateCells` applies the 10 000-character display cap to every text
+    /// cell; EXPLAIN output must be read whole or its JSON can't be parsed.
     private func execute(
-        _ sql: String,
+        _ statements: [String],
         maxRows: Int,
         timeout: TimeInterval,
         truncateCells: Bool
@@ -319,16 +349,34 @@ actor DatabaseClient: PostgresClientProtocol {
             // connection than the query it's meant to guard.
             return try await client.withConnection { connection in
                 try await Self.runQueryOnConnection(
-                    sql,
+                    statements,
                     maxRows: maxRows,
                     timeout: timeout,
                     truncateCells: truncateCells,
                     start: start,
-                    connection: connection
+                    connection: connection,
+                    cancelBackend: { pid in Self.cancelBackend(pid, using: client) }
                 )
             }
         } catch {
+            // Stop cancels the statement on the server, which then fails with
+            // "canceling statement due to user request" — report the Stop.
+            if Task.isCancelled { throw CancellationError() }
             throw mapQueryError(error, from: client)
+        }
+    }
+
+    /// Asks the server to cancel whatever backend `pid` is running, over
+    /// another pool connection. The leased connection is busy waiting for
+    /// its result, so this is the only way to make Stop take effect.
+    private static func cancelBackend(_ pid: Int32, using client: PostgresClient) {
+        Task.detached {
+            do {
+                let rows = try await client.query("SELECT pg_cancel_backend(\(pid))")
+                for try await _ in rows {}
+            } catch {
+                Log.db.error("Cancel request failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
@@ -339,6 +387,13 @@ actor DatabaseClient: PostgresClientProtocol {
         switch error {
         case let error as AppError:
             return error
+        case is ConnectionClosed:
+            if client === failedClient {
+                client = nil
+                runTask?.cancel()
+                runTask = nil
+            }
+            return AppError.connectionFailed("Connection lost: the server closed the connection.")
         case is CancellationError:
             // Surface user-initiated cancellation as-is so callers can tell
             // it apart from a real failure.
@@ -521,52 +576,80 @@ actor DatabaseClient: PostgresClientProtocol {
             """
     }
 
-    /// Runs `sql` on a single leased connection, optionally guarded by a
-    /// server-side `statement_timeout` plus a client-side timer race.
-    /// `timeout <= 0` means no limit: the query runs until it finishes or the
-    /// owning task is cancelled (Stop button).
+    /// Runs `statements` in order on a single leased connection, optionally
+    /// guarded by a server-side `statement_timeout` plus a client-side timer
+    /// race. `timeout <= 0` means no limit: the statements run until they
+    /// finish or the owning task is cancelled (Stop button), which cancels
+    /// the running statement on the server.
     private static func runQueryOnConnection(
-        _ sql: String,
+        _ statements: [String],
         maxRows: Int,
         timeout: TimeInterval,
         truncateCells: Bool,
         start: CFAbsoluteTime,
-        connection: PostgresConnection
+        connection: PostgresConnection,
+        cancelBackend: @escaping @Sendable (Int32) -> Void
     ) async throws -> QueryResult {
         let hasTimeout = timeout > 0
 
-        if hasTimeout {
-            // Server-side guard — the server kills the query if our
-            // client-side cancellation doesn't reach the driver in time.
-            let timeoutMs = Int(timeout * 1000)
-            try await connection.query(
-                PostgresQuery(unsafeSQL: "SET statement_timeout = \(timeoutMs)"),
-                logger: connection.logger
-            )
+        // One round trip: the backend PID Stop needs to cancel the statement,
+        // and — when limited — a session `statement_timeout`, the server-side
+        // guard in case the client-side cancellation doesn't get through.
+        let setup: PostgresQuery = hasTimeout
+            ? "SELECT pg_backend_pid(), set_config('statement_timeout', \(String(Int(timeout * 1000))), false)"
+            : "SELECT pg_backend_pid(), ''"
+        var backendPID: Int32?
+        for try await row in try await connection.query(setup, logger: connection.logger) {
+            backendPID = try PostgresRandomAccessRow(row)[0].decode(Int32.self)
         }
 
         // The connection returns to the pool when this scope ends, so the
         // timeout must be restored — success or failure — or later queries on
         // this connection would be silently capped. RESET (not `SET … = 0`)
         // restores the role/database default rather than assuming it was 0.
+        // Retried once: a Stop racing the end of the query can cancel it.
         let resetTimeout = {
-            guard hasTimeout else { return }
-            do {
-                try await connection.query(
-                    PostgresQuery(unsafeSQL: "RESET statement_timeout"),
-                    logger: connection.logger
-                )
-            } catch {
-                Log.db.error("Failed to reset statement_timeout: \(String(describing: error), privacy: .public)")
+            // A query on a closed connection never completes; the pool drops
+            // it anyway, so there's nothing to restore.
+            guard hasTimeout, !connection.isClosed else { return }
+            for attempt in 1 ... 2 {
+                do {
+                    let reset: EventLoopFuture<PostgresQueryResult> = connection.query(
+                        PostgresQuery(unsafeSQL: "RESET statement_timeout"),
+                        logger: connection.logger
+                    )
+                    _ = try await Self.result(of: reset, unlessClosed: connection)
+                    return
+                } catch is ConnectionClosed {
+                    return
+                } catch where attempt == 1 {
+                    continue
+                } catch {
+                    Log.db.error("Failed to reset statement_timeout: \(String(describing: error), privacy: .public)")
+                }
             }
         }
 
+        let running = RunningStatement(pid: backendPID)
         do {
             let result = try await withThrowingTaskGroup(of: QueryResult.self) { group in
                 group.addTask {
-                    try await Self.collectRows(
-                        sql: sql, maxRows: maxRows, truncateCells: truncateCells, start: start, connection: connection
-                    )
+                    try await withTaskCancellationHandler {
+                        defer { running.finish() }
+                        var last: QueryResult?
+                        for statement in statements {
+                            try Task.checkCancellation()
+                            last = try await Self.collectRows(
+                                sql: statement, maxRows: maxRows, truncateCells: truncateCells,
+                                start: start, connection: connection
+                            )
+                        }
+                        try Task.checkCancellation()
+                        guard let last else { throw AppError.queryFailed("There is no SQL statement to run.") }
+                        return last
+                    } onCancel: {
+                        if let pid = running.pidIfRunning() { cancelBackend(pid) }
+                    }
                 }
 
                 if hasTimeout {
@@ -594,7 +677,44 @@ actor DatabaseClient: PostgresClientProtocol {
         }
     }
 
-    /// Streams the query's rows into a `QueryResult`, stopping at `maxRows`.
+    /// Thrown from the row callback to stop reading at `maxRows`.
+    private struct RowLimitReached: Error {}
+
+    /// The server closed the connection while a statement was running.
+    struct ConnectionClosed: Error {}
+
+    /// Awaits `future`, or fails with `ConnectionClosed` when the connection
+    /// closes first: the driver doesn't always complete a query that was in
+    /// flight (or sent) when the server dropped the connection.
+    private static func result<T>(
+        of future: EventLoopFuture<T>,
+        unlessClosed connection: PostgresConnection
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            let resume = ResumeOnce(continuation)
+            future.whenComplete { resume($0) }
+            connection.closeFuture.whenComplete { _ in resume(.failure(ConnectionClosed())) }
+        }
+    }
+
+    /// Resumes a continuation from whichever event comes first.
+    private final class ResumeOnce<T>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<T, Error>?
+
+        init(_ continuation: CheckedContinuation<T, Error>) { self.continuation = continuation }
+
+        func callAsFunction(_ result: Result<T, Error>) {
+            let pending: CheckedContinuation<T, Error>? = lock.withLock {
+                defer { continuation = nil }
+                return continuation
+            }
+            pending?.resume(with: result)
+        }
+    }
+
+    /// Runs one statement and collects up to `maxRows` rows plus the
+    /// affected-row count from its command tag.
     private static func collectRows(
         sql: String,
         maxRows: Int,
@@ -602,38 +722,22 @@ actor DatabaseClient: PostgresClientProtocol {
         start: CFAbsoluteTime,
         connection: PostgresConnection
     ) async throws -> QueryResult {
-        try Task.checkCancellation()
+        let collector = RowCollector(maxRows: maxRows, truncateCells: truncateCells)
 
-        let rowSequence = try await connection.query(PostgresQuery(unsafeSQL: sql), logger: connection.logger)
-
-        var columns: [String] = []
-        var rows: [[CellValue]] = []
-        var isTruncated = false
-
-        for try await row in rowSequence {
-            try Task.checkCancellation()
-
-            let randomRow = PostgresRandomAccessRow(row)
-
-            if columns.isEmpty {
-                for i in 0 ..< randomRow.count {
-                    columns.append(randomRow[i].columnName)
-                }
+        // The callback form is the driver's only API that reports the command
+        // tag ("UPDATE 5"); rows are decoded as they arrive.
+        var metadata: PostgresQueryMetadata?
+        do {
+            let future = connection.query(PostgresQuery(unsafeSQL: sql), logger: connection.logger) { row in
+                try collector.add(row)
             }
-
-            var cellValues: [CellValue] = []
-            for i in 0 ..< randomRow.count {
-                cellValues.append(Self.decodeCellValue(randomRow[i], truncate: truncateCells))
-            }
-
-            rows.append(cellValues)
-
-            if rows.count >= maxRows {
-                isTruncated = true
-                break
-            }
+            metadata = try await Self.result(of: future, unlessClosed: connection)
+        } catch where collector.reachedRowLimit {
+            // Stopping at maxRows cancels the stream; the rows read are the result.
+            metadata = nil
         }
 
+        let (columns, rows, isTruncated) = collector.snapshot()
         let elapsed = CFAbsoluteTimeGetCurrent() - start
         Log.perf.info("Query: \(elapsed, format: .fixed(precision: 3))s, \(rows.count) rows")
 
@@ -641,9 +745,75 @@ actor DatabaseClient: PostgresClientProtocol {
             columns: columns,
             rows: rows,
             executionTime: elapsed,
-            rowsAffected: nil,
+            rowsAffected: metadata.flatMap(Self.affectedRows),
             isTruncated: isTruncated
         )
+    }
+
+    /// Rows changed by a data-modifying command, from its command tag; `nil`
+    /// for commands that don't report one (SELECT, DDL, …).
+    static func affectedRows(_ metadata: PostgresQueryMetadata) -> Int? {
+        switch metadata.command {
+        case "INSERT", "UPDATE", "DELETE", "COPY":
+            return metadata.rows
+        default:
+            // The driver leaves tags it doesn't know (MERGE n) unparsed.
+            let parts = metadata.command.split(separator: " ")
+            guard parts.count == 2, parts[0] == "MERGE" else { return nil }
+            return Int(parts[1])
+        }
+    }
+
+    /// Accumulates decoded rows from the driver's row callback, which runs on
+    /// the connection's event loop.
+    private final class RowCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private let maxRows: Int
+        private let truncateCells: Bool
+        private var columns: [String] = []
+        private var rows: [[CellValue]] = []
+        private var isTruncated = false
+
+        init(maxRows: Int, truncateCells: Bool) {
+            self.maxRows = maxRows
+            self.truncateCells = truncateCells
+        }
+
+        func add(_ row: PostgresRow) throws {
+            let randomRow = PostgresRandomAccessRow(row)
+            var cells: [CellValue] = []
+            cells.reserveCapacity(randomRow.count)
+            for i in 0 ..< randomRow.count {
+                cells.append(DatabaseClient.decodeCellValue(randomRow[i], truncate: truncateCells))
+            }
+            let reachedLimit: Bool = lock.withLock {
+                if columns.isEmpty {
+                    columns = (0 ..< randomRow.count).map { randomRow[$0].columnName }
+                }
+                rows.append(cells)
+                if rows.count >= maxRows { isTruncated = true }
+                return isTruncated
+            }
+            if reachedLimit { throw RowLimitReached() }
+        }
+
+        var reachedRowLimit: Bool { lock.withLock { isTruncated } }
+
+        func snapshot() -> (columns: [String], rows: [[CellValue]], isTruncated: Bool) {
+            lock.withLock { (columns, rows, isTruncated) }
+        }
+    }
+
+    /// The backend a Stop should cancel, cleared once the statements finish
+    /// so a late Stop can't cancel the next user of the pooled connection.
+    private final class RunningStatement: @unchecked Sendable {
+        private let lock = NSLock()
+        private var pid: Int32?
+
+        init(pid: Int32?) { self.pid = pid }
+
+        func pidIfRunning() -> Int32? { lock.withLock { pid } }
+        func finish() { lock.withLock { pid = nil } }
     }
 
     /// Runs `EXPLAIN (FORMAT JSON, ANALYZE on/off, BUFFERS on/off) <sql>` and
@@ -662,7 +832,7 @@ actor DatabaseClient: PostgresClientProtocol {
 
         // Plans for partitioned tables or wide joins easily exceed the
         // display cap applied by `runQuery`; a truncated document is not JSON.
-        let result = try await execute(wrapped, maxRows: 1, timeout: timeout, truncateCells: false)
+        let result = try await execute([wrapped], maxRows: 1, timeout: timeout, truncateCells: false)
         guard let first = result.rows.first?.first, case let .text(jsonString) = first else {
             throw AppError.queryFailed("EXPLAIN returned no JSON output")
         }
@@ -671,11 +841,31 @@ actor DatabaseClient: PostgresClientProtocol {
 
     // MARK: - Cell Decoding
 
+    /// Whole seconds only: the fraction is appended from the raw
+    /// microseconds, which `Date` (a Double) can't carry exactly.
     private static let dateFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    /// Renders a timestamp (microseconds since 2000-01-01 UTC) as ISO 8601
+    /// in UTC: milliseconds when the value has no finer digits, otherwise all
+    /// six fractional digits (`2026-03-15T13:45:30.123456Z`).
+    static func formatTimestamp(us: Int64) -> String {
+        var seconds = us / 1_000_000
+        var micros = us % 1_000_000
+        if micros < 0 {
+            seconds -= 1
+            micros += 1_000_000
+        }
+        let date = Date(timeIntervalSinceReferenceDate: TimeInterval(seconds) - pgEpochOffsetFromAppleEpoch)
+        let base = dateFormatter.string(from: date).dropLast() // drop "Z"
+        let fraction = micros % 1000 == 0
+            ? String(format: ".%03d", Int(micros / 1000))
+            : String(format: ".%06d", Int(micros))
+        return base + fraction + "Z"
+    }
 
     private static let dateOnlyFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -692,7 +882,7 @@ actor DatabaseClient: PostgresClientProtocol {
     /// When adding support for a new PostgreSQL type: add a case to
     /// `formatBinary(buffer:type:)` so the binary wire bytes get a proper
     /// textual rendering instead of leaking through as garbled UTF-8.
-    private static func decodeCellValue(_ cell: PostgresCell, truncate shouldTruncate: Bool = true) -> CellValue {
+    fileprivate static func decodeCellValue(_ cell: PostgresCell, truncate shouldTruncate: Bool = true) -> CellValue {
         guard let bytes = cell.bytes else { return .null }
 
         if cell.format == .binary {
@@ -781,8 +971,7 @@ actor DatabaseClient: PostgresClientProtocol {
             guard let us = buffer.readInteger(as: Int64.self) else { return nil }
             if us == Int64.max { return "infinity" }
             if us == Int64.min { return "-infinity" }
-            let sec = TimeInterval(us) / 1_000_000 - pgEpochOffsetFromAppleEpoch
-            return dateFormatter.string(from: Date(timeIntervalSinceReferenceDate: sec))
+            return formatTimestamp(us: us)
         case .time:
             guard let us = buffer.readInteger(as: Int64.self) else { return nil }
             return formatTimeOfDay(us: us)
@@ -1258,9 +1447,14 @@ actor DatabaseClient: PostgresClientProtocol {
     private static func describeClientSideError(_ error: PSQLError) -> String {
         var text: String
         switch error.code {
+        case .connectionError where String(describing: error.underlying as Any).contains("failedToValidateHostname"):
+            text = "SSL handshake failed: the server certificate is not valid for this host name. "
+                + "Check the host, or use SSL mode Verify CA to check only the certificate chain."
         case .connectionError where error.underlying is NIOSSLError:
             text = String(describing: error.underlying!).contains("CERTIFICATE_VERIFY_FAILED")
-                ? "SSL handshake failed: the server certificate could not be verified against the system's trusted certificates."
+                ? "SSL handshake failed: the server certificate could not be verified. "
+                + "Choose the server's CA certificate, or turn on \u{201C}Don't verify server certificate\u{201D} "
+                + "with SSL mode Prefer or Require."
                 : "SSL handshake failed."
         case .connectionError:
             text = "Could not reach the server."
@@ -1760,7 +1954,8 @@ actor DatabaseClient: PostgresClientProtocol {
         try await establishClient(
             host: host, port: port,
             username: newProfile.username, password: password,
-            database: newProfile.database, sslMode: newProfile.sslMode,
+            database: newProfile.database, ssl: newProfile.sslSettings,
+            tlsServerName: Self.tlsServerName(for: newProfile),
             cleanupOnFailure: { [weak self] in
                 // Preserve SSH tunnel on switch failure so the caller can retry.
                 await self?.teardownPostgresClient()

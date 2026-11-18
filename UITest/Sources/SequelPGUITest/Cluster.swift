@@ -41,6 +41,8 @@ enum Cluster {
     static func role(_ name: String) -> Config.Credentials { config.roles[name]! }
     static var sshClientKey: String { Repo.testDB.appending(path: ".generated/ssh/client_ed25519").path }
     static var sshWrongKey: String { Repo.testDB.appending(path: ".generated/ssh/wrong_ed25519").path }
+    /// Private CA that signed pg18's certificate.
+    static var caCert: String { Repo.testDB.appending(path: ".generated/certs/ca.crt").path }
     static var sshKnownHosts: String { Repo.testDB.appending(path: ".generated/ssh/known_hosts").path }
 
     static func isPortOpen(_ port: Int) -> Bool {
@@ -94,6 +96,8 @@ struct SeedProfile: Encodable {
     var database = Cluster.config.database
     var username = Cluster.role("scram").user
     var sslMode = "off"
+    var sslSkipVerification = false
+    var sslRootCertPath = ""
     var useSSHTunnel = false
     var sshHost = ""
     var sshPort = 22
@@ -124,8 +128,8 @@ struct SeedProfile: Encodable {
     }
 
     private enum ProfileKeys: String, CodingKey {
-        case id, name, host, port, database, username, sslMode, useSSHTunnel, sshHost, sshPort, sshUser,
-             sshAuthMethod, sshKeyPath
+        case id, name, host, port, database, username, sslMode, sslSkipVerification, sslRootCertPath,
+             useSSHTunnel, sshHost, sshPort, sshUser, sshAuthMethod, sshKeyPath
     }
 
     private enum Keys: String, CodingKey { case profile, password, sshPassword }
@@ -140,6 +144,8 @@ struct SeedProfile: Encodable {
         try profile.encode(database, forKey: .database)
         try profile.encode(username, forKey: .username)
         try profile.encode(sslMode, forKey: .sslMode)
+        try profile.encode(sslSkipVerification, forKey: .sslSkipVerification)
+        try profile.encode(sslRootCertPath, forKey: .sslRootCertPath)
         try profile.encode(useSSHTunnel, forKey: .useSSHTunnel)
         try profile.encode(sshHost, forKey: .sshHost)
         try profile.encode(sshPort, forKey: .sshPort)

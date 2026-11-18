@@ -3,10 +3,35 @@ import XCTest
 
 /// Every `SSLMode` against a TLS-enabled server (pg18) and a plain one (pg16).
 ///
-/// The test CA is private, so `verify-ca` / `verify-full` are expected to
-/// fail: the app validates against the system trust store only and has no
-/// per-connection root-certificate setting. Those tests pin that behavior.
+/// pg18's certificate comes from a private test CA: verification succeeds
+/// only with the profile's CA file, or with "Don't verify server certificate"
+/// (Prefer/Require). `connect(…)` turns verification off unless asked.
 final class SSLModeTests: IntegrationTestCase {
+    private func connectError(_ profile: ConnectionProfile, password: String? = nil) async -> Error? {
+        let client = DatabaseClient()
+        return await assertThrowsAsync {
+            try await client.connect(
+                profile: profile,
+                password: password ?? TestCluster.password(.scram),
+                sshPassword: nil
+            )
+        }
+    }
+
+    private func connectVerified(_ mode: SSLMode, host: String? = nil) async throws -> DatabaseClient {
+        try TestCluster.require([.pg18])
+        let client = DatabaseClient()
+        try await client.connect(
+            profile: TestCluster.profile(
+                .pg18, sslMode: mode, host: host, verifyCertificate: true, caCertPath: TestCluster.caCertPath
+            ),
+            password: TestCluster.password(.scram),
+            sshPassword: nil
+        )
+        addTeardownBlock { await client.disconnect() }
+        return client
+    }
+
     private func isSessionEncrypted(_ client: DatabaseClient) async throws -> Bool {
         let value = try await client.scalar("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
         return value == "t" || value == "true"
@@ -55,20 +80,49 @@ final class SSLModeTests: IntegrationTestCase {
 
     func testVerifyModesRejectCertificateFromUntrustedCA() async throws {
         try TestCluster.require([.pg18])
-        for mode in [SSLMode.verifyCa, .verifyFull] {
-            let client = DatabaseClient()
-            let error = await assertThrowsAsync({
-                try await client.connect(
-                    profile: TestCluster.profile(.pg18, sslMode: mode),
-                    password: TestCluster.password(.scram),
-                    sshPassword: nil
-                )
-            }, "\(mode) must not trust a private CA")
+        for mode in [SSLMode.prefer, .require, .verifyCa, .verifyFull] {
+            let error = await connectError(TestCluster.profile(.pg18, sslMode: mode, verifyCertificate: true))
             XCTAssertTrue(
                 message(of: error).contains("could not be verified"),
                 "\(mode): expected a certificate-verification explanation, got: \(message(of: error))"
             )
         }
+    }
+
+    func testVerifyModesSucceedWithProfileCA() async throws {
+        for mode in [SSLMode.prefer, .require, .verifyCa, .verifyFull] {
+            let client = try await connectVerified(mode)
+            let encrypted = try await isSessionEncrypted(client)
+            XCTAssertTrue(encrypted, "\(mode)")
+        }
+    }
+
+    func testVerifyFullThroughSSHTunnel() async throws {
+        // The tunnel dials 127.0.0.1; the certificate is checked with the
+        // profile's real host as the expected name (and the peer address).
+        try TestCluster.require([.pg18])
+        for mode in [SSLMode.verifyCa, .verifyFull] {
+            var profile = TestCluster.sshProfile(auth: .keyFile, sslMode: mode)
+            profile.sslSkipVerification = false
+            profile.sslRootCertPath = TestCluster.caCertPath
+            let client = DatabaseClient()
+            try await client.connect(profile: profile, password: TestCluster.password(.scram), sshPassword: nil)
+            let encrypted = try await isSessionEncrypted(client)
+            XCTAssertTrue(encrypted, "\(mode)")
+            await client.disconnect()
+        }
+    }
+
+    func testUnreadableCAFileIsExplained() async throws {
+        try TestCluster.require([.pg18])
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("not-a-cert-\(UUID()).pem")
+        try Data("not a certificate".utf8).write(to: bogus)
+        defer { try? FileManager.default.removeItem(at: bogus) }
+        let error = await connectError(TestCluster.profile(
+            .pg18, sslMode: .verifyFull, verifyCertificate: true, caCertPath: bogus.path
+        ))
+        XCTAssertNotNil(error)
+        XCTAssertFalse(message(of: error).isEmpty)
     }
 
     func testSSLOnlyRoleIsRejectedWithoutTLS() async throws {

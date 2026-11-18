@@ -306,6 +306,8 @@ struct StartPageView: View {
                 database: copy.database,
                 username: copy.username,
                 sslMode: copy.sslMode,
+                sslSkipVerification: copy.sslSkipVerification,
+                sslRootCertPath: copy.sslRootCertPath,
                 useSSHTunnel: copy.useSSHTunnel,
                 sshHost: copy.sshHost,
                 sshPort: copy.sshPort,

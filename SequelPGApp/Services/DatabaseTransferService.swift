@@ -33,6 +33,7 @@ actor DatabaseTransferService {
             arguments: arguments,
             password: password,
             sslMode: connection.pgSSLMode,
+            sslRootCert: connection.sslRootCertPath,
             label: "pg_dump",
             makeError: AppError.exportFailed
         )
@@ -48,15 +49,63 @@ actor DatabaseTransferService {
         toolPath: String,
         inputPath: String
     ) -> AsyncThrowingStream<String, Error> {
-        let arguments = options.arguments(connection: connection, inputPath: inputPath)
+        // pg_dump 17+ writes `SET transaction_timeout = 0;`, which servers
+        // before 17 reject — fatal under ON_ERROR_STOP. Such scripts are fed
+        // through stdin with that line guarded by the server version.
+        let rewrite = Self.compatibilityRewrite(ofScriptAt: inputPath)
+        let arguments = options.arguments(connection: connection, inputPath: rewrite == nil ? inputPath : "-")
         return run(
             toolPath: toolPath,
             arguments: arguments,
             password: password,
             sslMode: connection.pgSSLMode,
+            sslRootCert: connection.sslRootCertPath,
             label: "psql",
-            makeError: AppError.importFailed
+            makeError: AppError.importFailed,
+            stdin: rewrite.map { (head: $0.head, file: inputPath, offset: $0.consumed) }
         )
+    }
+
+    /// Size of the script head searched for the preamble.
+    static let preambleScanLimit = 64 * 1024
+
+    /// Replaces an unconditional `SET transaction_timeout = 0;` in the dump's
+    /// preamble (the SET block before the first object) with a version check.
+    /// Returns the rewritten head and how many bytes of the original it
+    /// replaces, or `nil` when the script needs no change.
+    static func compatibilityRewrite(ofScriptAt path: String) -> (head: Data, consumed: Int)? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        let head = handle.readData(ofLength: preambleScanLimit)
+        return compatibilityRewrite(ofHead: head)
+    }
+
+    static func compatibilityRewrite(ofHead head: Data) -> (head: Data, consumed: Int)? {
+        let target = Data("SET transaction_timeout = 0;".utf8)
+        var lineStart = head.startIndex
+        while lineStart < head.endIndex {
+            guard let newline = head[lineStart...].firstIndex(of: UInt8(ascii: "\n")) else { return nil }
+            var line = head[lineStart ..< newline]
+            if line.last == UInt8(ascii: "\r") { line = line.dropLast() }
+            if line.elementsEqual(target) {
+                var rewritten = Data(head[head.startIndex ..< lineStart])
+                // Plain SQL: newer dumps `\\restrict` psql meta-commands.
+                rewritten.append(Data("""
+                DO $sequelpg$ BEGIN IF pg_catalog.current_setting('server_version_num')::int >= 170000 \
+                THEN PERFORM pg_catalog.set_config('transaction_timeout', '0', false); END IF; END $sequelpg$;
+
+                """.utf8))
+                return (rewritten, newline + 1 - head.startIndex)
+            }
+            // The preamble is comments, blank lines, SETs and set_config calls;
+            // anything else means the line isn't there (or is user data).
+            let text = String(decoding: line, as: UTF8.self)
+            let isPreamble = text.isEmpty || text.hasPrefix("--") || text.hasPrefix("SET ")
+                || text.hasPrefix("SELECT pg_catalog.set_config(") || text.hasPrefix("\\")
+            guard isPreamble else { return nil }
+            lineStart = newline + 1
+        }
+        return nil
     }
 
     // MARK: - Private
@@ -66,8 +115,10 @@ actor DatabaseTransferService {
         arguments: [String],
         password: String?,
         sslMode: String,
+        sslRootCert: String?,
         label: String,
-        makeError: @escaping @Sendable (String) -> AppError
+        makeError: @escaping @Sendable (String) -> AppError,
+        stdin: (head: Data, file: String, offset: Int)? = nil
     ) -> AsyncThrowingStream<String, Error> {
         let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
 
@@ -86,6 +137,8 @@ actor DatabaseTransferService {
             environment["PGPASSWORD"] = password
         }
         environment["PGSSLMODE"] = sslMode
+        environment.removeValue(forKey: "PGSSLROOTCERT")
+        if let sslRootCert { environment["PGSSLROOTCERT"] = sslRootCert }
         environment["PGCONNECT_TIMEOUT"] = "10"
         proc.environment = environment
 
@@ -121,15 +174,61 @@ actor DatabaseTransferService {
             }
         }
 
+        let inputPipe = stdin == nil ? nil : Pipe()
+        if let inputPipe { proc.standardInput = inputPipe }
+
         do {
             try proc.run()
             process = proc
+            if let inputPipe, let stdin {
+                Self.feed(inputPipe.fileHandleForWriting, head: stdin.head, file: stdin.file, offset: stdin.offset)
+            }
             Log.app.info("\(label, privacy: .public) started (PID \(proc.processIdentifier))")
         } catch {
             continuation.finish(throwing: makeError("Failed to launch \(label): \(error.localizedDescription)"))
         }
 
         return stream
+    }
+}
+
+extension DatabaseTransferService {
+    /// Streams `head` followed by `file` from `offset` into the child's stdin
+    /// on a background thread. Stops quietly when the child exits (EPIPE).
+    fileprivate static func feed(_ writer: FileHandle, head: Data, file: String, offset: Int) {
+        let fd = writer.fileDescriptor
+        // A write to a closed pipe must fail with EPIPE, not kill the app.
+        _ = fcntl(fd, F_SETNOSIGPIPE, 1)
+        Thread.detachNewThread {
+            defer { try? writer.close() }
+            guard writeAll(head, to: fd), let reader = FileHandle(forReadingAtPath: file) else { return }
+            defer { try? reader.close() }
+            do {
+                try reader.seek(toOffset: UInt64(offset))
+                while let chunk = try reader.read(upToCount: 1 << 20), !chunk.isEmpty {
+                    guard writeAll(chunk, to: fd) else { return }
+                }
+            } catch {
+                Log.app.error("Import input failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private static func writeAll(_ data: Data, to fd: Int32) -> Bool {
+        data.withUnsafeBytes { buffer in
+            guard var pointer = buffer.baseAddress else { return true }
+            var remaining = buffer.count
+            while remaining > 0 {
+                let written = Darwin.write(fd, pointer, remaining)
+                if written < 0 {
+                    if errno == EINTR { continue }
+                    return false
+                }
+                pointer += written
+                remaining -= written
+            }
+            return true
+        }
     }
 }
 

@@ -73,16 +73,24 @@ Debug builds honor these hooks (`SequelPGApp/Utilities/TestingHooks.swift`). Rel
 | `SEQUELPG_UITEST_SAVE_DIR` / `SEQUELPG_UITEST_OPEN_FILE` | replace the Save / Open panels |
 | `SEQUELPG_SSH_KNOWN_HOSTS_FILE` | tunnels use the cluster's `known_hosts`, not `~/.ssh/known_hosts` |
 
-## Known product issues found by the suites
+## Known product issues
 
-These are pinned by tests (`XCTExpectFailure`, or a comment in the scenario). They will flag when fixed.
+None open. A product bug found by a suite gets its real assertion wrapped in
+`XCTExpectFailure("why")` (or a comment in the scenario), so the test flips
+to failing once the bug is fixed — then remove the wrapper.
 
-- **Stop doesn't cancel the statement on the server.** The UI waits for the query to finish.
-- **Timestamps lose microseconds.** They are shown with millisecond precision.
-- **Export from PG 18 can't be imported into PG < 17.** pg_dump 18 emits `SET transaction_timeout`.
-- **Multi-statement queries are rejected.** Execution uses the extended protocol.
-- **verify-ca / verify-full trust only the system store.** A private CA can't be configured.
-- **No affected-row count.** INSERT/UPDATE/DELETE show "Command Completed" without "N rows affected", because the command tag isn't read.
+Behavior the suites pin, which earlier versions got wrong:
+
+- **Stop** cancels the statement on the server (`pg_cancel_backend`) and returns at once.
+- **Timestamps** keep microseconds (`2026-03-15T13:45:30.123456Z`).
+- **Dumps from pg_dump 17+** import into older servers: the import guards `SET transaction_timeout` by server version.
+- **Scripts** run statement by statement; the last result is shown and a failing statement stops the rest.
+- **SSL**: Prefer/Require verify the certificate unless "Don't verify server certificate" is on; a per-profile CA file serves all verifying modes. pg18's certificate is signed by `.generated/certs/ca.crt`.
+- **DML** reports "N rows affected" (INSERT, UPDATE, DELETE, MERGE, COPY).
+
+TLS host-name checks can't be shown failing on this cluster: NIOSSL also
+accepts a certificate whose IP entry matches the peer, and the test
+certificate lists 127.0.0.1.
 
 ## Troubleshooting
 

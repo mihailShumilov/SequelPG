@@ -131,9 +131,7 @@ final class AppViewModelIntegrationTests: IntegrationTestCase {
         for _ in 0 ..< 30 where vm.queryVM.isExecuting {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        XCTExpectFailure("Known issue: Stop does not cancel the query server-side, so the spinner stays until it finishes") {
-            XCTAssertFalse(vm.queryVM.isExecuting, "Stop must clear the spinner")
-        }
+        XCTAssertFalse(vm.queryVM.isExecuting, "Stop must clear the spinner")
         for _ in 0 ..< 60 where vm.queryVM.isExecuting {
             try await Task.sleep(nanoseconds: 100_000_000)
         }

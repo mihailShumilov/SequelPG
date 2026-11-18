@@ -219,6 +219,7 @@ struct QueryTabView: View {
                         } description: {
                             Text(commandSummary(result))
                         }
+                        .accessibilityElement(children: .combine)
                         .accessibilityIdentifier(A11yID.Query.commandCompleted)
                     } else {
                         VStack(spacing: 0) {

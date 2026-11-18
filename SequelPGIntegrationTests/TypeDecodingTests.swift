@@ -24,9 +24,7 @@ final class TypeDecodingTests: IntegrationTestCase {
         "c_date": "2026-03-15",
         "c_time": "13:45:30",
         "c_timetz": "13:45:30+02:00", // app format (psql: +02)
-        // app format: ISO 8601. Sub-millisecond digits are dropped — see
-        // testTimestampKeepsMicroseconds (known issue).
-        "c_ts": "2026-03-15T13:45:30.123Z",
+        "c_ts": "2026-03-15T13:45:30.123456Z", // app format: ISO 8601, UTC
         "c_tstz": "2026-03-15T13:45:30.000Z", // app format: ISO 8601
         "c_interval": "1 year 2 mons 3 days 04:05:06",
         "c_uuid": "A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11", // app format: Foundation UUID casing
@@ -67,9 +65,7 @@ final class TypeDecodingTests: IntegrationTestCase {
     func testTimestampKeepsMicroseconds() async throws {
         let client = try await connect()
         let value = try await client.scalar("SELECT c_ts FROM qa.type_samples WHERE id = 1")
-        XCTExpectFailure("Known issue: timestamp rendering truncates to milliseconds") {
-            XCTAssertTrue(value?.contains("123456") == true, value ?? "nil")
-        }
+        XCTAssertEqual(value, "2026-03-15T13:45:30.123456Z")
     }
 
     func testNullsDecodeAsNullForEveryType() async throws {

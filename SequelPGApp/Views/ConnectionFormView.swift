@@ -13,6 +13,8 @@ struct ConnectionFormModel {
     var username: String = ""
     var password: String = ""
     var sslMode: SSLMode = .prefer
+    var sslSkipVerification: Bool = false
+    var sslRootCertPath: String = ""
 
     var useSSHTunnel: Bool = false
     var sshHost: String = ""
@@ -33,6 +35,8 @@ struct ConnectionFormModel {
         database = profile.database
         username = profile.username
         sslMode = profile.sslMode
+        sslSkipVerification = profile.sslSkipVerification
+        sslRootCertPath = profile.sslRootCertPath
         self.password = password
 
         useSSHTunnel = profile.useSSHTunnel
@@ -60,6 +64,8 @@ struct ConnectionFormModel {
             database: database.trimmingCharacters(in: .whitespaces),
             username: username.trimmingCharacters(in: .whitespaces),
             sslMode: sslMode,
+            sslSkipVerification: sslSkipVerification,
+            sslRootCertPath: sslRootCertPath.trimmingCharacters(in: .whitespaces),
             useSSHTunnel: useSSHTunnel,
             sshHost: sshHost.trimmingCharacters(in: .whitespaces),
             sshPort: sshPortInt,
@@ -79,6 +85,17 @@ struct ConnectionSettingsForm: View {
     @Binding var form: ConnectionFormModel
     @State private var showPassword = false
     @State private var showSSHPassword = false
+
+    private func chooseRootCertificate() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose CA Certificate"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.showsHiddenFiles = true
+        if let url = FilePanels.chooseOpenURL(panel) {
+            form.sslRootCertPath = (url.path as NSString).abbreviatingWithTildeInPath
+        }
+    }
 
     var body: some View {
         Form {
@@ -115,8 +132,24 @@ struct ConnectionSettingsForm: View {
                     }
                 }
                 .accessibilityIdentifier(A11yID.Form.sslMode)
-                .help("Prefer and Require encrypt the connection but don't verify the server's certificate. "
-                    + "Verify CA checks the certificate chain; Verify Full also checks the host name.")
+                .help("Prefer uses SSL when the server offers it; Require insists on it. "
+                    + "Verify CA checks the certificate chain only; Verify Full also checks the host name.")
+                if form.sslMode.verificationIsOptional {
+                    Toggle("Don't verify server certificate", isOn: $form.sslSkipVerification)
+                        .accessibilityIdentifier(A11yID.Form.sslSkipVerification)
+                        .help("Encrypt without checking who the server is. Use for self-signed certificates "
+                            + "you can't add as a CA file.")
+                }
+                if form.sslMode != .off, !(form.sslMode.verificationIsOptional && form.sslSkipVerification) {
+                    HStack {
+                        TextField("CA Certificate", text: $form.sslRootCertPath, prompt: Text("System trust store"))
+                            .accessibilityIdentifier(A11yID.Form.sslRootCert)
+                            .help("PEM file with the CA that signed the server certificate. "
+                                + "Leave empty to trust the system's certificates.")
+                        Button("Choose\u{2026}") { chooseRootCertificate() }
+                            .accessibilityIdentifier(A11yID.Form.sslRootCertChoose)
+                    }
+                }
             } header: {
                 Text("PostgreSQL Server")
             } footer: {
@@ -127,8 +160,8 @@ struct ConnectionSettingsForm: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .textSelection(.enabled)
-                    if form.sslMode == .prefer || form.sslMode == .require {
-                        Text("Encrypted, but the server's identity isn't verified. Use Verify Full to authenticate it.")
+                    if form.sslMode.verificationIsOptional, form.sslSkipVerification {
+                        Text("Encrypted, but the server's identity isn't verified.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

@@ -328,7 +328,8 @@ struct CascadeDeleteBuilder {
             port: endpoint?.port ?? live.profile.port,
             database: live.profile.database,
             username: live.profile.username,
-            sslMode: live.profile.sslMode
+            sslMode: live.profile.sslMode,
+            sslRootCertPath: live.profile.sslSettings.rootCertificatePath
         )
         return (connection, live.password)
     }

@@ -72,9 +72,22 @@ final class ScenarioContext {
     }
 
     /// Picks `item` from the pop-up/menu button matching `menuButton`.
-    func choose(_ menuButton: Query, item: String, timeout: TimeInterval = 5) throws {
-        try press(menuButton, timeout: timeout)
-        try press(Query(role: "AXMenuItem", label: item), timeout: 3)
+    /// Opens a pop-up menu and picks `item`. A menu snapshots its items'
+    /// enabled state when it opens, so a still-disabled item (the app is
+    /// catching up) is retried by closing and reopening the menu.
+    func choose(_ menuButton: Query, item: String, timeout: TimeInterval = 10) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            try press(menuButton, timeout: max(1, deadline.timeIntervalSinceNow))
+            do {
+                try press(Query(role: "AXMenuItem", label: item), timeout: 2)
+                return
+            } catch {
+                guard Date() < deadline else { throw error }
+                try key("escape")
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            }
+        }
     }
 
     /// Replaces the text of the field with this identifier.
