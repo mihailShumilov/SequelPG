@@ -135,11 +135,12 @@ final class ConnectionFailureTests: XCTestCase {
         XCTAssertTrue(message.contains("Set SSL Mode to Prefer or Off"))
     }
 
-    func testCertificateRejectedSuggestsRequire() {
+    func testCertificateRejectedSuggestsCAFileOrSkippingVerification() {
         let message = ConnectionFailure.certificateRejected("CERTIFICATE_VERIFY_FAILED")
             .message(sslMode: .verifyFull, endpoint: "db:5432")
         XCTAssertTrue(message.contains("CERTIFICATE_VERIFY_FAILED"))
-        XCTAssertTrue(message.contains("set SSL Mode to Require"))
+        XCTAssertTrue(message.contains("CA certificate"))
+        XCTAssertTrue(message.contains("Don't verify server certificate"))
     }
 
     func testHandshakeHintOnlyWhenSSLIsRequired() {

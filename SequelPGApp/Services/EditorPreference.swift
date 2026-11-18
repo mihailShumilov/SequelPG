@@ -44,7 +44,7 @@ enum EditorFontFamily: String, CaseIterable, Identifiable, Sendable {
 @MainActor
 @Observable
 final class EditorPreference {
-    static let shared = EditorPreference()
+    static let shared = EditorPreference(defaults: TestingHooks.userDefaults)
 
     /// Fallback when the user never picked a timeout — matches the historical
     /// hard-coded cap so existing installs keep their behavior.

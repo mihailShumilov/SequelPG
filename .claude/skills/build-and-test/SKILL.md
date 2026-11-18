@@ -1,6 +1,6 @@
 ---
 name: build-and-test
-description: Build SequelPG, run the XCTest suite (all, one class, or one method), and format Swift with SwiftFormat. Use after any Swift change, before committing, or when the user asks to build, test, or check that the project compiles.
+description: Build SequelPG, run the unit, integration and UI test suites (all, one class, or one method), and format Swift with SwiftFormat. Use after any Swift change, before committing, or when the user asks to build, test, or check that the project compiles.
 ---
 
 # Build and test SequelPG
@@ -28,7 +28,20 @@ xcodebuild test -project SequelPG.xcodeproj -scheme SequelPG -destination 'platf
   -only-testing:SequelPGTests/TableViewModelTests/testSomething 2>&1 | tail -20
 ```
 
-Tests never need a live database — they use `MockDatabaseClient`.
+Unit tests (`SequelPGTests`) never need a live database — they use `MockDatabaseClient`.
+
+## Live-database suites (local only)
+
+| Suite | Command | Needs |
+| --- | --- | --- |
+| Unit | `make -C test-db test-unit` | nothing |
+| Integration (`SequelPGIntegrationTests`, ~45 s) | `make -C test-db test-integration [ONLY=Class[/method]]` | `make -C test-db up` |
+| UI scenarios (`UITest/`, ~4 min) | `make -C test-db test-ui [ONLY="smoke edit-rows"]` | cluster + Accessibility permission for the terminal |
+| Everything on a fresh cluster | `make -C test-db test-all` | Docker |
+
+See the `test-db`, `integration-test` and `ui-test` skills. Results: `build/test-results/*.xcresult`, `build/uitest/report/report.html`.
+
+No test run touches the real Keychain or the developer's saved connections: the app detects the XCTest host or `-SequelPGUITestMode` (`TestingHooks`) and switches to an in-memory Keychain and an isolated defaults suite.
 
 ## Format
 

@@ -27,6 +27,8 @@ struct PGToolConnection: Sendable, Equatable {
     var database: String
     var username: String
     var sslMode: SSLMode
+    /// CA bundle for verify-ca / verify-full (`PGSSLROOTCERT`), `nil` for libpq's default.
+    var sslRootCertPath: String? = nil
 
     /// The value `pg_dump`/`psql` expect in `PGSSLMODE`.
     var pgSSLMode: String {

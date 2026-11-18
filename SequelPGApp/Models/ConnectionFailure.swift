@@ -40,8 +40,9 @@ enum ConnectionFailure: Equatable, Sendable {
                 + "Set SSL Mode to Prefer or Off."
         case let .certificateRejected(detail):
             return "The server's SSL certificate could not be verified (\(detail)). "
-                + "If the server uses a self-signed certificate, set SSL Mode to Require "
-                + "to encrypt the connection without verifying the certificate."
+                + "If the server uses a private CA, choose its CA certificate in the connection settings. "
+                + "For a self-signed certificate, turn on \u{201C}Don't verify server certificate\u{201D} "
+                + "(SSL Mode Prefer or Require) to encrypt without verifying it."
         case let .tlsHandshakeFailed(detail):
             return "The SSL handshake with \(endpoint) failed (\(detail))."
                 + (sslMode == .off || sslMode == .prefer ? "" : " Try SSL Mode Prefer or Off.")

@@ -30,16 +30,16 @@ enum PGToolchain {
     /// on auto-detection. Persisted in `UserDefaults`.
     static var configuredDirectory: String? {
         get {
-            let value = UserDefaults.standard.string(forKey: configuredDirectoryKey)?
+            let value = TestingHooks.userDefaults.string(forKey: configuredDirectoryKey)?
                 .trimmingCharacters(in: .whitespaces)
             return (value?.isEmpty ?? true) ? nil : value
         }
         set {
             let trimmed = newValue?.trimmingCharacters(in: .whitespaces)
             if let trimmed, !trimmed.isEmpty {
-                UserDefaults.standard.set(trimmed, forKey: configuredDirectoryKey)
+                TestingHooks.userDefaults.set(trimmed, forKey: configuredDirectoryKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: configuredDirectoryKey)
+                TestingHooks.userDefaults.removeObject(forKey: configuredDirectoryKey)
             }
         }
     }

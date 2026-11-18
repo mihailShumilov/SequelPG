@@ -5,8 +5,8 @@ import SwiftUI
 struct SequelPGApp: App {
     /// Shared connection list — all windows read/write the same saved profiles.
     @State private var connectionListVM = ConnectionListViewModel(
-        store: ConnectionStore(),
-        keychainService: KeychainService.shared
+        store: TestingHooks.makeConnectionStore(),
+        keychainService: TestingHooks.keychainService
     )
 
     /// User's chosen appearance (Auto / Light / Dark). Shared across all

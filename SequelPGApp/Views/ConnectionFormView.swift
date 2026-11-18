@@ -13,6 +13,8 @@ struct ConnectionFormModel {
     var username: String = ""
     var password: String = ""
     var sslMode: SSLMode = .prefer
+    var sslSkipVerification: Bool = false
+    var sslRootCertPath: String = ""
 
     var useSSHTunnel: Bool = false
     var sshHost: String = ""
@@ -33,6 +35,8 @@ struct ConnectionFormModel {
         database = profile.database
         username = profile.username
         sslMode = profile.sslMode
+        sslSkipVerification = profile.sslSkipVerification
+        sslRootCertPath = profile.sslRootCertPath
         self.password = password
 
         useSSHTunnel = profile.useSSHTunnel
@@ -60,6 +64,8 @@ struct ConnectionFormModel {
             database: database.trimmingCharacters(in: .whitespaces),
             username: username.trimmingCharacters(in: .whitespaces),
             sslMode: sslMode,
+            sslSkipVerification: sslSkipVerification,
+            sslRootCertPath: sslRootCertPath.trimmingCharacters(in: .whitespaces),
             useSSHTunnel: useSSHTunnel,
             sshHost: sshHost.trimmingCharacters(in: .whitespaces),
             sshPort: sshPortInt,
@@ -80,19 +86,37 @@ struct ConnectionSettingsForm: View {
     @State private var showPassword = false
     @State private var showSSHPassword = false
 
+    private func chooseRootCertificate() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose CA Certificate"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.showsHiddenFiles = true
+        if let url = FilePanels.chooseOpenURL(panel) {
+            form.sslRootCertPath = (url.path as NSString).abbreviatingWithTildeInPath
+        }
+    }
+
     var body: some View {
         Form {
             Section {
                 TextField("Name", text: $form.name)
+                    .accessibilityIdentifier(A11yID.Form.name)
                 TextField("Host", text: $form.host, prompt: Text("localhost"))
+                    .accessibilityIdentifier(A11yID.Form.host)
                 TextField("Port", text: $form.port, prompt: Text("5432"))
+                    .accessibilityIdentifier(A11yID.Form.port)
                 TextField("Database", text: $form.database)
+                    .accessibilityIdentifier(A11yID.Form.database)
                 TextField("Username", text: $form.username)
+                    .accessibilityIdentifier(A11yID.Form.username)
                 HStack {
                     if showPassword {
                         TextField("Password", text: $form.password)
+                            .accessibilityIdentifier(A11yID.Form.password)
                     } else {
                         SecureField("Password", text: $form.password)
+                            .accessibilityIdentifier(A11yID.Form.password)
                     }
                     Button {
                         showPassword.toggle()
@@ -107,15 +131,41 @@ struct ConnectionSettingsForm: View {
                         Text(mode.displayName).tag(mode)
                     }
                 }
+                .accessibilityIdentifier(A11yID.Form.sslMode)
+                .help("Prefer uses SSL when the server offers it; Require insists on it. "
+                    + "Verify CA checks the certificate chain only; Verify Full also checks the host name.")
+                if form.sslMode.verificationIsOptional {
+                    Toggle("Don't verify server certificate", isOn: $form.sslSkipVerification)
+                        .accessibilityIdentifier(A11yID.Form.sslSkipVerification)
+                        .help("Encrypt without checking who the server is. Use for self-signed certificates "
+                            + "you can't add as a CA file.")
+                }
+                if form.sslMode != .off, !(form.sslMode.verificationIsOptional && form.sslSkipVerification) {
+                    HStack {
+                        TextField("CA Certificate", text: $form.sslRootCertPath, prompt: Text("System trust store"))
+                            .accessibilityIdentifier(A11yID.Form.sslRootCert)
+                            .help("PEM file with the CA that signed the server certificate. "
+                                + "Leave empty to trust the system's certificates.")
+                        Button("Choose\u{2026}") { chooseRootCertificate() }
+                            .accessibilityIdentifier(A11yID.Form.sslRootCertChoose)
+                    }
+                }
             } header: {
                 Text("PostgreSQL Server")
             } footer: {
-                Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("postgresql://\(form.username)@\(form.host):\(form.port)/\(form.database)")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    if form.sslMode.verificationIsOptional, form.sslSkipVerification {
+                        Text("Encrypted, but the server's identity isn't verified.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("SSH Tunnel") {

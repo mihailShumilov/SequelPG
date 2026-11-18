@@ -12,12 +12,7 @@ struct ERDLayoutStore {
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
-        let base = (try? fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )) ?? fileManager.temporaryDirectory
+        let base = TestingHooks.applicationSupportDirectory(fileManager: fileManager)
         self.directory = base
             .appendingPathComponent("SequelPG", isDirectory: true)
             .appendingPathComponent("erd-layouts", isDirectory: true)

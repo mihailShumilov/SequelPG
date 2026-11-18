@@ -45,3 +45,7 @@ Pods/
 
 # Security audit findings (may describe unresolved issues; keep local)
 .claude/agent-memory/paranoid-security-auditor/audit-findings-*.md
+
+# Test cluster generated keys/certs and local test results
+test-db/.generated/
+build/test-results/

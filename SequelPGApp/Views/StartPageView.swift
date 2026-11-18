@@ -86,6 +86,7 @@ struct StartPageView: View {
                 .tag(profile.id)
             }
             .listStyle(.sidebar)
+            .accessibilityIdentifier(A11yID.StartPage.connectionList)
             // Row-level tap gestures swallow the click the List needs to change
             // its selection on macOS, so double-click (and Return) is handled by
             // the List's own primary action instead.
@@ -112,6 +113,7 @@ struct StartPageView: View {
                     } description: {
                         Text("Click + to add your first PostgreSQL server.")
                     }
+                    .accessibilityIdentifier(A11yID.StartPage.emptyState)
                 } else if connectionListVM.filteredProfiles.isEmpty {
                     ContentUnavailableView.search(text: connectionListVM.filterText)
                 }
@@ -129,6 +131,7 @@ struct StartPageView: View {
                 }
                 .help("Add connection")
                 .accessibilityLabel("Add connection")
+                .accessibilityIdentifier(A11yID.StartPage.addConnection)
                 Button {
                     if let profile = connectionListVM.selectedProfile {
                         deleteTarget = profile
@@ -139,6 +142,7 @@ struct StartPageView: View {
                 .disabled(connectionListVM.selectedProfile == nil)
                 .help("Delete the selected connection")
                 .accessibilityLabel("Delete connection")
+                .accessibilityIdentifier(A11yID.StartPage.deleteConnection)
             }
             .buttonStyle(.borderless)
             .controlSize(.small)
@@ -191,14 +195,20 @@ struct StartPageView: View {
                     InlineBanner(kind: .warning, message: validationErrors.joined(separator: "\n")) {
                         validationErrors = []
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(A11yID.StartPage.validationErrors)
                 }
 
                 if let testResult {
                     switch testResult {
                     case .success:
                         InlineBanner(kind: .info, message: "Connection test succeeded.") { self.testResult = nil }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier(A11yID.StartPage.testSucceeded)
                     case let .failure(message):
                         InlineBanner(kind: .error, message: message) { self.testResult = nil }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier(A11yID.StartPage.testFailed)
                     }
                 }
 
@@ -219,6 +229,7 @@ struct StartPageView: View {
                     }
                     .disabled(isTestingConnection || isConnecting)
                     .help("Open a throwaway connection to verify these settings")
+                    .accessibilityIdentifier(A11yID.StartPage.testConnection)
 
                     Spacer()
 
@@ -244,6 +255,7 @@ struct StartPageView: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(isTestingConnection || isConnecting)
+                    .accessibilityIdentifier(A11yID.StartPage.connect)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
@@ -294,6 +306,8 @@ struct StartPageView: View {
                 database: copy.database,
                 username: copy.username,
                 sslMode: copy.sslMode,
+                sslSkipVerification: copy.sslSkipVerification,
+                sslRootCertPath: copy.sslRootCertPath,
                 useSSHTunnel: copy.useSSHTunnel,
                 sshHost: copy.sshHost,
                 sshPort: copy.sshPort,

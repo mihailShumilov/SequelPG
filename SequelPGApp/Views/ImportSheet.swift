@@ -170,7 +170,7 @@ struct ImportSheet: View {
         var types: [UTType] = [.plainText, .data]
         if let sql = UTType(filenameExtension: "sql") { types.insert(sql, at: 0) }
         panel.allowedContentTypes = types
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanels.chooseOpenURL(panel) else { return }
         vm.inputURL = url
     }
 

@@ -8,6 +8,10 @@ enum SSLMode: String, Codable, CaseIterable, Sendable {
     case verifyCa = "verify-ca"
     case verifyFull = "verify-full"
 
+    /// Modes that encrypt but, like libpq, only verify the certificate when
+    /// asked to; the profile's `sslSkipVerification` decides.
+    var verificationIsOptional: Bool { self == .prefer || self == .require }
+
     var displayName: String {
         switch self {
         case .off: return "Off"
@@ -44,6 +48,12 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
     var database: String
     var username: String
     var sslMode: SSLMode
+    /// Prefer/Require only: encrypt without checking the server certificate
+    /// (self-signed or private-CA servers). Verify CA/Full always verify.
+    @DecodableDefault.False var sslSkipVerification: Bool
+    /// PEM file with the CA certificate(s) to trust instead of the system
+    /// trust store. Empty uses the system store.
+    @DecodableDefault.EmptyString var sslRootCertPath: String
 
     @DecodableDefault.False var useSSHTunnel: Bool
     @DecodableDefault.EmptyString var sshHost: String
@@ -60,6 +70,8 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         database: String,
         username: String,
         sslMode: SSLMode = .require,
+        sslSkipVerification: Bool = false,
+        sslRootCertPath: String = "",
         useSSHTunnel: Bool = false,
         sshHost: String = "",
         sshPort: Int = 22,
@@ -74,6 +86,8 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         self.database = database
         self.username = username
         self.sslMode = sslMode
+        self.sslSkipVerification = sslSkipVerification
+        self.sslRootCertPath = sslRootCertPath
         self.useSSHTunnel = useSSHTunnel
         self.sshHost = sshHost
         self.sshPort = sshPort
@@ -110,6 +124,11 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         if port < 1 || port > 65535 {
             errors.append("Port must be between 1 and 65535.")
         }
+        if sslMode != .off, !sslRootCertPath.trimmingCharacters(in: .whitespaces).isEmpty,
+           !FileManager.default.isReadableFile(atPath: sslSettings.rootCertificatePath ?? "")
+        {
+            errors.append("CA certificate file not found.")
+        }
         if useSSHTunnel {
             if sshHost.trimmingCharacters(in: .whitespaces).isEmpty {
                 errors.append("SSH Host is required when using SSH tunnel.")
@@ -122,6 +141,35 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
             }
         }
         return errors
+    }
+}
+
+/// The TLS part of a profile, handed to the database client.
+struct SSLSettings: Sendable, Equatable {
+    var mode: SSLMode
+    /// Effective only for Prefer/Require.
+    var skipVerification = false
+    /// Absolute path of a CA bundle to trust, `nil` for the system store.
+    var rootCertificatePath: String?
+
+    /// Whether the server certificate is checked at all.
+    var verifiesCertificate: Bool {
+        switch mode {
+        case .off: return false
+        case .prefer, .require: return !skipVerification
+        case .verifyCa, .verifyFull: return true
+        }
+    }
+}
+
+extension ConnectionProfile {
+    var sslSettings: SSLSettings {
+        let path = sslRootCertPath.trimmingCharacters(in: .whitespaces)
+        return SSLSettings(
+            mode: sslMode,
+            skipVerification: sslSkipVerification,
+            rootCertificatePath: path.isEmpty ? nil : (path as NSString).expandingTildeInPath
+        )
     }
 }
 

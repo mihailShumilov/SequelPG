@@ -1,0 +1,25 @@
+{
+  "_comment": "Single source of truth for the test cluster. Read by test-db/Makefile, docker-compose (via scripts/write-dotenv.sh) and the Swift test helpers (TestDB.swift). Ports are fixed so they never clash with dev-db (54318).",
+  "host": "127.0.0.1",
+  "database": "sequelpg_test",
+  "admin": { "user": "sp_admin", "password": "sp_admin_pw" },
+  "roles": {
+    "scram":    { "user": "sp_scram",    "password": "scram_pw" },
+    "md5":      { "user": "sp_md5",      "password": "md5_pw" },
+    "trust":    { "user": "sp_trust",    "password": "" },
+    "readonly": { "user": "sp_readonly", "password": "readonly_pw" },
+    "sslonly":  { "user": "sp_sslonly",  "password": "sslonly_pw" }
+  },
+  "servers": {
+    "pg18": { "port": 55418, "major": 18, "ssl": true },
+    "pg16": { "port": 55416, "major": 16, "ssl": false },
+    "pg13": { "port": 55413, "major": 13, "ssl": false }
+  },
+  "ssh": {
+    "port": 55022,
+    "user": "tunnel",
+    "password": "tunnel_pw",
+    "targetHost": "pg18",
+    "targetPort": 5432
+  }
+}

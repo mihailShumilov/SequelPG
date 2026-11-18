@@ -1,11 +1,24 @@
 ---
 name: add-swift-file
-description: Add a new Swift source or test file to SequelPG and register it in SequelPG.xcodeproj/project.pbxproj (the project uses explicit file references, so new files are not picked up automatically). Use whenever creating a new .swift file in SequelPGApp/ or SequelPGTests/.
+description: Add a new Swift source or test file to SequelPG and register it in SequelPG.xcodeproj/project.pbxproj (the project uses explicit file references, so new files are not picked up automatically). Use whenever creating a new .swift file in SequelPGApp/, SequelPGTests/ or SequelPGIntegrationTests/.
 ---
 
 # Add a Swift file to the Xcode project
 
 `project.pbxproj` uses objectVersion 56 with explicit file references. A `.swift` file that exists on disk but isn't registered is silently ignored by the build.
+
+## Quick way: `Scripts/pbxproj.py`
+
+```bash
+Scripts/pbxproj.py add-file SequelPGApp/Utilities/Foo.swift --targets SequelPG
+Scripts/pbxproj.py add-file SequelPGTests/FooTests.swift --targets SequelPGTests
+Scripts/pbxproj.py add-file SequelPGIntegrationTests/FooIntegrationTests.swift --targets SequelPGIntegrationTests
+Scripts/pbxproj.py list-targets
+```
+
+It writes all four entries with fresh ids, creates missing groups for the folder, and refuses a file that is already registered. Then `plutil -lint SequelPG.xcodeproj/project.pbxproj` and build. The manual steps below are the fallback and explain what the script does.
+
+The UI scenario driver (`UITest/`) is a SwiftPM package, not part of the Xcode project — files there need no registration.
 
 ## 1. Create the file
 
