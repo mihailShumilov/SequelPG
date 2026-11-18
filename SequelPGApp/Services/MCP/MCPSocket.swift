@@ -135,18 +135,25 @@ struct LineBuffer {
     static let maxLineLength = 16 * 1024 * 1024
 
     private var buffer = Data()
+    /// Bytes of `buffer` already searched for a newline.
+    private var scanned = 0
 
     /// Appends `chunk` and returns the complete lines it finished (without
     /// the newline, blank lines skipped). `nil` when a line grew too long.
     mutating func append(_ chunk: Data) -> [Data]? {
         buffer.append(chunk)
         var lines: [Data] = []
-        while let newline = buffer.firstIndex(of: 0x0A) {
-            var line = buffer[buffer.startIndex ..< newline]
+        var lineStart = buffer.startIndex
+        var index = buffer.startIndex + scanned
+        while let newline = buffer[index...].firstIndex(of: 0x0A) {
+            var line = buffer[lineStart ..< newline]
             if line.last == 0x0D { line = line.dropLast() }
             if !line.isEmpty { lines.append(Data(line)) }
-            buffer.removeSubrange(buffer.startIndex ... newline)
+            lineStart = newline + 1
+            index = lineStart
         }
+        buffer.removeSubrange(buffer.startIndex ..< lineStart)
+        scanned = buffer.count
         if buffer.count > Self.maxLineLength { return nil }
         return lines
     }

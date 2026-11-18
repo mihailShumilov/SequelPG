@@ -82,11 +82,13 @@ Tools: `list_connections`, `list_databases`, `list_schemas`, `list_objects`, `de
 How it works:
 - The client starts the SequelPG executable with `--mcp-stdio`. That process only forwards messages to the running app over a private Unix socket (`~/Library/Application Support/SequelPG/mcp.sock`), and opens SequelPG in the background when it isn't running. Passwords, SSH tunnels and connections stay inside the app.
 - MCP queries use their own sessions, so they never change the database or interrupt a query in your windows.
-- `run_query` runs exactly one statement in a `READ ONLY` transaction that is always rolled back, with a 30-second `statement_timeout` and up to 1000 rows. Multiple statements, transaction control, `COPY`, `LOAD` and session commands (`SET`, `RESET`, `DISCARD`…) are rejected.
+- `run_query` runs exactly one `SELECT`, `WITH`, `VALUES`, `TABLE`, `SHOW` or `EXPLAIN` statement in a `READ ONLY` transaction that is always rolled back, with a 30-second `statement_timeout` and up to 1000 rows. Everything else (`DO`, `CALL`, `COPY`, `SET`, maintenance commands, several statements at once) is rejected, and advisory locks a query takes are released afterwards.
+- Up to 4 tool calls run at once, and at most 6 database sessions stay open; idle ones close after 5 minutes.
+- The server switch, allowed clients and which connections are shared are stored in the Keychain, so another program can't turn them on by editing SequelPG's preferences.
 
 Security notes:
 - Query results are sent to the assistant's model provider. Share only connections whose data you're allowed to send there.
-- A read-only transaction is not a sandbox: functions with side effects (`pg_terminate_backend`, `dblink_exec`, `lo_export`…) still run. For the strongest guarantee, connect as a role with only `SELECT` privileges.
+- A read-only transaction is not a sandbox: functions with side effects (`pg_terminate_backend`, `dblink_exec`…) still run. Share connections that use a role with only the privileges the assistant needs, such as `SELECT` on your schemas. SequelPG refuses superusers and members of `pg_execute_server_program`, `pg_write_server_files` and `pg_read_server_files`.
 - The approval prompt uses the name the client reports about itself; it guards against surprises, not against software already running under your user account.
 
 ## Architecture Overview

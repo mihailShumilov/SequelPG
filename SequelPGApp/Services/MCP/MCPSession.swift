@@ -134,14 +134,26 @@ actor MCPSession {
         case "tools/list":
             await reply(id: id, result: ["tools": .array(handler.tools.map(\.json))])
         case "tools/call":
-            startToolCall(id: id, params: params)
+            await startToolCall(id: id, params: params)
         default:
             await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.methodNotFound,
                                                  message: "Method not found: \(method)").encodedLine())
         }
     }
 
-    /// Cancels every running tool call (the connection closed).
+    /// Waits for running tool calls to reply (the client sent its last
+    /// request and half-closed the connection).
+    func drain() async {
+        while let task = inFlight.values.first {
+            await task.value
+            // A finished task removes itself; a cancelled one may not have.
+            if let entry = inFlight.first(where: { $0.value == task }) {
+                inFlight.removeValue(forKey: entry.key)
+            }
+        }
+    }
+
+    /// Cancels every running tool call (the server is stopping).
     func close() {
         for task in inFlight.values {
             task.cancel()
@@ -178,21 +190,20 @@ actor MCPSession {
         ]
     }
 
-    private func startToolCall(id: JSONValue, params: [String: JSONValue]) {
+    private func startToolCall(id: JSONValue, params: [String: JSONValue]) async {
+        guard inFlight[id] == nil else {
+            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidRequest,
+                                                 message: "Request id is already in use").encodedLine())
+            return
+        }
         guard let name = params["name"]?.stringValue else {
-            let send = send
-            Task {
-                await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidParams,
-                                                     message: "Missing tool name").encodedLine())
-            }
+            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidParams,
+                                                 message: "Missing tool name").encodedLine())
             return
         }
         guard handler.tools.contains(where: { $0.name == name }) else {
-            let send = send
-            Task {
-                await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidParams,
-                                                     message: "Unknown tool: \(name)").encodedLine())
-            }
+            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidParams,
+                                                 message: "Unknown tool: \(name)").encodedLine())
             return
         }
         let arguments = params["arguments"]?.objectValue ?? [:]

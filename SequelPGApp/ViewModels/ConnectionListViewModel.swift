@@ -37,6 +37,8 @@ enum ConnectionStatus {
         profiles.first { $0.id == selectedProfileId }
     }
 
+    private let mcpAuthorization: MCPAuthorizationStore
+
     init(
         store: ConnectionStore,
         keychainService: KeychainServiceProtocol,
@@ -45,12 +47,20 @@ enum ConnectionStatus {
         self.store = store
         self.keychainService = keychainService
         self.testClientFactory = testClientFactory
-        self.profiles = store.loadAll()
+        mcpAuthorization = MCPAuthorizationStore(keychain: keychainService)
+        reload()
         self.selectedProfileId = profiles.first?.id
     }
 
     func reload() {
-        profiles = store.loadAll()
+        // MCP access shown in the UI is the Keychain copy, the one the MCP
+        // server enforces, not whatever UserDefaults says.
+        let shared = mcpAuthorization.load()
+        profiles = store.loadAll().map { profile in
+            var profile = profile
+            profile.mcpAccess = shared.access(for: profile.id)
+            return profile
+        }
         if selectedProfileId == nil || !profiles.contains(where: { $0.id == selectedProfileId }) {
             selectedProfileId = profiles.first?.id
         }
@@ -58,6 +68,7 @@ enum ConnectionStatus {
 
     func addProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.add(profile)
+        mcpAuthorization.setAccess(profile.mcpAccess, for: profile.id)
         syncKeychain(key: profile.keychainKey, password: password, label: "password")
         syncKeychain(key: profile.sshKeychainKey, password: sshPassword, label: "SSH password")
         reload()
@@ -66,6 +77,9 @@ enum ConnectionStatus {
 
     func updateProfile(_ profile: ConnectionProfile, password: String?, sshPassword: String? = nil) {
         store.update(profile)
+        if mcpAuthorization.load().access(for: profile.id) != profile.mcpAccess {
+            mcpAuthorization.setAccess(profile.mcpAccess, for: profile.id)
+        }
         syncKeychain(key: profile.keychainKey, password: password, label: "password")
         syncKeychain(key: profile.sshKeychainKey, password: sshPassword, label: "SSH password")
         reload()
@@ -76,6 +90,7 @@ enum ConnectionStatus {
             selectedProfileId = nil
         }
         store.delete(id: profile.id)
+        mcpAuthorization.setAccess(.off, for: profile.id)
         // Pass empty string to force delete path regardless of prior state.
         syncKeychain(key: profile.keychainKey, password: "", label: "password")
         syncKeychain(key: profile.sshKeychainKey, password: "", label: "SSH password")

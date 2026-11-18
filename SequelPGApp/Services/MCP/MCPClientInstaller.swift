@@ -109,10 +109,12 @@ enum MCPClientInstaller {
     }
 
     /// Runs `claude mcp add` through a login shell, so the PATH set up in the
-    /// user's shell profile finds the CLI. An existing entry is replaced.
+    /// user's shell profile finds the CLI. An existing entry is replaced only
+    /// once the new command is known to work: add, and if the name is taken,
+    /// remove and add again.
     private static func installInClaudeCode() throws {
         let remove = ["claude", "mcp", "remove", "--scope", "user", serverName].map(shellQuoted).joined(separator: " ")
-        let script = "\(remove) >/dev/null 2>&1; \(claudeCodeCommand)"
+        let script = "\(claudeCodeCommand) 2>/dev/null || { \(remove) >/dev/null 2>&1 && \(claudeCodeCommand); }"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-lc", script]
@@ -134,7 +136,9 @@ enum MCPClientInstaller {
 
     /// Sets `mcpServers.sequelpg` in a JSON config, keeping everything else.
     /// The previous file is kept next to it as `<name>.bak`.
-    static func mergeEntry(into url: URL, fileManager: FileManager = .default) throws {
+    static func mergeEntry(into configURL: URL, fileManager: FileManager = .default) throws {
+        // Write through a symlink (dotfile managers) instead of replacing it.
+        let url = configURL.resolvingSymlinksInPath()
         var root: [String: Any] = [:]
         if let data = fileManager.contents(atPath: url.path), !data.isEmpty {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -146,6 +150,9 @@ enum MCPClientInstaller {
             try fileManager.copyItem(at: url, to: backup)
         } else {
             try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        if let existing = root["mcpServers"], !(existing is [String: Any]) {
+            throw InstallError.invalidConfig(url.path)
         }
         var servers = root["mcpServers"] as? [String: Any] ?? [:]
         servers[serverName] = serverEntry

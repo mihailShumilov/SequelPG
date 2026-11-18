@@ -3,25 +3,23 @@ import Foundation
 /// Checks SQL handed to `runReadOnlyQuery` (the MCP server's query path)
 /// before it reaches the server.
 ///
-/// The real guarantee is the `READ ONLY` transaction that is always rolled
-/// back. This guard closes the gaps that transaction leaves open:
-/// - several statements, or transaction control, could end the read-only
-///   transaction and run later statements outside it;
-/// - `COPY … TO` (including `TO PROGRAM`) is allowed in a read-only
-///   transaction and can write server files or run commands as the server;
-/// - `LOAD`, `CHECKPOINT`, `SET`/`RESET`/`DISCARD` and `PREPARE TRANSACTION`
-///   change server or session state outside the transaction's data.
+/// Two layers keep MCP queries from changing anything:
+/// - this guard admits exactly one statement whose leading keyword is on an
+///   allowlist of query statements (`SELECT`, `WITH`, `VALUES`, `TABLE`,
+///   `SHOW`, `EXPLAIN`). Everything else — `DO`, `CALL`, `COPY`, `LOAD`,
+///   `SET`, transaction control, maintenance commands such as `CLUSTER` or
+///   `REINDEX` that a read-only transaction still allows — is refused;
+/// - the statement runs in a `READ ONLY` transaction that is always rolled
+///   back, which refuses data-modifying CTEs and other writes.
 ///
-/// It is not a sandbox: functions with side effects (`pg_terminate_backend`,
-/// `dblink_exec`, `lo_export`, …) still run. A database role with only the
-/// needed privileges is the dependable boundary.
+/// Neither is a sandbox for functions with side effects
+/// (`pg_terminate_backend`, `dblink_exec`, `lo_export`, …). The MCP server
+/// therefore also refuses roles with superuser or server file/program
+/// privileges, and a role with only the needed privileges is the
+/// dependable boundary.
 enum ReadOnlySQLGuard {
-    /// Leading keywords that are refused.
-    static let blockedKeywords: Set<String> = [
-        "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "ABORT", "SAVEPOINT", "RELEASE", "PREPARE",
-        "COPY", "LOAD", "CHECKPOINT", "SET", "RESET", "DISCARD", "LISTEN", "UNLISTEN", "NOTIFY",
-        "VACUUM", "LOCK",
-    ]
+    /// Leading keywords that are accepted.
+    static let allowedKeywords: Set<String> = ["SELECT", "WITH", "VALUES", "TABLE", "SHOW", "EXPLAIN"]
 
     /// Returns the single statement in `sql`, or throws why it can't run.
     static func validate(_ sql: String) throws -> String {
@@ -34,13 +32,19 @@ enum ReadOnlySQLGuard {
                 "Run one statement at a time (got \(statements.count)).",
             ])
         }
-        if let keyword = leadingKeyword(of: statement), blockedKeywords.contains(keyword) {
+        guard let keyword = leadingKeyword(of: statement), allowedKeywords.contains(keyword) else {
+            let shown = leadingKeyword(of: statement) ?? "This"
             throw AppError.validationFailed([
-                "\(keyword) statements are not allowed: queries run in a read-only transaction.",
+                "\(shown) statements are not allowed. Only SELECT, WITH, VALUES, TABLE, SHOW and EXPLAIN run, "
+                    + "in a read-only transaction.",
             ])
         }
         return statement
     }
+
+    /// PostgreSQL's whitespace (space, tab, LF, CR, FF, VT). Other Unicode
+    /// spaces are identifier characters to PostgreSQL, not separators.
+    private static let pgWhitespace: Set<Unicode.Scalar> = [" ", "\t", "\n", "\r", "\u{0C}", "\u{0B}"]
 
     /// The first keyword of `statement`, uppercased, after leading
     /// whitespace, comments and opening parentheses.
@@ -49,10 +53,11 @@ enum ReadOnlySQLGuard {
         var index = 0
         while index < scalars.count {
             let c = scalars[index]
-            if CharacterSet.whitespacesAndNewlines.contains(c) || c == "(" {
+            if pgWhitespace.contains(c) || c == "(" {
                 index += 1
             } else if c == "-", index + 1 < scalars.count, scalars[index + 1] == "-" {
-                while index < scalars.count, scalars[index] != "\n" {
+                // PostgreSQL ends a line comment at CR as well as LF.
+                while index < scalars.count, scalars[index] != "\n", scalars[index] != "\r" {
                     index += 1
                 }
             } else if c == "/", index + 1 < scalars.count, scalars[index + 1] == "*" {

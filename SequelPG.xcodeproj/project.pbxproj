@@ -152,6 +152,9 @@
 		F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */; };
 		3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */; };
 		17135B5773774B1EB919A13B /* MCPClientInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */; };
+		0AA8F49F5BC84D6B837A9A69 /* MCPServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657B061FBE704A7FA5B8D09C /* MCPServerTests.swift */; };
+		EB23774040C74599A842BC99 /* MCPReadOnlyQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58923BCF4074F5ABDE1B3F7 /* MCPReadOnlyQueryTests.swift */; };
+		A66643A2445B418C833FDA54 /* MCPAuthorizationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FE7713C90E4C12A03F203C /* MCPAuthorizationStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -320,6 +323,9 @@
 		E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlySQLGuard.swift; sourceTree = "<group>"; };
 		4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsPane.swift; sourceTree = "<group>"; };
 		C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPClientInstaller.swift; sourceTree = "<group>"; };
+		657B061FBE704A7FA5B8D09C /* MCPServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServerTests.swift; sourceTree = "<group>"; };
+		A58923BCF4074F5ABDE1B3F7 /* MCPReadOnlyQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPReadOnlyQueryTests.swift; sourceTree = "<group>"; };
+		D8FE7713C90E4C12A03F203C /* MCPAuthorizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPAuthorizationStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -541,6 +547,7 @@
 				D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */,
 				454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */,
 				70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */,
+				657B061FBE704A7FA5B8D09C /* MCPServerTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -569,6 +576,7 @@
 				B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */,
 				76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */,
 				3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */,
+				A58923BCF4074F5ABDE1B3F7 /* MCPReadOnlyQueryTests.swift */,
 			);
 			path = SequelPGIntegrationTests;
 			sourceTree = "<group>";
@@ -586,6 +594,7 @@
 				EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */,
 				BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */,
 				C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */,
+				D8FE7713C90E4C12A03F203C /* MCPAuthorizationStore.swift */,
 			);
 			path = MCP;
 			sourceTree = "<group>";
@@ -814,6 +823,7 @@
 				F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */,
 				3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */,
 				17135B5773774B1EB919A13B /* MCPClientInstaller.swift in Sources */,
+				A66643A2445B418C833FDA54 /* MCPAuthorizationStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -848,6 +858,7 @@
 				183C254613EE47098A5B0728 /* SQLStatementSplitterTests.swift in Sources */,
 				EB10F1393FE944748B047BEF /* ConnectionSSLTests.swift in Sources */,
 				5F00B0604FAA43A6AAAF0CF7 /* QueryOutputFormattingTests.swift in Sources */,
+				0AA8F49F5BC84D6B837A9A69 /* MCPServerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -866,6 +877,7 @@
 				FE7102F0EAB34FF9AB9A653B /* DropObjectIntegrationTests.swift in Sources */,
 				DE87A925268A4E518600A1D2 /* AppViewModelIntegrationTests.swift in Sources */,
 				DED43A3EA5FC4BFC8CE2EC96 /* TransferIntegrationTests.swift in Sources */,
+				EB23774040C74599A842BC99 /* MCPReadOnlyQueryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

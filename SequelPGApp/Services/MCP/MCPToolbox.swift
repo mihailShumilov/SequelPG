@@ -4,11 +4,18 @@ import Foundation
 /// connections whose MCP access is turned on are visible.
 struct MCPToolbox: MCPToolHandling {
     let store: ConnectionStoreProtocol
+    /// Which connections are shared: the Keychain copy, not the profile's
+    /// `mcpAccess` mirror in UserDefaults.
+    let authorization: MCPAuthorizationStore
     let pool: MCPSessionPool
     /// Server-side `statement_timeout` for run_query / explain_query.
     var queryTimeout: TimeInterval = 30
     /// Asks the user, once per client, whether it may use the tools.
     var authorize: @Sendable (MCPClientInfo?) async -> Bool = { _ in true }
+
+    /// Tool calls running at once, across all clients; the rest wait.
+    static let maxConcurrentCalls = 4
+    private let limiter = AsyncLimiter(limit: MCPToolbox.maxConcurrentCalls)
 
     static let defaultMaxRows = 200
     static let maxRowsLimit = 1000
@@ -21,6 +28,9 @@ struct MCPToolbox: MCPToolHandling {
     }
 
     func callTool(_ name: String, arguments: [String: JSONValue], client: MCPClientInfo?) async -> MCPToolResult {
+        // Bounds the connections an assistant firing calls in parallel can open.
+        await limiter.acquire()
+        defer { Task { await limiter.release() } }
         guard await authorize(client) else {
             return .error(
                 "The user did not allow \(MCPServerController.normalizedName(client)) to use SequelPG. "
@@ -180,7 +190,12 @@ struct MCPToolbox: MCPToolHandling {
 
     /// Profiles MCP clients may use.
     private func sharedProfiles() -> [ConnectionProfile] {
-        store.loadAll().filter { $0.mcpAccess != .off }
+        let shared = authorization.load()
+        return store.loadAll().compactMap { profile in
+            var profile = profile
+            profile.mcpAccess = shared.access(for: profile.id)
+            return profile.mcpAccess == .off ? nil : profile
+        }
     }
 
     private func listConnectionsResult() -> MCPToolResult {
@@ -256,7 +271,17 @@ struct MCPToolbox: MCPToolHandling {
         let indexes = try await client.listIndexes(schema: schema, table: table)
         let constraints = try await client.listConstraints(schema: schema, table: table)
         let triggers = try await client.listTriggers(schema: schema, table: table)
-        let rowCount = try? await client.getApproximateRowCount(schema: schema, table: table)
+        // The planner's estimate only. `getApproximateRowCount` falls back
+        // to COUNT(*) outside a read-only transaction, which would run a
+        // view's functions read-write and scan without a time limit.
+        let estimate = try? await client.runReadOnlyQuery(
+            "SELECT c.reltuples::bigint AS n FROM pg_catalog.pg_class c "
+                + "JOIN pg_catalog.pg_namespace s ON s.oid = c.relnamespace "
+                + "WHERE s.nspname = \(quoteLiteral(.text(schema))) AND c.relname = \(quoteLiteral(.text(table)))",
+            maxRows: 1, timeout: 5
+        )
+        var rowCount: Int64?
+        if case let .text(value)? = estimate?.rows.first?.first { rowCount = Int64(value) }
 
         var lines = ["\(schema).\(table)" + (rowCount.map { $0 >= 0 ? " (~\($0) rows)" : "" } ?? "")]
         lines.append("Columns:")
@@ -354,6 +379,32 @@ private struct Arguments {
 
     func bool(_ key: String) -> Bool? {
         values[key]?.boolValue ?? values[key]?.stringValue.flatMap { Bool($0.lowercased()) }
+    }
+}
+
+/// A FIFO counting semaphore for async code.
+actor AsyncLimiter {
+    private let limit: Int
+    private var running = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(limit: Int) { self.limit = limit }
+
+    func acquire() async {
+        if running < limit {
+            running += 1
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            running -= 1
+        } else {
+            // The slot passes straight to the next waiter.
+            waiters.removeFirst().resume()
+        }
     }
 }
 

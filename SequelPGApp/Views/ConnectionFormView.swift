@@ -197,7 +197,7 @@ struct ConnectionSettingsForm: View {
             } footer: {
                 Text(form.mcpAccess == .off
                     ? "AI assistants connected through MCP (Claude, Cursor…) can't see this connection."
-                    : "AI assistants connected through MCP can browse the schema and run read-only queries. Query results are sent to the assistant's model provider. Turn the server on in Settings → MCP.")
+                    : "AI assistants connected through MCP can browse the schema and run SELECT queries in a read-only transaction. Results are sent to the assistant's model provider. Connect as a role with only the privileges the assistant needs; superusers are refused. Turn the server on in Settings → MCP.")
             }
         }
         .formStyle(.grouped)

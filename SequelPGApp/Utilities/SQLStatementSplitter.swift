@@ -43,7 +43,8 @@ enum SQLStatementSplitter {
 
             // Comments.
             if c == "-", next == "-" {
-                while i < chars.count, chars[i] != "\n" { i += 1 }
+                // Like PostgreSQL's lexer, a line comment ends at CR or LF.
+                while i < chars.count, chars[i] != "\n", chars[i] != "\r" { i += 1 }
                 continue
             }
             if c == "/", next == "*" {

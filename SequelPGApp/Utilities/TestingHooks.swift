@@ -145,6 +145,7 @@ enum TestingHooks {
             if let sshPassword = seed.sshPassword, !sshPassword.isEmpty {
                 try? keychainService.save(password: sshPassword, forKey: seed.profile.sshKeychainKey)
             }
+            MCPAuthorizationStore(keychain: keychainService).setAccess(seed.profile.mcpAccess, for: seed.profile.id)
         }
         #endif
         return store
