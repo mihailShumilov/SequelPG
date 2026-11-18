@@ -39,6 +39,10 @@ protocol PostgresClientProtocol: Sendable {
     /// external tools (pg_dump/psql). `nil` when not connected.
     func currentEndpoint() async -> PGConnectionEndpoint?
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
+    /// Runs exactly one statement inside a `READ ONLY` transaction that is
+    /// always rolled back. Rejects scripts, transaction control, COPY and
+    /// session commands (see `ReadOnlySQLGuard`). Used by the MCP server.
+    func runReadOnlyQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
     func explainQuery(_ sql: String, analyze: Bool, buffers: Bool, timeout: TimeInterval) async throws -> QueryPlan
     func listSchemas() async throws -> [String]
     func listTables(schema: String) async throws -> [DBObject]
@@ -387,6 +391,60 @@ actor DatabaseClient: PostgresClientProtocol {
             throw AppError.queryFailed("There is no SQL statement to run.")
         }
         return try await execute(statements, maxRows: maxRows, timeout: timeout, truncateCells: true)
+    }
+
+    func runReadOnlyQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult {
+        let statement = try ReadOnlySQLGuard.validate(sql)
+        guard let client else { throw AppError.notConnected }
+        let start = CFAbsoluteTimeGetCurrent()
+        do {
+            return try await client.withConnection { connection in
+                try await connection.query("BEGIN READ ONLY", logger: connection.logger)
+                do {
+                    // Transaction-scoped, so it can't outlive this call on
+                    // the pooled connection.
+                    if timeout > 0 {
+                        try await connection.query(
+                            PostgresQuery(unsafeSQL: "SET LOCAL statement_timeout = \(Int(timeout * 1000))"),
+                            logger: connection.logger
+                        )
+                    }
+                    let result = try await Self.runQueryOnConnection(
+                        [statement],
+                        maxRows: maxRows,
+                        timeout: 0,
+                        truncateCells: true,
+                        start: start,
+                        connection: connection,
+                        cancelBackend: { pid in Self.cancelBackend(pid, using: client) }
+                    )
+                    await Self.rollback(connection)
+                    return result
+                } catch {
+                    await Self.rollback(connection)
+                    throw error
+                }
+            }
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw mapQueryError(error, from: client)
+        }
+    }
+
+    /// Ends the transaction even when the calling task is cancelled: the
+    /// future-based query is not cancellation-aware, so the connection never
+    /// goes back to the pool inside an open transaction.
+    private static func rollback(_ connection: PostgresConnection) async {
+        guard !connection.isClosed else { return }
+        let future: EventLoopFuture<PostgresQueryResult> = connection.query(
+            PostgresQuery(unsafeSQL: "ROLLBACK"),
+            logger: connection.logger
+        )
+        do {
+            _ = try await Self.result(of: future, unlessClosed: connection)
+        } catch {
+            Log.db.error("ROLLBACK failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Shared executor behind `runQuery` and `explainQuery`. Runs `statements`

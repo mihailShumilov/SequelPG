@@ -109,6 +109,13 @@ actor MockDatabaseClient: PostgresClientProtocol {
         return stubbedQueryResult
     }
 
+    var lastReadOnlySQL: String?
+
+    func runReadOnlyQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult {
+        lastReadOnlySQL = sql
+        return try await runQuery(sql, maxRows: maxRows, timeout: timeout)
+    }
+
     var explainQueryHandler: (@Sendable (String, Bool, Bool) throws -> QueryPlan)?
     var lastExplainSQL: String?
     var lastExplainAnalyze: Bool?

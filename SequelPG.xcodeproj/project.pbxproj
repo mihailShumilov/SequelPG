@@ -147,6 +147,9 @@
 		5E9E9EB89A8C4DA387AF8096 /* MCPStdioBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */; };
 		3FBD7911E1414D10B0860500 /* MCPToolbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9584DB7C78F7489ABB988951 /* MCPToolbox.swift */; };
 		298CA0FB7A25478C87FB29B4 /* MCPServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AF09872A37417EBB67C74C /* MCPServerController.swift */; };
+		6124E3A54A434932B0B5AD4B /* MCPSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */; };
+		0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */; };
+		F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -310,6 +313,9 @@
 		AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPStdioBridge.swift; sourceTree = "<group>"; };
 		9584DB7C78F7489ABB988951 /* MCPToolbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolbox.swift; sourceTree = "<group>"; };
 		54AF09872A37417EBB67C74C /* MCPServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServerController.swift; sourceTree = "<group>"; };
+		EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSessionPool.swift; sourceTree = "<group>"; };
+		BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPResultFormatter.swift; sourceTree = "<group>"; };
+		E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlySQLGuard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -485,6 +491,7 @@
 				E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */,
 				1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */,
 				B7656793BE484B14B1431FD5 /* SQLStatementSplitter.swift */,
+				E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -571,6 +578,8 @@
 				AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */,
 				9584DB7C78F7489ABB988951 /* MCPToolbox.swift */,
 				54AF09872A37417EBB67C74C /* MCPServerController.swift */,
+				EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */,
+				BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */,
 			);
 			path = MCP;
 			sourceTree = "<group>";
@@ -794,6 +803,9 @@
 				5E9E9EB89A8C4DA387AF8096 /* MCPStdioBridge.swift in Sources */,
 				3FBD7911E1414D10B0860500 /* MCPToolbox.swift in Sources */,
 				298CA0FB7A25478C87FB29B4 /* MCPServerController.swift in Sources */,
+				6124E3A54A434932B0B5AD4B /* MCPSessionPool.swift in Sources */,
+				0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */,
+				F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

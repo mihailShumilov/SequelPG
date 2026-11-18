@@ -8,7 +8,8 @@ import Observation
 final class MCPServerController {
     static let shared = MCPServerController(
         defaults: TestingHooks.userDefaults,
-        store: ConnectionStore(defaults: TestingHooks.userDefaults)
+        store: ConnectionStore(defaults: TestingHooks.userDefaults),
+        keychain: TestingHooks.keychainService
     )
 
     enum Status: Equatable {
@@ -21,6 +22,7 @@ final class MCPServerController {
 
     private let defaults: UserDefaults
     private let store: ConnectionStoreProtocol
+    private let pool: MCPSessionPool
     private var server: MCPSocketServer?
 
     private(set) var status: Status = .stopped
@@ -34,9 +36,10 @@ final class MCPServerController {
         }
     }
 
-    init(defaults: UserDefaults, store: ConnectionStoreProtocol) {
+    init(defaults: UserDefaults, store: ConnectionStoreProtocol, keychain: KeychainServiceProtocol) {
         self.defaults = defaults
         self.store = store
+        pool = MCPSessionPool(keychain: keychain)
         isEnabled = defaults.bool(forKey: Self.enabledKey) || TestingHooks.forcesMCPEnabled
     }
 
@@ -44,7 +47,7 @@ final class MCPServerController {
     func apply() {
         if isEnabled {
             guard server == nil else { return }
-            let server = MCPSocketServer(handler: MCPToolbox(store: store))
+            let server = MCPSocketServer(handler: MCPToolbox(store: store, pool: pool))
             do {
                 try server.start()
                 self.server = server
@@ -57,6 +60,8 @@ final class MCPServerController {
             server?.stop()
             server = nil
             status = .stopped
+            let pool = pool
+            Task { await pool.closeAll() }
         }
     }
 
