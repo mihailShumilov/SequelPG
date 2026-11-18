@@ -88,7 +88,7 @@ How it works:
 
 Security notes:
 - Query results are sent to the assistant's model provider. Share only connections whose data you're allowed to send there.
-- A read-only transaction is not a sandbox: functions with side effects (`pg_terminate_backend`, `dblink_exec`…) still run. Share connections that use a role with only the privileges the assistant needs, such as `SELECT` on your schemas. SequelPG refuses superusers and members of `pg_execute_server_program`, `pg_write_server_files` and `pg_read_server_files`.
+- A read-only transaction is not a sandbox: functions with side effects (`pg_terminate_backend`, `dblink_exec`…) still run. Share connections that use a role with only the privileges the assistant needs, such as `SELECT` on your schemas. SequelPG refuses superusers and members of `pg_execute_server_program`, `pg_write_server_files` and `pg_read_server_files`, unless you set the connection's MCP Access to **Read-only, allow superuser**. That option is meant for local development databases: an assistant can then do anything the role can.
 - The approval prompt uses the name the client reports about itself; it guards against surprises, not against software already running under your user account.
 
 ## Architecture Overview

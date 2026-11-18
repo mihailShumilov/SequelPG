@@ -61,7 +61,9 @@ final class MCPServerController {
     }
 
     /// Number of MCP clients connected right now.
-    var connectedClientCount: Int { server?.clientCount ?? 0 }
+    var connectedClientCount: Int {
+        server?.clientCount ?? 0
+    }
 
     /// Starts or stops the listener to match `isEnabled`.
     func apply() {
@@ -102,9 +104,15 @@ final class MCPServerController {
     /// approved client.
     func authorize(_ client: MCPClientInfo?) async -> Bool {
         let name = Self.normalizedName(client)
-        if approvedClients.contains(name) || TestingHooks.forcesMCPEnabled { return true }
-        if deniedClients.contains(name) { return false }
-        if let pending = pendingApprovals[name] { return await pending.value }
+        if approvedClients.contains(name) || TestingHooks.forcesMCPEnabled {
+            return true
+        }
+        if deniedClients.contains(name) {
+            return false
+        }
+        if let pending = pendingApprovals[name] {
+            return await pending.value
+        }
 
         let previous = lastPrompt
         let task = Task { @MainActor in
@@ -117,7 +125,9 @@ final class MCPServerController {
         pendingApprovals[name] = nil
         if allowed {
             let state = authorization.update { state in
-                if !state.approvedClients.contains(name) { state.approvedClients.append(name) }
+                if !state.approvedClients.contains(name) {
+                    state.approvedClients.append(name)
+                }
             }
             approvedClients = state.approvedClients.sorted()
         } else {
@@ -148,11 +158,11 @@ final class MCPServerController {
         let alert = NSAlert()
         alert.messageText = "Allow “\(name)” to use your SequelPG connections?"
         alert.informativeText = """
-            An AI assistant connected through MCP wants to browse the schemas and run read-only queries \
-            on the connections you shared with MCP. Query results are sent to the assistant's model provider.
+        An AI assistant connected through MCP wants to browse the schemas and run read-only queries \
+        on the connections you shared with MCP. Query results are sent to the assistant's model provider.
 
-            You can revoke access in Settings → MCP.
-            """
+        You can revoke access in Settings → MCP.
+        """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Don’t Allow")

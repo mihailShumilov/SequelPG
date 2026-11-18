@@ -1,5 +1,5 @@
-import XCTest
 @testable import SequelPG
+import XCTest
 
 // MARK: - ReadOnlySQLGuard
 
@@ -14,9 +14,15 @@ final class ReadOnlySQLGuardTests: XCTestCase {
     }
 
     func testAllowsSingleReadStatements() throws {
-        for sql in ["SELECT 1", "select * from t;", "WITH a AS (SELECT 1) SELECT * FROM a", "EXPLAIN SELECT 1",
-                    "VALUES (1), (2)", "SHOW search_path", "TABLE people"]
-        {
+        for sql in [
+            "SELECT 1",
+            "select * from t;",
+            "WITH a AS (SELECT 1) SELECT * FROM a",
+            "EXPLAIN SELECT 1",
+            "VALUES (1), (2)",
+            "SHOW search_path",
+            "TABLE people",
+        ] {
             XCTAssertNoThrow(try ReadOnlySQLGuard.validate(sql), sql)
         }
         XCTAssertEqual(try ReadOnlySQLGuard.validate("SELECT 1;"), "SELECT 1")
@@ -33,12 +39,34 @@ final class ReadOnlySQLGuardTests: XCTestCase {
     }
 
     func testRejectsEverythingButQueries() {
-        for sql in ["COMMIT", "begin", "ROLLBACK", "start transaction read write", "end", "abort", "savepoint s",
-                    "copy (select 1) to program 'id'", "COPY t TO '/tmp/x'", "LOAD 'plugin'", "SET ROLE admin",
-                    "reset all", "DISCARD ALL", "prepare transaction 'x'", "checkpoint", "/* x */ commit",
-                    "notify chan", "lock table t", "vacuum t", "DO $$BEGIN NULL; END$$", "CALL p()",
-                    "CLUSTER t", "REINDEX TABLE t", "ANALYZE t", "INSERT INTO t VALUES (1)", "DELETE FROM t"]
-        {
+        for sql in [
+            "COMMIT",
+            "begin",
+            "ROLLBACK",
+            "start transaction read write",
+            "end",
+            "abort",
+            "savepoint s",
+            "copy (select 1) to program 'id'",
+            "COPY t TO '/tmp/x'",
+            "LOAD 'plugin'",
+            "SET ROLE admin",
+            "reset all",
+            "DISCARD ALL",
+            "prepare transaction 'x'",
+            "checkpoint",
+            "/* x */ commit",
+            "notify chan",
+            "lock table t",
+            "vacuum t",
+            "DO $$BEGIN NULL; END$$",
+            "CALL p()",
+            "CLUSTER t",
+            "REINDEX TABLE t",
+            "ANALYZE t",
+            "INSERT INTO t VALUES (1)",
+            "DELETE FROM t",
+        ] {
             XCTAssertThrowsError(try ReadOnlySQLGuard.validate(sql), sql)
         }
     }
@@ -119,7 +147,9 @@ private actor Outbox {
     private(set) var messages: [JSONValue] = []
 
     func append(_ data: Data) {
-        if let value = try? JSONDecoder().decode(JSONValue.self, from: data) { messages.append(value) }
+        if let value = try? JSONDecoder().decode(JSONValue.self, from: data) {
+            messages.append(value)
+        }
     }
 
     func waitForCount(_ count: Int, timeout: TimeInterval = 2) async -> [JSONValue] {
@@ -245,8 +275,7 @@ final class MCPToolboxTests: XCTestCase {
     }
 
     private func makeToolbox(authorize: @escaping @Sendable (MCPClientInfo?) async -> Bool = { _ in true })
-        -> MCPToolbox
-    {
+        -> MCPToolbox {
         let mock = mock!
         let pool = MCPSessionPool(keychain: keychain) { mock }
         return MCPToolbox(store: store, authorization: authorization, pool: pool, authorize: authorize)
@@ -273,11 +302,21 @@ final class MCPToolboxTests: XCTestCase {
     func testPrivilegedRoleIsRefused() async {
         await mock.setRunQueryHandler { sql in
             if sql.contains("rolsuper") {
-                return QueryResult(columns: ["role", "privileged"], rows: [[.text("postgres"), .text("true")]],
-                                   executionTime: 0, rowsAffected: nil, isTruncated: false)
+                return QueryResult(
+                    columns: ["role", "privileged"],
+                    rows: [[.text("postgres"), .text("true")]],
+                    executionTime: 0,
+                    rowsAffected: nil,
+                    isTruncated: false
+                )
             }
-            return QueryResult(columns: ["n"], rows: [[.text("1")]], executionTime: 0, rowsAffected: nil,
-                               isTruncated: false)
+            return QueryResult(
+                columns: ["n"],
+                rows: [[.text("1")]],
+                executionTime: 0,
+                rowsAffected: nil,
+                isTruncated: false
+            )
         }
         let result = await makeToolbox().callTool(
             "run_query", arguments: ["connection": "Shared", "sql": "SELECT 1"], client: nil
@@ -286,6 +325,31 @@ final class MCPToolboxTests: XCTestCase {
         XCTAssertTrue(result.text.contains("\"postgres\" is a superuser"), result.text)
         let disconnects = await mock.disconnectCallCount
         XCTAssertEqual(disconnects, 1)
+    }
+
+    func testAllowSuperuserSkipsTheRoleCheck() async {
+        authorization.setAccess(.readOnlyAnyRole, for: shared.id)
+        await mock.setRunQueryHandler { sql in
+            XCTAssertFalse(sql.contains("rolsuper"), "the role check ran despite readOnlyAnyRole")
+            return QueryResult(
+                columns: ["n"],
+                rows: [[.text("1")]],
+                executionTime: 0,
+                rowsAffected: nil,
+                isTruncated: false
+            )
+        }
+        let result = await makeToolbox().callTool(
+            "run_query", arguments: ["connection": "Shared", "sql": "SELECT 1"], client: nil
+        )
+        XCTAssertFalse(result.isError, result.text)
+    }
+
+    func testUnknownAccessValueDecodesAsOff() throws {
+        let decoded = try JSONDecoder().decode([MCPAccess].self, from: Data(#"["readOnlyAnyRole","writeAll"]"#.utf8))
+        XCTAssertEqual(decoded, [.readOnlyAnyRole, .off])
+        XCTAssertFalse(MCPAccess.readOnlyAnyRole.refusesPrivilegedRoles)
+        XCTAssertTrue(MCPAccess.readOnly.refusesPrivilegedRoles)
     }
 
     func testHiddenConnectionIsUnknown() async {
@@ -343,7 +407,11 @@ final class MCPToolboxTests: XCTestCase {
         _ = await toolbox.callTool("list_schemas", arguments: ["connection": "Shared"], client: nil)
         var connects = await mock.connectCallCount
         XCTAssertEqual(connects, 1)
-        _ = await toolbox.callTool("list_schemas", arguments: ["connection": "Shared", "database": "other"], client: nil)
+        _ = await toolbox.callTool(
+            "list_schemas",
+            arguments: ["connection": "Shared", "database": "other"],
+            client: nil
+        )
         connects = await mock.connectCallCount
         let database = await mock.lastConnectedProfile?.database
         XCTAssertEqual(connects, 2)
@@ -355,16 +423,26 @@ final class MCPToolboxTests: XCTestCase {
 
 final class MCPResultFormatterTests: XCTestCase {
     func testEscapesSeparatorsAndNewlines() {
-        let result = QueryResult(columns: ["a|b", "c"], rows: [[.text("x|y\nz"), .null]], executionTime: 0,
-                                 rowsAffected: nil, isTruncated: false)
+        let result = QueryResult(
+            columns: ["a|b", "c"],
+            rows: [[.text("x|y\nz"), .null]],
+            executionTime: 0,
+            rowsAffected: nil,
+            isTruncated: false
+        )
         let text = MCPResultFormatter.format(result, maxRowsRequested: 10)
         XCTAssertTrue(text.hasPrefix("a\\|b | c\nx\\|y\\nz | NULL\n"), text)
         XCTAssertTrue(text.contains("1 row"))
     }
 
     func testMentionsRowLimitAndCommandResults() {
-        let truncated = QueryResult(columns: ["n"], rows: [[.text("1")]], executionTime: 0, rowsAffected: nil,
-                                    isTruncated: true)
+        let truncated = QueryResult(
+            columns: ["n"],
+            rows: [[.text("1")]],
+            executionTime: 0,
+            rowsAffected: nil,
+            isTruncated: true
+        )
         XCTAssertTrue(MCPResultFormatter.format(truncated, maxRowsRequested: 1).contains("max_rows=1"))
         let command = QueryResult(columns: [], rows: [], executionTime: 0, rowsAffected: 3, isTruncated: false)
         XCTAssertTrue(MCPResultFormatter.format(command, maxRowsRequested: 1).hasPrefix("OK, 3 rows affected"))
@@ -693,10 +771,14 @@ private actor Counter {
         peak = max(peak, current)
     }
 
-    func leave() { current -= 1 }
+    func leave() {
+        current -= 1
+    }
 }
 
 private actor Created {
     private(set) var clients: [MockDatabaseClient] = []
-    func add(_ client: MockDatabaseClient) { clients.append(client) }
+    func add(_ client: MockDatabaseClient) {
+        clients.append(client)
+    }
 }

@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - **MCP server for AI assistants.** Claude Code, Claude Desktop, Cursor and other Model Context Protocol clients can browse schemas and run read-only queries on the connections you share. Turn it on in **Settings → MCP**, set **MCP Access** to Read-only on each connection the assistant may use, and click **Add** next to your client. Tools: list connections, databases, schemas and objects; describe a table; get an object's DDL; run a query; explain a query.
-- **Queries from assistants are read-only.** Only one `SELECT`, `WITH`, `VALUES`, `TABLE`, `SHOW` or `EXPLAIN` statement runs per call, in a read-only transaction that is always rolled back, with a 30-second timeout and a row limit. Superuser roles and roles that can run programs or read and write files on the server are refused; share connections that use a role with only the privileges the assistant needs.
+- **Queries from assistants are read-only.** Only one `SELECT`, `WITH`, `VALUES`, `TABLE`, `SHOW` or `EXPLAIN` statement runs per call, in a read-only transaction that is always rolled back, with a 30-second timeout and a row limit. Superuser roles and roles that can run programs or read and write files on the server are refused; share connections that use a role with only the privileges the assistant needs. For local development databases, a connection can opt in with **Read-only, allow superuser**.
 - **SequelPG asks before a new assistant uses your connections**, and lists the allowed ones in Settings, where you can revoke them. Connections stay off for assistants until you share them. Passwords never leave SequelPG, and the sharing settings are kept in the Keychain.
 
 ### Fixed

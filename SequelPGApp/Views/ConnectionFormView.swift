@@ -195,9 +195,19 @@ struct ConnectionSettingsForm: View {
             } header: {
                 Text("AI Assistants")
             } footer: {
-                Text(form.mcpAccess == .off
-                    ? "AI assistants connected through MCP (Claude, Cursor…) can't see this connection."
-                    : "AI assistants connected through MCP can browse the schema and run SELECT queries in a read-only transaction. Results are sent to the assistant's model provider. Connect as a role with only the privileges the assistant needs; superusers are refused. Turn the server on in Settings → MCP.")
+                switch form.mcpAccess {
+                case .off:
+                    Text("AI assistants connected through MCP (Claude, Cursor…) can't see this connection.")
+                case .readOnly:
+                    Text("AI assistants connected through MCP can browse the schema and run SELECT queries in a read-only transaction. Results are sent to the assistant's model provider. Connect as a role with only the privileges the assistant needs; superusers are refused. Turn the server on in Settings → MCP.")
+                case .readOnlyAnyRole:
+                    Label {
+                        Text("Superusers are allowed. A read-only transaction doesn't stop a superuser's functions from changing data, ending sessions or running programs on the database server, so an assistant can do anything this role can. Use only for local development databases. Turn the server on in Settings → MCP.")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                    }
+                }
             }
         }
         .formStyle(.grouped)

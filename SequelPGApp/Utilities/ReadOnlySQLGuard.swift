@@ -70,7 +70,9 @@ enum ReadOnlySQLGuard {
                     } else if scalars[index] == "*", index + 1 < scalars.count, scalars[index + 1] == "/" {
                         depth -= 1
                         index += 2
-                        if depth == 0 { break }
+                        if depth == 0 {
+                            break
+                        }
                     } else {
                         index += 1
                     }

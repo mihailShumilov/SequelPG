@@ -24,9 +24,9 @@ enum JSONValue: Sendable, Equatable {
 
     var intValue: Int? {
         switch self {
-        case let .int(value): return value
-        case let .double(value) where value.rounded() == value && abs(value) < 1e15: return Int(value)
-        default: return nil
+        case let .int(value): value
+        case let .double(value) where value.rounded() == value && abs(value) < 1e15: Int(value)
+        default: nil
         }
     }
 
@@ -41,7 +41,9 @@ enum JSONValue: Sendable, Equatable {
     }
 
     var isNull: Bool {
-        if case .null = self { return true }
+        if case .null = self {
+            return true
+        }
         return false
     }
 }
@@ -83,17 +85,30 @@ extension JSONValue: Codable {
 }
 
 extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral,
-    ExpressibleByArrayLiteral, ExpressibleByDictionaryLiteral, ExpressibleByNilLiteral
-{
-    init(stringLiteral value: String) { self = .string(value) }
-    init(integerLiteral value: Int) { self = .int(value) }
-    init(booleanLiteral value: Bool) { self = .bool(value) }
-    init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
+    ExpressibleByArrayLiteral, ExpressibleByDictionaryLiteral, ExpressibleByNilLiteral {
+    init(stringLiteral value: String) {
+        self = .string(value)
+    }
+
+    init(integerLiteral value: Int) {
+        self = .int(value)
+    }
+
+    init(booleanLiteral value: Bool) {
+        self = .bool(value)
+    }
+
+    init(arrayLiteral elements: JSONValue...) {
+        self = .array(elements)
+    }
+
     init(dictionaryLiteral elements: (String, JSONValue)...) {
         self = .object(Dictionary(elements, uniquingKeysWith: { _, last in last }))
     }
 
-    init(nilLiteral _: ()) { self = .null }
+    init(nilLiteral _: ()) {
+        self = .null
+    }
 }
 
 extension JSONValue {

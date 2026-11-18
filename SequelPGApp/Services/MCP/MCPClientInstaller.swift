@@ -11,7 +11,9 @@ enum MCPClientInstaller {
         Bundle.main.executableURL?.path ?? "/Applications/SequelPG.app/Contents/MacOS/SequelPG"
     }
 
-    static var bridgeArguments: [String] { [MCPStdioBridge.argument] }
+    static var bridgeArguments: [String] {
+        [MCPStdioBridge.argument]
+    }
 
     /// macOS runs a downloaded app from a randomized read-only location until
     /// it is moved; a path written from there breaks on the next launch.
@@ -24,13 +26,15 @@ enum MCPClientInstaller {
         case claudeDesktop
         case cursor
 
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
 
         var displayName: String {
             switch self {
-            case .claudeCode: return "Claude Code"
-            case .claudeDesktop: return "Claude Desktop"
-            case .cursor: return "Cursor"
+            case .claudeCode: "Claude Code"
+            case .claudeDesktop: "Claude Desktop"
+            case .cursor: "Cursor"
             }
         }
 
@@ -72,7 +76,9 @@ enum MCPClientInstaller {
 
     static func shellQuoted(_ value: String) -> String {
         let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_./=:@"))
-        if !value.isEmpty, value.unicodeScalars.allSatisfy({ safe.contains($0) }) { return value }
+        if !value.isEmpty, value.unicodeScalars.allSatisfy({ safe.contains($0) }) {
+            return value
+        }
         return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
@@ -85,11 +91,11 @@ enum MCPClientInstaller {
         var errorDescription: String? {
             switch self {
             case let .claudeCLIFailed(output):
-                return output.isEmpty
+                output.isEmpty
                     ? "The claude command failed. Is Claude Code installed?"
                     : output
             case let .invalidConfig(path):
-                return "\(path) isn't valid JSON, so it was left unchanged. Fix it or add the entry by hand."
+                "\(path) isn't valid JSON, so it was left unchanged. Fix it or add the entry by hand."
             }
         }
     }

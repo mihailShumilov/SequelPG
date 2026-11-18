@@ -40,11 +40,15 @@ enum MCPStdioBridge {
     // MARK: - Private
 
     private static func connectOrLaunch(_ path: String) -> Int32? {
-        if let fd = MCPSocket.connect(to: path) { return fd }
+        if let fd = MCPSocket.connect(to: path) {
+            return fd
+        }
         launchApp()
         let deadline = Date().addingTimeInterval(launchTimeout)
         while Date() < deadline {
-            if let fd = MCPSocket.connect(to: path) { return fd }
+            if let fd = MCPSocket.connect(to: path) {
+                return fd
+            }
             usleep(200_000)
         }
         return nil
@@ -70,16 +74,17 @@ enum MCPStdioBridge {
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
         while true {
             let count = read(source, &buffer, buffer.count)
-            if count < 0, errno == EINTR { continue }
-            guard count > 0 else { return }
-            guard MCPSocket.writeAll(destination, Data(buffer[0 ..< count])) else { return }
+            if count < 0, errno == EINTR {
+                continue
+            }
+            guard count > 0, MCPSocket.writeAll(destination, Data(buffer[0 ..< count])) else { return }
         }
     }
 
     static let unavailableMessage = """
-        SequelPG's MCP server is not available. Open SequelPG, choose Settings → MCP, \
-        and turn on "Enable MCP server".
-        """
+    SequelPG's MCP server is not available. Open SequelPG, choose Settings → MCP, \
+    and turn on "Enable MCP server".
+    """
 
     /// Answers the client's first request with an explanation, so it shows
     /// the user why the server failed, then exits.
@@ -89,7 +94,9 @@ enum MCPStdioBridge {
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
         while true {
             let count = read(STDIN_FILENO, &buffer, buffer.count)
-            if count < 0, errno == EINTR { continue }
+            if count < 0, errno == EINTR {
+                continue
+            }
             guard count > 0, let complete = lines.append(Data(buffer[0 ..< count])) else { break }
             for line in complete {
                 guard let message = try? JSONDecoder().decode(JSONValue.self, from: line),

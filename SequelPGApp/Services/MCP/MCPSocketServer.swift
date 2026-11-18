@@ -23,10 +23,14 @@ final class MCPSocketServer: @unchecked Sendable {
 
     deinit { stop() }
 
-    var isRunning: Bool { lock.withLock { listenFD >= 0 } }
+    var isRunning: Bool {
+        lock.withLock { listenFD >= 0 }
+    }
 
     /// Number of connected clients.
-    var clientCount: Int { lock.withLock { clients.count } }
+    var clientCount: Int {
+        lock.withLock { clients.count }
+    }
 
     enum StartError: LocalizedError {
         case alreadyInUse(String)
@@ -34,7 +38,7 @@ final class MCPSocketServer: @unchecked Sendable {
         var errorDescription: String? {
             switch self {
             case let .alreadyInUse(path):
-                return "Another SequelPG instance is already serving MCP at \(path)."
+                "Another SequelPG instance is already serving MCP at \(path)."
             }
         }
     }
@@ -45,8 +49,11 @@ final class MCPSocketServer: @unchecked Sendable {
     func start() throws {
         guard !isRunning else { return }
         let directory = (path as NSString).deletingLastPathComponent
-        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
+        try FileManager.default.createDirectory(
+            atPath: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         if FileManager.default.fileExists(atPath: path) {
             if let probe = MCPSocket.connect(to: path) {
                 close(probe)
@@ -102,7 +109,9 @@ final class MCPSocketServer: @unchecked Sendable {
         while true {
             let clientFD = accept(fd, nil, nil)
             if clientFD < 0 {
-                if errno == EINTR { continue }
+                if errno == EINTR {
+                    continue
+                }
                 return // listening socket closed by stop()
             }
             MCPSocket.disableSIGPIPE(clientFD)
@@ -170,7 +179,9 @@ private final class ClientConnection: @unchecked Sendable {
     func shutdown(cancelling: Bool) {
         lock.withLock {
             cancelOnEOF = cancelOnEOF || cancelling
-            if !closed { Darwin.shutdown(fd, SHUT_RDWR) }
+            if !closed {
+                Darwin.shutdown(fd, SHUT_RDWR)
+            }
         }
         if cancelling, let session {
             Task { await session.close() }
@@ -202,7 +213,9 @@ private final class ClientConnection: @unchecked Sendable {
         }
         while true {
             let count = read(fd, &chunk, chunk.count)
-            if count < 0, errno == EINTR { continue }
+            if count < 0, errno == EINTR {
+                continue
+            }
             guard count > 0, let complete = lines.append(Data(chunk[0 ..< count])) else { break }
             for line in complete {
                 continuation.yield(line)

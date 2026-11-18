@@ -1,5 +1,5 @@
-import XCTest
 @testable import SequelPG
+import XCTest
 
 /// `DatabaseClient.runReadOnlyQuery` (the MCP server's query path) against
 /// real servers: writes fail, nothing leaks onto pooled connections, and
@@ -30,7 +30,10 @@ final class MCPReadOnlyQueryTests: IntegrationTestCase {
                 "SELECT nextval('qa.people_id_seq')",
             ] {
                 let error = await assertThrowsAsync { try await client.runReadOnlyQuery(sql, maxRows: 1, timeout: 5) }
-                XCTAssertTrue(message(of: error).contains("read-only transaction"), "\(server) \(sql): \(message(of: error))")
+                XCTAssertTrue(
+                    message(of: error).contains("read-only transaction"),
+                    "\(server) \(sql): \(message(of: error))"
+                )
             }
             let count = try await client.exec("SELECT count(*) FROM \(schema).t")
             XCTAssertEqual(count.rows.first?.first, .text("0"), "\(server)")
@@ -58,7 +61,11 @@ final class MCPReadOnlyQueryTests: IntegrationTestCase {
             let timeout = try await client.runQuery("SHOW statement_timeout", maxRows: 1, timeout: 0)
             XCTAssertEqual(timeout.rows.first?.first, .text("0"), "statement_timeout leaked onto a pooled connection")
             let mode = try await client.runQuery("SHOW transaction_read_only", maxRows: 1, timeout: 0)
-            XCTAssertEqual(mode.rows.first?.first, .text("off"), "a pooled connection stayed in a read-only transaction")
+            XCTAssertEqual(
+                mode.rows.first?.first,
+                .text("off"),
+                "a pooled connection stayed in a read-only transaction"
+            )
         }
         try await assertNoIdleTransactions(client)
     }
@@ -115,6 +122,25 @@ final class MCPReadOnlyQueryTests: IntegrationTestCase {
         XCTAssertEqual(rows.rows.count, 1)
     }
 
+    func testAllowSuperuserOptInConnectsAndStaysReadOnly() async throws {
+        try TestCluster.require([.pg18])
+        let keychain = InMemoryKeychainService()
+        let pool = MCPSessionPool(keychain: keychain)
+        addTeardownBlock { await pool.closeAll() }
+        var superuser = TestCluster.profile(.pg18, role: .scram)
+        superuser.mcpAccess = .readOnlyAnyRole
+        try keychain.save(password: TestCluster.password(.scram) ?? "", forKey: superuser.keychainKey)
+        let client = try await pool.client(for: superuser)
+        let mode = try await client.runReadOnlyQuery("SHOW transaction_read_only", maxRows: 1, timeout: 5)
+        XCTAssertEqual(mode.rows.first?.first, .text("on"))
+        let error = await assertThrowsAsync {
+            try await client.runReadOnlyQuery("COPY (SELECT 1) TO PROGRAM 'true'", maxRows: 1, timeout: 5)
+        }
+        guard case .validationFailed? = error as? AppError else {
+            return XCTFail("expected a validation error, got \(message(of: error))")
+        }
+    }
+
     func testToolboxDescribesTableAsPlainRole() async throws {
         try TestCluster.require([.pg18])
         let keychain = InMemoryKeychainService()
@@ -140,14 +166,21 @@ final class MCPReadOnlyQueryTests: IntegrationTestCase {
     }
 
     /// No session of this user is left `idle in transaction`.
-    private func assertNoIdleTransactions(_ client: DatabaseClient, file: StaticString = #filePath,
-                                          line: UInt = #line) async throws
-    {
+    private func assertNoIdleTransactions(
+        _ client: DatabaseClient,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
         let idle = try await client.runQuery("""
-            SELECT count(*) FROM pg_stat_activity
-            WHERE usename = current_user AND pid <> pg_backend_pid() AND state LIKE 'idle in transaction%'
-            """, maxRows: 1, timeout: 5)
-        XCTAssertEqual(idle.rows.first?.first, .text("0"), "a pooled connection was left in a transaction",
-                       file: file, line: line)
+        SELECT count(*) FROM pg_stat_activity
+        WHERE usename = current_user AND pid <> pg_backend_pid() AND state LIKE 'idle in transaction%'
+        """, maxRows: 1, timeout: 5)
+        XCTAssertEqual(
+            idle.rows.first?.first,
+            .text("0"),
+            "a pooled connection was left in a transaction",
+            file: file,
+            line: line
+        )
     }
 }

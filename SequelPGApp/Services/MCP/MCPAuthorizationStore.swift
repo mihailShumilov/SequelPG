@@ -45,7 +45,8 @@ final class MCPAuthorizationStore: @unchecked Sendable {
                 let data = try JSONEncoder().encode(state)
                 try keychain.save(password: String(decoding: data, as: UTF8.self), forKey: Self.keychainKey)
             } catch {
-                Log.mcp.error("Failed to save MCP settings to Keychain: \(error.localizedDescription, privacy: .public)")
+                Log.mcp
+                    .error("Failed to save MCP settings to Keychain: \(error.localizedDescription, privacy: .public)")
             }
             return state
         }

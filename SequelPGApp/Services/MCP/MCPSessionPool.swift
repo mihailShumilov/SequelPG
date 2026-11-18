@@ -89,7 +89,9 @@ actor MCPSessionPool {
         let task = Task<any PostgresClientProtocol, Error> {
             try await client.connect(profile: target, password: password, sshPassword: sshPassword)
             do {
-                try await Self.verifyRole(of: client)
+                if target.mcpAccess.refusesPrivilegedRoles {
+                    try await Self.verifyRole(of: client)
+                }
             } catch {
                 await client.disconnect()
                 throw error
@@ -98,7 +100,9 @@ actor MCPSessionPool {
         }
         connecting[key] = PendingConnect(token: token, profile: target, task: task)
         defer {
-            if connecting[key]?.token == token { connecting[key] = nil }
+            if connecting[key]?.token == token {
+                connecting[key] = nil
+            }
         }
         let connected = try await task.value
 
@@ -110,8 +114,7 @@ actor MCPSessionPool {
             discard(key, token: previous.token)
         }
         while entries.count >= Self.maxSessions,
-              let oldest = entries.min(by: { $0.value.lastUsed < $1.value.lastUsed })
-        {
+              let oldest = entries.min(by: { $0.value.lastUsed < $1.value.lastUsed }) {
             discard(oldest.key, token: oldest.value.token)
         }
         entries[key] = Entry(client: connected, token: token, profile: target, lastUsed: Date())
@@ -127,9 +130,8 @@ actor MCPSessionPool {
         let result = try await client.runReadOnlyQuery(privilegeQuery, maxRows: 1, timeout: 10)
         guard let row = result.rows.first,
               let flagIndex = result.columns.firstIndex(of: "privileged"),
-              case let .text(flag) = row[flagIndex]
-        else { return }
-        guard ["t", "true"].contains(flag.lowercased()) else { return }
+              case let .text(flag) = row[flagIndex],
+              ["t", "true"].contains(flag.lowercased()) else { return }
         var role = "This role"
         if let nameIndex = result.columns.firstIndex(of: "role"), case let .text(name) = row[nameIndex] {
             role = "The role \"\(name)\""
@@ -138,20 +140,22 @@ actor MCPSessionPool {
             "\(role) is a superuser or can run programs or read and write files on the database server, so "
                 + "SequelPG doesn't let AI assistants use it: a read-only transaction can't contain those "
                 + "privileges. In SequelPG, point this connection at a role with only the privileges the "
-                + "assistant needs (for example SELECT on your schemas)."
+                + "assistant needs (for example SELECT on your schemas). For a local development database, "
+                + "the user can instead set the connection's MCP Access to "
+                + "\"\(MCPAccess.readOnlyAnyRole.displayName)\"."
         )
     }
 
     static let privilegeQuery = """
-        SELECT r.rolname AS role,
-               r.rolsuper OR EXISTS (
-                   SELECT 1 FROM pg_catalog.pg_roles g
-                   WHERE g.rolname IN ('pg_execute_server_program', 'pg_write_server_files', 'pg_read_server_files')
-                     AND pg_catalog.pg_has_role(r.oid, g.oid, 'MEMBER')
-               ) AS privileged
-        FROM pg_catalog.pg_roles r
-        WHERE r.rolname = current_user
-        """
+    SELECT r.rolname AS role,
+           r.rolsuper OR EXISTS (
+               SELECT 1 FROM pg_catalog.pg_roles g
+               WHERE g.rolname IN ('pg_execute_server_program', 'pg_write_server_files', 'pg_read_server_files')
+                 AND pg_catalog.pg_has_role(r.oid, g.oid, 'MEMBER')
+           ) AS privileged
+    FROM pg_catalog.pg_roles r
+    WHERE r.rolname = current_user
+    """
 
     /// Disconnects every session, including connects still in progress.
     func closeAll() async {
@@ -165,7 +169,9 @@ actor MCPSessionPool {
         }
     }
 
-    var openSessionCount: Int { entries.count }
+    var openSessionCount: Int {
+        entries.count
+    }
 
     /// Removes the entry if it is still `token`'s, disconnecting in the background.
     private func discard(_ key: Key, token: UUID) {
@@ -183,7 +189,7 @@ actor MCPSessionPool {
         sweeper = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                guard let self, await self.sweep() else { return }
+                guard let self, await sweep() else { return }
             }
         }
     }

@@ -15,9 +15,9 @@ enum MCPSocket {
     /// Where the app listens: `~/Library/Application Support/SequelPG/mcp.sock`.
     static var defaultPath: String {
         #if DEBUG
-        if let override = ProcessInfo.processInfo.environment[socketPathEnvironmentKey], !override.isEmpty {
-            return override
-        }
+            if let override = ProcessInfo.processInfo.environment[socketPathEnvironmentKey], !override.isEmpty {
+                return override
+            }
         #endif
         return TestingHooks.applicationSupportDirectory()
             .appendingPathComponent("SequelPG", isDirectory: true)
@@ -32,9 +32,9 @@ enum MCPSocket {
         var errorDescription: String? {
             switch self {
             case let .pathTooLong(path):
-                return "The MCP socket path is too long: \(path)"
+                "The MCP socket path is too long: \(path)"
             case let .system(call, code):
-                return "\(call) failed: \(String(cString: strerror(code)))"
+                "\(call) failed: \(String(cString: strerror(code)))"
             }
         }
     }
@@ -90,7 +90,9 @@ enum MCPSocket {
             while remaining > 0 {
                 let written = write(fd, pointer, remaining)
                 if written < 0 {
-                    if errno == EINTR { continue }
+                    if errno == EINTR {
+                        continue
+                    }
                     return false
                 }
                 remaining -= written
@@ -121,8 +123,8 @@ enum MCPSocket {
     static func isTrustedPeer(_ fd: Int32) -> Bool {
         var uid: uid_t = 0
         var gid: gid_t = 0
-        guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { return false }
-        guard let pid = peerPID(fd), let peerPath = executablePath(of: pid),
+        guard getpeereid(fd, &uid, &gid) == 0, uid == getuid(),
+              let pid = peerPID(fd), let peerPath = executablePath(of: pid),
               let ownPath = Bundle.main.executableURL?.resolvingSymlinksInPath().path
         else { return false }
         return peerPath == ownPath
@@ -147,14 +149,20 @@ struct LineBuffer {
         var index = buffer.startIndex + scanned
         while let newline = buffer[index...].firstIndex(of: 0x0A) {
             var line = buffer[lineStart ..< newline]
-            if line.last == 0x0D { line = line.dropLast() }
-            if !line.isEmpty { lines.append(Data(line)) }
+            if line.last == 0x0D {
+                line = line.dropLast()
+            }
+            if !line.isEmpty {
+                lines.append(Data(line))
+            }
             lineStart = newline + 1
             index = lineStart
         }
         buffer.removeSubrange(buffer.startIndex ..< lineStart)
         scanned = buffer.count
-        if buffer.count > Self.maxLineLength { return nil }
+        if buffer.count > Self.maxLineLength {
+            return nil
+        }
         return lines
     }
 }

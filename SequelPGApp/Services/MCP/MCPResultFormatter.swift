@@ -44,8 +44,8 @@ enum MCPResultFormatter {
 
     static func render(_ value: CellValue) -> String {
         switch value {
-        case .null: return "NULL"
-        case let .text(text): return escape(text)
+        case .null: "NULL"
+        case let .text(text): escape(text)
         }
     }
 

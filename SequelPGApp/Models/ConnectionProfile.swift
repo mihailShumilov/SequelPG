@@ -41,13 +41,22 @@ enum SSHAuthMethod: String, Codable, CaseIterable, Sendable {
 enum MCPAccess: String, Codable, CaseIterable, Sendable {
     case off
     case readOnly
+    /// Read-only, also for superusers and roles that can run programs or
+    /// read and write files on the server. The user's explicit choice for
+    /// local development databases: a read-only transaction doesn't contain
+    /// those privileges.
+    case readOnlyAnyRole
 
     var displayName: String {
         switch self {
         case .off: return "Off"
         case .readOnly: return "Read-only"
+        case .readOnlyAnyRole: return "Read-only, allow superuser"
         }
     }
+
+    /// Whether MCP sessions refuse superusers and other privileged roles.
+    var refusesPrivilegedRoles: Bool { self != .readOnlyAnyRole }
 
     /// Unknown values (written by a newer version) read as `.off`, never as
     /// a decoding failure that would drop the whole profile.

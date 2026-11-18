@@ -54,7 +54,9 @@ enum MCPProtocol {
     /// support it, otherwise our newest (the client then decides whether to
     /// continue).
     static func negotiate(_ requested: String?) -> String {
-        if let requested, supportedVersions.contains(requested) { return requested }
+        if let requested, supportedVersions.contains(requested) {
+            return requested
+        }
         return supportedVersions[0]
     }
 
@@ -94,9 +96,9 @@ actor MCPSession {
     }
 
     static let instructions = """
-        SequelPG exposes the user's saved PostgreSQL connections. Call list_connections first and pass a \
-        connection's id to the other tools. Queries run in read-only transactions with a row limit.
-        """
+    SequelPG exposes the user's saved PostgreSQL connections. Call list_connections first and pass a \
+    connection's id to the other tools. Queries run in read-only transactions with a row limit.
+    """
 
     /// Handles one line of input. Returns once the message is dispatched —
     /// tool calls finish (and reply) in the background.
@@ -105,18 +107,25 @@ actor MCPSession {
         do {
             message = try JSONDecoder().decode(JSONValue.self, from: line)
         } catch {
-            await send(MCPProtocol.errorResponse(id: .null, code: MCPProtocol.ErrorCode.parseError,
-                                                 message: "Parse error").encodedLine())
+            await send(MCPProtocol.errorResponse(
+                id: .null,
+                code: MCPProtocol.ErrorCode.parseError,
+                message: "Parse error"
+            ).encodedLine())
             return
         }
         guard case let .object(fields) = message, let method = fields["method"]?.stringValue else {
             // Responses to server-initiated requests (we send none) and
             // batches (removed from the protocol) are not supported.
             let isResponse = message["method"] == nil && (message["result"] != nil || message["error"] != nil)
-            if isResponse { return }
-            await send(MCPProtocol.errorResponse(id: message["id"] ?? .null,
-                                                 code: MCPProtocol.ErrorCode.invalidRequest,
-                                                 message: "Invalid request").encodedLine())
+            if isResponse {
+                return
+            }
+            await send(MCPProtocol.errorResponse(
+                id: message["id"] ?? .null,
+                code: MCPProtocol.ErrorCode.invalidRequest,
+                message: "Invalid request"
+            ).encodedLine())
             return
         }
         let params = fields["params"]?.objectValue ?? [:]
@@ -136,8 +145,11 @@ actor MCPSession {
         case "tools/call":
             await startToolCall(id: id, params: params)
         default:
-            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.methodNotFound,
-                                                 message: "Method not found: \(method)").encodedLine())
+            await send(MCPProtocol.errorResponse(
+                id: id,
+                code: MCPProtocol.ErrorCode.methodNotFound,
+                message: "Method not found: \(method)"
+            ).encodedLine())
         }
     }
 
@@ -192,18 +204,27 @@ actor MCPSession {
 
     private func startToolCall(id: JSONValue, params: [String: JSONValue]) async {
         guard inFlight[id] == nil else {
-            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidRequest,
-                                                 message: "Request id is already in use").encodedLine())
+            await send(MCPProtocol.errorResponse(
+                id: id,
+                code: MCPProtocol.ErrorCode.invalidRequest,
+                message: "Request id is already in use"
+            ).encodedLine())
             return
         }
         guard let name = params["name"]?.stringValue else {
-            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidParams,
-                                                 message: "Missing tool name").encodedLine())
+            await send(MCPProtocol.errorResponse(
+                id: id,
+                code: MCPProtocol.ErrorCode.invalidParams,
+                message: "Missing tool name"
+            ).encodedLine())
             return
         }
         guard handler.tools.contains(where: { $0.name == name }) else {
-            await send(MCPProtocol.errorResponse(id: id, code: MCPProtocol.ErrorCode.invalidParams,
-                                                 message: "Unknown tool: \(name)").encodedLine())
+            await send(MCPProtocol.errorResponse(
+                id: id,
+                code: MCPProtocol.ErrorCode.invalidParams,
+                message: "Unknown tool: \(name)"
+            ).encodedLine())
             return
         }
         let arguments = params["arguments"]?.objectValue ?? [:]

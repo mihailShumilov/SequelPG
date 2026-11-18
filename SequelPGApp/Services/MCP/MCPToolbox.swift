@@ -202,9 +202,9 @@ struct MCPToolbox: MCPToolHandling {
         let profiles = sharedProfiles()
         guard !profiles.isEmpty else {
             return MCPToolResult(text: """
-                No connections are shared with MCP. In SequelPG, edit a connection and set \
-                "MCP access" to Read-only.
-                """)
+            No connections are shared with MCP. In SequelPG, edit a connection and set \
+            "MCP access" to Read-only.
+            """)
         }
         let rows = profiles.map { profile -> JSONValue in
             [
@@ -281,27 +281,39 @@ struct MCPToolbox: MCPToolHandling {
             maxRows: 1, timeout: 5
         )
         var rowCount: Int64?
-        if case let .text(value)? = estimate?.rows.first?.first { rowCount = Int64(value) }
+        if case let .text(value)? = estimate?.rows.first?.first {
+            rowCount = Int64(value)
+        }
 
         var lines = ["\(schema).\(table)" + (rowCount.map { $0 >= 0 ? " (~\($0) rows)" : "" } ?? "")]
         lines.append("Columns:")
         for column in columns.sorted(by: { $0.ordinalPosition < $1.ordinalPosition }) {
             var line = "- \(column.name) \(column.udtName.flatMap { $0.isEmpty ? nil : $0 } ?? column.dataType)"
-            if !column.isNullable { line += " NOT NULL" }
+            if !column.isNullable {
+                line += " NOT NULL"
+            }
             if let generation = column.identityGeneration, column.isIdentity {
                 line += " GENERATED \(generation) AS IDENTITY"
             } else if let defaultValue = column.columnDefault {
                 line += " DEFAULT \(defaultValue)"
             }
-            if column.isPrimaryKey { line += " [PK]" }
+            if column.isPrimaryKey {
+                line += " [PK]"
+            }
             lines.append(line)
         }
         if !indexes.isEmpty {
             lines.append("Indexes:")
             for index in indexes {
                 var flags: [String] = []
-                if index.isPrimary { flags.append("primary") } else if index.isUnique { flags.append("unique") }
-                if index.isPartial { flags.append("partial") }
+                if index.isPrimary {
+                    flags.append("primary")
+                } else if index.isUnique {
+                    flags.append("unique")
+                }
+                if index.isPartial {
+                    flags.append("partial")
+                }
                 let suffix = flags.isEmpty ? "" : " " + flags.joined(separator: ", ")
                 lines.append("- \(index.name): \(index.method) (\(index.columns.joined(separator: ", ")))\(suffix)")
             }
@@ -343,7 +355,7 @@ struct MCPToolbox: MCPToolHandling {
     }
 
     private func explainQuery(_ args: Arguments) async throws -> MCPToolResult {
-        let statement = try ReadOnlySQLGuard.validate(try args.requiredString("sql"))
+        let statement = try ReadOnlySQLGuard.validate(args.requiredString("sql"))
         let analyze = args.bool("analyze") ?? false
         let sql = "EXPLAIN (ANALYZE \(analyze), FORMAT TEXT) \(statement)"
         let result = try await session(args).runReadOnlyQuery(sql, maxRows: 10000, timeout: queryTimeout)
@@ -388,7 +400,9 @@ actor AsyncLimiter {
     private var running = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    init(limit: Int) { self.limit = limit }
+    init(limit: Int) {
+        self.limit = limit
+    }
 
     func acquire() async {
         if running < limit {
@@ -411,6 +425,11 @@ actor AsyncLimiter {
 /// A tool failure with a message for the model.
 struct ToolError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
-    var errorDescription: String? { message }
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? {
+        message
+    }
 }
