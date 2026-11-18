@@ -30,7 +30,7 @@ struct MCPSettingsPane: View {
                 Text("Server")
             } footer: {
                 Text(
-                    "Lets AI assistants that support the Model Context Protocol — Claude Code, Claude Desktop, Cursor and others — browse schemas and run read-only queries on the connections you share. Passwords never leave SequelPG. A read-only transaction doesn't stop functions with side effects, so share connections that use a role with only the privileges the assistant needs; superuser roles are refused."
+                    "Lets AI assistants that support the Model Context Protocol — Claude Code, Claude Desktop, Cursor and others — browse schemas and run read-only queries on the connections you share. Passwords never leave SequelPG. A read-only transaction doesn't stop functions with side effects, so share connections that use a role with only the privileges the assistant needs. Superuser roles are refused unless a connection allows them."
                 )
             }
 
