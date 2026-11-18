@@ -36,6 +36,36 @@ enum SSHAuthMethod: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// What MCP clients (AI assistants) may do with a connection. Off unless the
+/// user opts the connection in.
+enum MCPAccess: String, Codable, CaseIterable, Sendable {
+    case off
+    case readOnly
+    /// Read-only, also for superusers and roles that can run programs or
+    /// read and write files on the server. The user's explicit choice for
+    /// local development databases: a read-only transaction doesn't contain
+    /// those privileges.
+    case readOnlyAnyRole
+
+    var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .readOnly: return "Read-only"
+        case .readOnlyAnyRole: return "Read-only, allow superuser"
+        }
+    }
+
+    /// Whether MCP sessions refuse superusers and other privileged roles.
+    var refusesPrivilegedRoles: Bool { self != .readOnlyAnyRole }
+
+    /// Unknown values (written by a newer version) read as `.off`, never as
+    /// a decoding failure that would drop the whole profile.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = MCPAccess(rawValue: raw) ?? .off
+    }
+}
+
 /// A saved database connection profile. Password is stored separately in Keychain.
 ///
 /// SSH fields use `@DecodableDefault` so older profiles (stored before SSH support
@@ -62,6 +92,9 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
     @DecodableDefault.KeyFileAuth var sshAuthMethod: SSHAuthMethod
     @DecodableDefault.EmptyString var sshKeyPath: String
 
+    /// Whether MCP clients may use this connection.
+    @DecodableDefault.MCPAccessOff var mcpAccess: MCPAccess
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -77,7 +110,8 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         sshPort: Int = 22,
         sshUser: String = "",
         sshAuthMethod: SSHAuthMethod = .keyFile,
-        sshKeyPath: String = ""
+        sshKeyPath: String = "",
+        mcpAccess: MCPAccess = .off
     ) {
         self.id = id
         self.name = name
@@ -94,6 +128,7 @@ struct ConnectionProfile: Identifiable, Codable, Sendable, Equatable {
         self.sshUser = sshUser
         self.sshAuthMethod = sshAuthMethod
         self.sshKeyPath = sshKeyPath
+        self.mcpAccess = mcpAccess
     }
 
     /// Keychain key for storing the database password.
@@ -204,6 +239,7 @@ enum DecodableDefault {
     typealias EmptyString = Wrapper<Sources.EmptyString>
     typealias SSHPort = Wrapper<Sources.SSHPort>
     typealias KeyFileAuth = Wrapper<Sources.KeyFileAuth>
+    typealias MCPAccessOff = Wrapper<Sources.MCPAccessOff>
 
     enum Sources {
         enum False: Source {
@@ -217,6 +253,9 @@ enum DecodableDefault {
         }
         enum KeyFileAuth: Source {
             static let defaultValue: SSHAuthMethod = .keyFile
+        }
+        enum MCPAccessOff: Source {
+            static let defaultValue: MCPAccess = .off
         }
     }
 }

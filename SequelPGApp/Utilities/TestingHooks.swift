@@ -24,6 +24,9 @@ enum TestingHooks {
         static let saveDirectory = "SEQUELPG_UITEST_SAVE_DIR"
         /// File an open panel "chooses" in UI-test mode.
         static let openFile = "SEQUELPG_UITEST_OPEN_FILE"
+        /// "1" turns the MCP server on in UI-test mode (its preference is
+        /// wiped at launch). Pair with `SEQUELPG_MCP_SOCKET` for the path.
+        static let enableMCP = "SEQUELPG_UITEST_MCP"
     }
 
     #if DEBUG
@@ -50,6 +53,15 @@ enum TestingHooks {
     static let isAutomatedTestRun = isUITestMode || isTestHost
 
     private static var environment: [String: String] { ProcessInfo.processInfo.environment }
+
+    /// UI-test mode asked for the MCP server to be on.
+    static var forcesMCPEnabled: Bool {
+        #if DEBUG
+        return isUITestMode && environment[Env.enableMCP] == "1"
+        #else
+        return false
+        #endif
+    }
 
     // MARK: - SSH
 
@@ -133,6 +145,7 @@ enum TestingHooks {
             if let sshPassword = seed.sshPassword, !sshPassword.isEmpty {
                 try? keychainService.save(password: sshPassword, forKey: seed.profile.sshKeychainKey)
             }
+            MCPAuthorizationStore(keychain: keychainService).setAccess(seed.profile.mcpAccess, for: seed.profile.id)
         }
         #endif
         return store

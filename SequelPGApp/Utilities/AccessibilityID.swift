@@ -36,6 +36,12 @@ enum A11yID {
         static let sshAuth = "form.sshAuth"
         static let sshKeyPath = "form.sshKeyPath"
         static let sshPassword = "form.sshPassword"
+        static let mcpAccess = "form.mcpAccess"
+    }
+
+    enum Settings {
+        static let mcpEnabled = "settings.mcpEnabled"
+        static func mcpInstall(_ client: String) -> String { "settings.mcpInstall.\(client)" }
     }
 
     enum Workspace {

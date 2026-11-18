@@ -379,8 +379,10 @@ final class ConnectionListViewModelTests: XCTestCase {
 
         _ = sut.loadPasswordForProfile(profile)
 
-        XCTAssertEqual(keychain.loadCalls.count, 1)
-        XCTAssertEqual(keychain.loadCalls.first, profile.keychainKey)
+        // Reloads also read the MCP sharing state; only password reads count here.
+        let passwordLoads = keychain.loadCalls.filter { $0 != MCPAuthorizationStore.keychainKey }
+        XCTAssertEqual(passwordLoads.count, 1)
+        XCTAssertEqual(passwordLoads.first, profile.keychainKey)
     }
 
     // MARK: - setConnected

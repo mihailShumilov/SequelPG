@@ -7,4 +7,5 @@ enum Log {
     static let ui = Logger(subsystem: "com.sequelpg.app", category: "ui")
     static let perf = Logger(subsystem: "com.sequelpg.app", category: "perf")
     static let ssh = Logger(subsystem: "com.sequelpg.app", category: "ssh")
+    static let mcp = Logger(subsystem: "com.sequelpg.app", category: "mcp")
 }

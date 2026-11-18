@@ -140,6 +140,21 @@
 		183C254613EE47098A5B0728 /* SQLStatementSplitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */; };
 		EB10F1393FE944748B047BEF /* ConnectionSSLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */; };
 		5F00B0604FAA43A6AAAF0CF7 /* QueryOutputFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */; };
+		967F0EC791174E1B9F33655E /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C49BC06C97A646AF9120AA8F /* JSONValue.swift */; };
+		2D356101A0854802B333D676 /* MCPSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892BBC8EDAC246808C119883 /* MCPSession.swift */; };
+		968B7BC4A2C64DB2ACD40196 /* MCPSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66AE789F78254DDEB7CC05E2 /* MCPSocket.swift */; };
+		AA00136C4E1C41C6A2C4D792 /* MCPSocketServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D8BC6AB34644798F1F6E98 /* MCPSocketServer.swift */; };
+		5E9E9EB89A8C4DA387AF8096 /* MCPStdioBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */; };
+		3FBD7911E1414D10B0860500 /* MCPToolbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9584DB7C78F7489ABB988951 /* MCPToolbox.swift */; };
+		298CA0FB7A25478C87FB29B4 /* MCPServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AF09872A37417EBB67C74C /* MCPServerController.swift */; };
+		6124E3A54A434932B0B5AD4B /* MCPSessionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */; };
+		0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */; };
+		F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */; };
+		3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */; };
+		17135B5773774B1EB919A13B /* MCPClientInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */; };
+		0AA8F49F5BC84D6B837A9A69 /* MCPServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657B061FBE704A7FA5B8D09C /* MCPServerTests.swift */; };
+		EB23774040C74599A842BC99 /* MCPReadOnlyQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58923BCF4074F5ABDE1B3F7 /* MCPReadOnlyQueryTests.swift */; };
+		A66643A2445B418C833FDA54 /* MCPAuthorizationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FE7713C90E4C12A03F203C /* MCPAuthorizationStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -296,6 +311,21 @@
 		D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLStatementSplitterTests.swift; sourceTree = "<group>"; };
 		454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSSLTests.swift; sourceTree = "<group>"; };
 		70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryOutputFormattingTests.swift; sourceTree = "<group>"; };
+		C49BC06C97A646AF9120AA8F /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		892BBC8EDAC246808C119883 /* MCPSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSession.swift; sourceTree = "<group>"; };
+		66AE789F78254DDEB7CC05E2 /* MCPSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocket.swift; sourceTree = "<group>"; };
+		A4D8BC6AB34644798F1F6E98 /* MCPSocketServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocketServer.swift; sourceTree = "<group>"; };
+		AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPStdioBridge.swift; sourceTree = "<group>"; };
+		9584DB7C78F7489ABB988951 /* MCPToolbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolbox.swift; sourceTree = "<group>"; };
+		54AF09872A37417EBB67C74C /* MCPServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServerController.swift; sourceTree = "<group>"; };
+		EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSessionPool.swift; sourceTree = "<group>"; };
+		BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPResultFormatter.swift; sourceTree = "<group>"; };
+		E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlySQLGuard.swift; sourceTree = "<group>"; };
+		4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsPane.swift; sourceTree = "<group>"; };
+		C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPClientInstaller.swift; sourceTree = "<group>"; };
+		657B061FBE704A7FA5B8D09C /* MCPServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServerTests.swift; sourceTree = "<group>"; };
+		A58923BCF4074F5ABDE1B3F7 /* MCPReadOnlyQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPReadOnlyQueryTests.swift; sourceTree = "<group>"; };
+		D8FE7713C90E4C12A03F203C /* MCPAuthorizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPAuthorizationStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -385,6 +415,7 @@
 				AB10000000000000000066 /* ThemePreference.swift */,
 				AB10000000000000000E20 /* EditorPreference.swift */,
 				AB10000000000000000E03 /* ERDLayoutStore.swift */,
+				FE16D030AFEB4454A90CD56C /* MCP */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -444,6 +475,7 @@
 				AB10000000000000000E09 /* ERDCanvasView.swift */,
 				AB10000000000000000E0C /* ERDExportSheet.swift */,
 				AB10000000000000000E08 /* DiagramTabView.swift */,
+				4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -470,6 +502,7 @@
 				E5E71E9BADE641C6B05B3E3C /* TestingHooks.swift */,
 				1D19483910ED44EB8A12AB41 /* AccessibilityID.swift */,
 				B7656793BE484B14B1431FD5 /* SQLStatementSplitter.swift */,
+				E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -514,6 +547,7 @@
 				D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */,
 				454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */,
 				70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */,
+				657B061FBE704A7FA5B8D09C /* MCPServerTests.swift */,
 			);
 			path = SequelPGTests;
 			sourceTree = "<group>";
@@ -542,8 +576,27 @@
 				B53A9561AB814B6F9B10496D /* DropObjectIntegrationTests.swift */,
 				76F721385DF1407786C2E52D /* AppViewModelIntegrationTests.swift */,
 				3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */,
+				A58923BCF4074F5ABDE1B3F7 /* MCPReadOnlyQueryTests.swift */,
 			);
 			path = SequelPGIntegrationTests;
+			sourceTree = "<group>";
+		};
+		FE16D030AFEB4454A90CD56C /* MCP */ = {
+			isa = PBXGroup;
+			children = (
+				C49BC06C97A646AF9120AA8F /* JSONValue.swift */,
+				892BBC8EDAC246808C119883 /* MCPSession.swift */,
+				66AE789F78254DDEB7CC05E2 /* MCPSocket.swift */,
+				A4D8BC6AB34644798F1F6E98 /* MCPSocketServer.swift */,
+				AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */,
+				9584DB7C78F7489ABB988951 /* MCPToolbox.swift */,
+				54AF09872A37417EBB67C74C /* MCPServerController.swift */,
+				EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */,
+				BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */,
+				C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */,
+				D8FE7713C90E4C12A03F203C /* MCPAuthorizationStore.swift */,
+			);
+			path = MCP;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -758,6 +811,19 @@
 				F884F2E21B104EB9A973032B /* TestingHooks.swift in Sources */,
 				2934FA8D792E41368E03B429 /* AccessibilityID.swift in Sources */,
 				3E9008344E264D82B1DBDBF6 /* SQLStatementSplitter.swift in Sources */,
+				967F0EC791174E1B9F33655E /* JSONValue.swift in Sources */,
+				2D356101A0854802B333D676 /* MCPSession.swift in Sources */,
+				968B7BC4A2C64DB2ACD40196 /* MCPSocket.swift in Sources */,
+				AA00136C4E1C41C6A2C4D792 /* MCPSocketServer.swift in Sources */,
+				5E9E9EB89A8C4DA387AF8096 /* MCPStdioBridge.swift in Sources */,
+				3FBD7911E1414D10B0860500 /* MCPToolbox.swift in Sources */,
+				298CA0FB7A25478C87FB29B4 /* MCPServerController.swift in Sources */,
+				6124E3A54A434932B0B5AD4B /* MCPSessionPool.swift in Sources */,
+				0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */,
+				F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */,
+				3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */,
+				17135B5773774B1EB919A13B /* MCPClientInstaller.swift in Sources */,
+				A66643A2445B418C833FDA54 /* MCPAuthorizationStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -792,6 +858,7 @@
 				183C254613EE47098A5B0728 /* SQLStatementSplitterTests.swift in Sources */,
 				EB10F1393FE944748B047BEF /* ConnectionSSLTests.swift in Sources */,
 				5F00B0604FAA43A6AAAF0CF7 /* QueryOutputFormattingTests.swift in Sources */,
+				0AA8F49F5BC84D6B837A9A69 /* MCPServerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -810,6 +877,7 @@
 				FE7102F0EAB34FF9AB9A653B /* DropObjectIntegrationTests.swift in Sources */,
 				DE87A925268A4E518600A1D2 /* AppViewModelIntegrationTests.swift in Sources */,
 				DED43A3EA5FC4BFC8CE2EC96 /* TransferIntegrationTests.swift in Sources */,
+				EB23774040C74599A842BC99 /* MCPReadOnlyQueryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -889,12 +957,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.3.12;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -911,12 +979,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.3.12;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -930,9 +998,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.12;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -947,9 +1015,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.12;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

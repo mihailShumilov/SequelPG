@@ -24,6 +24,8 @@ struct ConnectionFormModel {
     var sshKeyPath: String = ""
     var sshPassword: String = ""
 
+    var mcpAccess: MCPAccess = .off
+
     mutating func load(
         from profile: ConnectionProfile,
         password: String,
@@ -46,6 +48,7 @@ struct ConnectionFormModel {
         sshAuthMethod = profile.sshAuthMethod
         sshKeyPath = profile.sshKeyPath
         self.sshPassword = sshPassword
+        mcpAccess = profile.mcpAccess
     }
 
     /// Builds a `ConnectionProfile` from the current field values.
@@ -71,7 +74,8 @@ struct ConnectionFormModel {
             sshPort: sshPortInt,
             sshUser: sshUser.trimmingCharacters(in: .whitespaces),
             sshAuthMethod: sshAuthMethod,
-            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces)
+            sshKeyPath: sshKeyPath.trimmingCharacters(in: .whitespaces),
+            mcpAccess: mcpAccess
         )
     }
 
@@ -179,6 +183,31 @@ struct ConnectionSettingsForm: View {
                     sshPassword: $form.sshPassword,
                     showSSHPassword: $showSSHPassword
                 )
+            }
+
+            Section {
+                Picker("MCP Access", selection: $form.mcpAccess) {
+                    ForEach(MCPAccess.allCases, id: \.self) { access in
+                        Text(access.displayName).tag(access)
+                    }
+                }
+                .accessibilityIdentifier(A11yID.Form.mcpAccess)
+            } header: {
+                Text("AI Assistants")
+            } footer: {
+                switch form.mcpAccess {
+                case .off:
+                    Text("AI assistants connected through MCP (Claude, Cursor…) can't see this connection.")
+                case .readOnly:
+                    Text("AI assistants connected through MCP can browse the schema and run SELECT queries in a read-only transaction. Results are sent to the assistant's model provider. Connect as a role with only the privileges the assistant needs; superusers are refused. Turn the server on in Settings → MCP.")
+                case .readOnlyAnyRole:
+                    Label {
+                        Text("Superusers are allowed. A read-only transaction doesn't stop a superuser's functions from changing data, ending sessions or running programs on the database server, so an assistant can do anything this role can. Use only for local development databases. Turn the server on in Settings → MCP.")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                    }
+                }
             }
         }
         .formStyle(.grouped)

@@ -39,6 +39,10 @@ protocol PostgresClientProtocol: Sendable {
     /// external tools (pg_dump/psql). `nil` when not connected.
     func currentEndpoint() async -> PGConnectionEndpoint?
     func runQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
+    /// Runs exactly one statement inside a `READ ONLY` transaction that is
+    /// always rolled back. Rejects scripts, transaction control, COPY and
+    /// session commands (see `ReadOnlySQLGuard`). Used by the MCP server.
+    func runReadOnlyQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult
     func explainQuery(_ sql: String, analyze: Bool, buffers: Bool, timeout: TimeInterval) async throws -> QueryPlan
     func listSchemas() async throws -> [String]
     func listTables(schema: String) async throws -> [DBObject]
@@ -387,6 +391,108 @@ actor DatabaseClient: PostgresClientProtocol {
             throw AppError.queryFailed("There is no SQL statement to run.")
         }
         return try await execute(statements, maxRows: maxRows, timeout: timeout, truncateCells: true)
+    }
+
+    func runReadOnlyQuery(_ sql: String, maxRows: Int, timeout: TimeInterval) async throws -> QueryResult {
+        let statement = try ReadOnlySQLGuard.validate(sql)
+        guard let client else { throw AppError.notConnected }
+        let start = CFAbsoluteTimeGetCurrent()
+        do {
+            return try await withThrowingTaskGroup(of: QueryResult.self) { group in
+                group.addTask {
+                    try await Self.runReadOnly(statement, maxRows: maxRows, timeout: timeout, start: start,
+                                               client: client)
+                }
+                // Client-side backstop in case the server never answers; the
+                // server-side statement_timeout normally fires first.
+                if timeout > 0 {
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: UInt64((timeout + 5) * 1_000_000_000))
+                        throw AppError.queryTimeout
+                    }
+                }
+                defer { group.cancelAll() }
+                guard let winner = try await group.next() else { throw AppError.queryTimeout }
+                return winner
+            }
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw mapQueryError(error, from: client)
+        }
+    }
+
+    private static func runReadOnly(
+        _ statement: String,
+        maxRows: Int,
+        timeout: TimeInterval,
+        start: CFAbsoluteTime,
+        client: PostgresClient
+    ) async throws -> QueryResult {
+        try await client.withConnection { connection in
+            do {
+                try await connection.query("BEGIN READ ONLY", logger: connection.logger)
+                // Transaction-scoped, so it can't outlive this call on the
+                // pooled connection.
+                if timeout > 0 {
+                    try await connection.query(
+                        PostgresQuery(unsafeSQL: "SET LOCAL statement_timeout = \(Int(timeout * 1000))"),
+                        logger: connection.logger
+                    )
+                }
+                let result = try await runQueryOnConnection(
+                    [statement],
+                    maxRows: maxRows,
+                    timeout: 0,
+                    truncateCells: true,
+                    start: start,
+                    connection: connection,
+                    cancelBackend: { pid in cancelBackend(pid, using: client) }
+                )
+                await endReadOnlyTransaction(connection)
+                return result
+            } catch {
+                await endReadOnlyTransaction(connection)
+                throw error
+            }
+        }
+    }
+
+    /// Rolls back and releases session-level advisory locks the statement
+    /// may have taken (they survive ROLLBACK), or closes the connection so
+    /// the pool discards it.
+    ///
+    /// A cancelled call may have a `pg_cancel_backend` for this backend still
+    /// in flight; back in the pool, it could cancel the next caller's
+    /// statement. A failed cleanup would leave the connection inside the
+    /// transaction or holding locks. Either way it must not be reused.
+    private static func endReadOnlyTransaction(_ connection: PostgresConnection) async {
+        guard !connection.isClosed else { return }
+        if !Task.isCancelled, await runCleanup("ROLLBACK", on: connection),
+           await runCleanup("SELECT pg_advisory_unlock_all()", on: connection)
+        {
+            return
+        }
+        do {
+            try await connection.close()
+        } catch {
+            Log.db.error("Closing a connection failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Runs a cleanup statement even when the calling task is cancelled: the
+    /// future-based query is not cancellation-aware. Returns whether it worked.
+    private static func runCleanup(_ sql: String, on connection: PostgresConnection) async -> Bool {
+        let future: EventLoopFuture<PostgresQueryResult> = connection.query(
+            PostgresQuery(unsafeSQL: sql),
+            logger: connection.logger
+        )
+        do {
+            _ = try await result(of: future, unlessClosed: connection)
+            return true
+        } catch {
+            Log.db.error("\(sql, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return false
+        }
     }
 
     /// Shared executor behind `runQuery` and `explainQuery`. Runs `statements`
