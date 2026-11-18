@@ -140,6 +140,13 @@
 		183C254613EE47098A5B0728 /* SQLStatementSplitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */; };
 		EB10F1393FE944748B047BEF /* ConnectionSSLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */; };
 		5F00B0604FAA43A6AAAF0CF7 /* QueryOutputFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */; };
+		967F0EC791174E1B9F33655E /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C49BC06C97A646AF9120AA8F /* JSONValue.swift */; };
+		2D356101A0854802B333D676 /* MCPSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892BBC8EDAC246808C119883 /* MCPSession.swift */; };
+		968B7BC4A2C64DB2ACD40196 /* MCPSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66AE789F78254DDEB7CC05E2 /* MCPSocket.swift */; };
+		AA00136C4E1C41C6A2C4D792 /* MCPSocketServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D8BC6AB34644798F1F6E98 /* MCPSocketServer.swift */; };
+		5E9E9EB89A8C4DA387AF8096 /* MCPStdioBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */; };
+		3FBD7911E1414D10B0860500 /* MCPToolbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9584DB7C78F7489ABB988951 /* MCPToolbox.swift */; };
+		298CA0FB7A25478C87FB29B4 /* MCPServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AF09872A37417EBB67C74C /* MCPServerController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -296,6 +303,13 @@
 		D5DD9B720645454E99FC6F8D /* SQLStatementSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLStatementSplitterTests.swift; sourceTree = "<group>"; };
 		454A8F4F5E174EC1A64FA4C2 /* ConnectionSSLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSSLTests.swift; sourceTree = "<group>"; };
 		70AE6245A51D4CAA99B0F23D /* QueryOutputFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryOutputFormattingTests.swift; sourceTree = "<group>"; };
+		C49BC06C97A646AF9120AA8F /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		892BBC8EDAC246808C119883 /* MCPSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSession.swift; sourceTree = "<group>"; };
+		66AE789F78254DDEB7CC05E2 /* MCPSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocket.swift; sourceTree = "<group>"; };
+		A4D8BC6AB34644798F1F6E98 /* MCPSocketServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocketServer.swift; sourceTree = "<group>"; };
+		AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPStdioBridge.swift; sourceTree = "<group>"; };
+		9584DB7C78F7489ABB988951 /* MCPToolbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolbox.swift; sourceTree = "<group>"; };
+		54AF09872A37417EBB67C74C /* MCPServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServerController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -385,6 +399,7 @@
 				AB10000000000000000066 /* ThemePreference.swift */,
 				AB10000000000000000E20 /* EditorPreference.swift */,
 				AB10000000000000000E03 /* ERDLayoutStore.swift */,
+				FE16D030AFEB4454A90CD56C /* MCP */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -544,6 +559,20 @@
 				3157377C1B8D489E89BBA860 /* TransferIntegrationTests.swift */,
 			);
 			path = SequelPGIntegrationTests;
+			sourceTree = "<group>";
+		};
+		FE16D030AFEB4454A90CD56C /* MCP */ = {
+			isa = PBXGroup;
+			children = (
+				C49BC06C97A646AF9120AA8F /* JSONValue.swift */,
+				892BBC8EDAC246808C119883 /* MCPSession.swift */,
+				66AE789F78254DDEB7CC05E2 /* MCPSocket.swift */,
+				A4D8BC6AB34644798F1F6E98 /* MCPSocketServer.swift */,
+				AD518E5AB7B146508FA7997F /* MCPStdioBridge.swift */,
+				9584DB7C78F7489ABB988951 /* MCPToolbox.swift */,
+				54AF09872A37417EBB67C74C /* MCPServerController.swift */,
+			);
+			path = MCP;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -758,6 +787,13 @@
 				F884F2E21B104EB9A973032B /* TestingHooks.swift in Sources */,
 				2934FA8D792E41368E03B429 /* AccessibilityID.swift in Sources */,
 				3E9008344E264D82B1DBDBF6 /* SQLStatementSplitter.swift in Sources */,
+				967F0EC791174E1B9F33655E /* JSONValue.swift in Sources */,
+				2D356101A0854802B333D676 /* MCPSession.swift in Sources */,
+				968B7BC4A2C64DB2ACD40196 /* MCPSocket.swift in Sources */,
+				AA00136C4E1C41C6A2C4D792 /* MCPSocketServer.swift in Sources */,
+				5E9E9EB89A8C4DA387AF8096 /* MCPStdioBridge.swift in Sources */,
+				3FBD7911E1414D10B0860500 /* MCPToolbox.swift in Sources */,
+				298CA0FB7A25478C87FB29B4 /* MCPServerController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,7 +1,19 @@
 import AppKit
 import SwiftUI
 
+/// Process entry point. The same executable serves two roles: the app, and —
+/// with `--mcp-stdio` — the headless bridge an MCP client launches. The
+/// bridge branch runs before any AppKit/SwiftUI setup.
 @main
+enum AppEntry {
+    static func main() {
+        if MCPStdioBridge.isBridgeInvocation {
+            MCPStdioBridge.run()
+        }
+        SequelPGApp.main()
+    }
+}
+
 struct SequelPGApp: App {
     /// Shared connection list — all windows read/write the same saved profiles.
     @State private var connectionListVM = ConnectionListViewModel(
@@ -21,6 +33,10 @@ struct SequelPGApp: App {
         // Register bundled JetBrains Mono so the editor-font preference can
         // offer it; SF Mono remains the default.
         Theme.registerBundledFonts()
+        // Unit/integration test hosts never serve MCP.
+        if !TestingHooks.isTestHost {
+            MCPServerController.shared.apply()
+        }
     }
 
     var body: some Scene {
