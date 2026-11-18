@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Settings → MCP: the server switch and status, the connections AI clients
@@ -5,6 +6,8 @@ import SwiftUI
 struct MCPSettingsPane: View {
     @Environment(MCPServerController.self) private var controller
     @Environment(ConnectionListViewModel.self) private var connectionListVM
+    @State private var installMessage: (text: String, isError: Bool)?
+    @State private var installing: MCPClientInstaller.Client?
 
     private var sharedProfiles: [ConnectionProfile] {
         connectionListVM.profiles.filter { $0.mcpAccess != .off }
@@ -27,6 +30,39 @@ struct MCPSettingsPane: View {
                 Text("Server")
             } footer: {
                 Text("Lets AI assistants that support the Model Context Protocol — Claude Code, Claude Desktop, Cursor and others — browse schemas and run read-only queries on the connections you share. Passwords never leave SequelPG.")
+            }
+
+            Section {
+                ForEach(MCPClientInstaller.Client.allCases) { client in
+                    LabeledContent(client.displayName) {
+                        Button(installing == client ? "Adding…" : "Add") { install(client) }
+                            .disabled(installing != nil)
+                            .accessibilityIdentifier(A11yID.Settings.mcpInstall(client.rawValue))
+                    }
+                }
+                HStack {
+                    Button("Copy JSON Config") { copy(MCPClientInstaller.jsonSnippet) }
+                    Button("Copy Claude Code Command") { copy(MCPClientInstaller.claudeCodeCommand) }
+                }
+                if let installMessage {
+                    Text(installMessage.text)
+                        .font(.caption)
+                        .foregroundStyle(installMessage.isError ? Color.red : Color.secondary)
+                        .textSelection(.enabled)
+                }
+                if MCPClientInstaller.isTranslocated {
+                    Label(
+                        "Move SequelPG to the Applications folder first: macOS is running it from a temporary location.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Connect a Client")
+            } footer: {
+                Text("Clients start \(MCPClientInstaller.bridgeExecutable) \(MCPStdioBridge.argument), which opens SequelPG in the background when it isn't running.")
+                    .textSelection(.enabled)
             }
 
             Section {
@@ -58,7 +94,28 @@ struct MCPSettingsPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(height: 460)
+        .frame(height: 560)
+    }
+
+    private func install(_ client: MCPClientInstaller.Client) {
+        installing = client
+        installMessage = nil
+        Task {
+            let result = await Task.detached { () -> Result<String, Error> in
+                Result { try MCPClientInstaller.install(client) }
+            }.value
+            installing = nil
+            switch result {
+            case let .success(message): installMessage = (message, false)
+            case let .failure(error): installMessage = (error.localizedDescription, true)
+            }
+        }
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        installMessage = ("Copied to the clipboard.", false)
     }
 
     @ViewBuilder

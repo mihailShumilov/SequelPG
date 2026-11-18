@@ -151,6 +151,7 @@
 		0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */; };
 		F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */; };
 		3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */; };
+		17135B5773774B1EB919A13B /* MCPClientInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -318,6 +319,7 @@
 		BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPResultFormatter.swift; sourceTree = "<group>"; };
 		E9FBB377315743E897F54030 /* ReadOnlySQLGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlySQLGuard.swift; sourceTree = "<group>"; };
 		4B8968ACBACB480082D9C716 /* MCPSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsPane.swift; sourceTree = "<group>"; };
+		C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPClientInstaller.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -583,6 +585,7 @@
 				54AF09872A37417EBB67C74C /* MCPServerController.swift */,
 				EFA0E616A9ED4D359C1A0713 /* MCPSessionPool.swift */,
 				BB6C972DBEA34406A73A0A3A /* MCPResultFormatter.swift */,
+				C4755B5161BA4B56868B0D33 /* MCPClientInstaller.swift */,
 			);
 			path = MCP;
 			sourceTree = "<group>";
@@ -810,6 +813,7 @@
 				0E5C898C97D8415CA2E40365 /* MCPResultFormatter.swift in Sources */,
 				F7AE2DC5C3DC4898BC6437E6 /* ReadOnlySQLGuard.swift in Sources */,
 				3FCAA5D81A7F443693E8690F /* MCPSettingsPane.swift in Sources */,
+				17135B5773774B1EB919A13B /* MCPClientInstaller.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

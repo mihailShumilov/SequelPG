@@ -66,6 +66,28 @@ Or use **Cmd+U** in Xcode.
 - [x] Database and Query menus with shortcuts (Refresh ⌘R, Disconnect ⇧⌘W, Run ⌘↩, Stop ⌘., Explain ⌥⌘E, Beautify ⇧⌘F)
 - [x] Structure / Content / Definition / Query / Diagram mode switcher in the toolbar (⌘1–⌘5)
 - [x] Light and Dark appearance with system colors and the user's accent color
+- [x] MCP server for AI assistants (Claude Code, Claude Desktop, Cursor): schema browsing and read-only queries on the connections you share
+
+## AI Assistants (MCP)
+
+SequelPG can serve the connections you choose to AI assistants that support the [Model Context Protocol](https://modelcontextprotocol.io).
+
+1. Open **Settings → MCP** and turn on **Enable MCP server**.
+2. Edit each connection the assistant may use and set **MCP Access** to **Read-only**. Other connections stay invisible.
+3. In **Settings → MCP → Connect a Client**, click **Add** next to Claude Code, Claude Desktop or Cursor. For other clients, use **Copy JSON Config**; the entry runs `SequelPG.app/Contents/MacOS/SequelPG --mcp-stdio`.
+4. The first time a client calls a tool, SequelPG asks whether to allow it. Allowed clients are listed in Settings, where you can revoke them.
+
+Tools: `list_connections`, `list_databases`, `list_schemas`, `list_objects`, `describe_table`, `get_ddl`, `run_query`, `explain_query`.
+
+How it works:
+- The client starts the SequelPG executable with `--mcp-stdio`. That process only forwards messages to the running app over a private Unix socket (`~/Library/Application Support/SequelPG/mcp.sock`), and opens SequelPG in the background when it isn't running. Passwords, SSH tunnels and connections stay inside the app.
+- MCP queries use their own sessions, so they never change the database or interrupt a query in your windows.
+- `run_query` runs exactly one statement in a `READ ONLY` transaction that is always rolled back, with a 30-second `statement_timeout` and up to 1000 rows. Multiple statements, transaction control, `COPY`, `LOAD` and session commands (`SET`, `RESET`, `DISCARD`…) are rejected.
+
+Security notes:
+- Query results are sent to the assistant's model provider. Share only connections whose data you're allowed to send there.
+- A read-only transaction is not a sandbox: functions with side effects (`pg_terminate_backend`, `dblink_exec`, `lo_export`…) still run. For the strongest guarantee, connect as a role with only `SELECT` privileges.
+- The approval prompt uses the name the client reports about itself; it guards against surprises, not against software already running under your user account.
 
 ## Architecture Overview
 
@@ -86,7 +108,7 @@ PostgresNIO (database driver)
 | Module             | Responsibility                                    |
 | ------------------ | ------------------------------------------------- |
 | `Models/`          | Data types: ConnectionProfile, QueryResult, etc.  |
-| `Services/`        | Database access, persistence, Keychain            |
+| `Services/`        | Database access, persistence, Keychain, MCP server |
 | `ViewModels/`      | UI state management, business logic               |
 | `Views/`           | SwiftUI views only; no direct DB or storage calls |
 | `Utilities/`       | Pure helpers: identifier quoting, logging          |

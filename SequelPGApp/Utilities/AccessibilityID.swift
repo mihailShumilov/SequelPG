@@ -41,6 +41,7 @@ enum A11yID {
 
     enum Settings {
         static let mcpEnabled = "settings.mcpEnabled"
+        static func mcpInstall(_ client: String) -> String { "settings.mcpInstall.\(client)" }
     }
 
     enum Workspace {
