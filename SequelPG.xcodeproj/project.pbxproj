@@ -14,6 +14,7 @@
 		AA10000000000000000005 /* QueryResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000005; };
 		AA10000000000000000006 /* CellValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000006; };
 		AA10000000000000000007 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000007; };
+		AA10000000000000000E32 /* ConnectionFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000E32; };
 		AA10000000000000000008 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000008; };
 		AA10000000000000000009 /* ConnectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000009; };
 		AA1000000000000000000A /* PostgresClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000000000000000000A; };
@@ -166,6 +167,7 @@
 		AB10000000000000000005 /* QueryResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryResult.swift; sourceTree = "<group>"; };
 		AB10000000000000000006 /* CellValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CellValue.swift; sourceTree = "<group>"; };
 		AB10000000000000000007 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		AB10000000000000000E32 /* ConnectionFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionFailure.swift; sourceTree = "<group>"; };
 		AB10000000000000000008 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		AB10000000000000000009 /* ConnectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStore.swift; sourceTree = "<group>"; };
 		AB1000000000000000000A /* PostgresClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostgresClient.swift; sourceTree = "<group>"; };
@@ -353,6 +355,7 @@
 				AB10000000000000000006 /* CellValue.swift */,
 				AB10000000000000000004 /* ColumnInfo.swift */,
 				AB10000000000000000002 /* ConnectionProfile.swift */,
+				AB10000000000000000E32 /* ConnectionFailure.swift */,
 				AB10000000000000000051 /* ConstraintInfo.swift */,
 				AB10000000000000000070 /* DatabaseTransfer.swift */,
 				AB10000000000000000003 /* DBObject.swift */,
@@ -670,6 +673,7 @@
 				AA10000000000000000005 /* QueryResult.swift in Sources */,
 				AA10000000000000000006 /* CellValue.swift in Sources */,
 				AA10000000000000000007 /* AppError.swift in Sources */,
+				AA10000000000000000E32 /* ConnectionFailure.swift in Sources */,
 				AA10000000000000000008 /* KeychainService.swift in Sources */,
 				AA10000000000000000009 /* ConnectionStore.swift in Sources */,
 				AA1000000000000000000A /* PostgresClient.swift in Sources */,
@@ -885,12 +889,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 29;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.3.8;
+				MARKETING_VERSION = 0.3.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -907,12 +911,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 29;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ATSApplicationFontsPath = Fonts;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 SequelPG Contributors";
-				MARKETING_VERSION = 0.3.8;
+				MARKETING_VERSION = 0.3.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -926,9 +930,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 29;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.8;
+				MARKETING_VERSION = 0.3.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -943,9 +947,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 29;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.3.8;
+				MARKETING_VERSION = 0.3.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sequelpg.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

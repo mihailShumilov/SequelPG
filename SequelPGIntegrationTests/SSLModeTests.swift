@@ -80,13 +80,27 @@ final class SSLModeTests: IntegrationTestCase {
 
     func testVerifyModesRejectCertificateFromUntrustedCA() async throws {
         try TestCluster.require([.pg18])
-        for mode in [SSLMode.prefer, .require, .verifyCa, .verifyFull] {
+        for mode in [SSLMode.require, .verifyCa, .verifyFull] {
             let error = await connectError(TestCluster.profile(.pg18, sslMode: mode, verifyCertificate: true))
             XCTAssertTrue(
                 message(of: error).contains("could not be verified"),
                 "\(mode): expected a certificate-verification explanation, got: \(message(of: error))"
             )
         }
+    }
+
+    func testPreferFallsBackToPlainWhenCertificateIsRejected() async throws {
+        // libpq's prefer: an SSL attempt that fails is retried without SSL.
+        try TestCluster.require([.pg18])
+        let client = DatabaseClient()
+        try await client.connect(
+            profile: TestCluster.profile(.pg18, sslMode: .prefer, verifyCertificate: true),
+            password: TestCluster.password(.scram),
+            sshPassword: nil
+        )
+        addTeardownBlock { await client.disconnect() }
+        let encrypted = try await isSessionEncrypted(client)
+        XCTAssertFalse(encrypted)
     }
 
     func testVerifyModesSucceedWithProfileCA() async throws {

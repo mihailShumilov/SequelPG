@@ -131,8 +131,12 @@ SwiftFormat is used for consistent formatting. See [CONTRIBUTING.md](CONTRIBUTIN
 - Ensure the user has access to the specified database.
 
 ### SSL Errors
-- If using SSL Require, ensure the server supports SSL.
-- Try SSL Prefer or Off to diagnose.
+SSL modes follow `psql`'s `sslmode`:
+- **Prefer** (the default) uses SSL when the server offers it and connects without SSL otherwise.
+- **Require** always encrypts but does not verify the server certificate, so self-signed certificates work.
+- **Verify CA** and **Verify Full** also check the certificate against the system's trusted roots (Verify Full checks the host name too).
+
+When a connection fails, the error names the cause and which SSL Mode to try.
 
 ### Timeout Errors
 - The default query timeout is 10 seconds.
